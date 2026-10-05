@@ -7,6 +7,16 @@ export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: api
 export const usePlayers = () => useQuery({ queryKey: ['players'], queryFn: api.players })
 export const useRuns = () => useQuery({ queryKey: ['runs'], queryFn: api.runs })
 
+/** Riot key and sync status. `check` makes the backend test the key with one Riot call. */
+export const useRiotStatus = (check = false) =>
+  useQuery({ queryKey: ['riot-status', check], queryFn: () => api.riotStatus(check) })
+
+export const usePlayerStats = (runId: number | null, challengeOnly: boolean) =>
+  useQuery({
+    queryKey: ['stats', runId, challengeOnly],
+    queryFn: () => api.playerStats({ run_id: runId ?? undefined, challenge_only: challengeOnly }),
+  })
+
 export const useChampions = () =>
   useQuery({ queryKey: ['champions'], queryFn: api.champions, staleTime: Infinity })
 

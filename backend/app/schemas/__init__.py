@@ -142,3 +142,60 @@ class ResultIn(BaseModel):
 
 class TokenUseIn(BaseModel):
     champion_id: str
+
+
+# --- riot and stats ---
+
+
+class PlayerOut(BaseModel):
+    id: int
+    display_name: str
+    riot_game_name: str | None
+    riot_tag_line: str | None
+    puuid: str | None
+    platform: str
+    region: str
+    created_at: datetime
+    # Set when a Riot ID lookup was attempted on this request and failed for a reason other than "not found".
+    link_error: str | None = None
+
+
+class RiotStatusOut(BaseModel):
+    key_set: bool
+    key_valid: bool | None  # None when not checked (no key)
+    message: str | None
+    last_sync_at: datetime | None
+    last_sync_error: str | None
+
+
+class SyncOut(BaseModel):
+    players_synced: int
+    new_matches: int
+    errors: list[str]
+
+
+class ChampionStatsOut(BaseModel):
+    champion_id: str
+    games: int
+    wins: int
+    win_rate: float
+    kda: float | None
+
+
+class PlayerStatsOut(BaseModel):
+    player_id: int
+    games: int
+    wins: int
+    losses: int
+    win_rate: float | None
+    detailed_games: int
+    avg_kills: float | None
+    avg_deaths: float | None
+    avg_assists: float | None
+    kda: float | None
+    kill_participation: float | None
+    cs_per_min: float | None
+    damage_per_min: float | None
+    vision_per_min: float | None
+    best_champions: list[ChampionStatsOut]
+    eliminated_champions: list[str]

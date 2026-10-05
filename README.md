@@ -2,7 +2,7 @@
 
 A web app for running the "League of Legends Survival" challenge with friends: a shared champion pool, spin wheels, eliminations on losses, and revive tokens for win streaks. See [SPEC.md](SPEC.md) for the full design.
 
-**Status:** milestones M0 to M2 are done, so the challenge is fully playable by hand. Riot API linking, stats, and auto results (M3, M4) are next.
+**Status:** milestones M0 to M3 are done. The challenge is fully playable by hand, players can link Riot IDs, matches import with "Sync matches", and the Stats tab is live. Automatic results (M4) are next.
 
 ## Running locally
 

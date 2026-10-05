@@ -19,6 +19,7 @@ export interface Player {
   platform: string
   region: string
   created_at: string
+  link_error?: string | null
 }
 
 export interface Champion {
@@ -103,4 +104,45 @@ export interface ReviveToken {
   earned_in_game_id: number
   used_at: string | null
   revived_champion_id: string | null
+}
+
+export interface RiotStatus {
+  key_set: boolean
+  key_valid: boolean | null
+  message: string | null
+  last_sync_at: string | null
+  last_sync_error: string | null
+}
+
+export interface SyncResult {
+  players_synced: number
+  new_matches: number
+  errors: string[]
+}
+
+export interface ChampionStats {
+  champion_id: string
+  games: number
+  wins: number
+  win_rate: number
+  kda: number | null
+}
+
+export interface PlayerStats {
+  player_id: number
+  games: number
+  wins: number
+  losses: number
+  win_rate: number | null
+  detailed_games: number
+  avg_kills: number | null
+  avg_deaths: number | null
+  avg_assists: number | null
+  kda: number | null
+  kill_participation: number | null
+  cs_per_min: number | null
+  damage_per_min: number | null
+  vision_per_min: number | null
+  best_champions: ChampionStats[]
+  eliminated_champions: string[]
 }

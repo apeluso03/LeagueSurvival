@@ -2,6 +2,7 @@ import os
 
 os.environ.setdefault("STARTUP_TASKS", "false")
 os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ["RIOT_API_KEY"] = ""  # tests must never call the real Riot API
 
 import pytest
 from fastapi.testclient import TestClient

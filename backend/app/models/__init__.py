@@ -133,7 +133,8 @@ class RiotMatch(SQLModel, table=True):
     match_id: str = Field(primary_key=True)
     queue_id: int
     game_start: datetime | None = dt_field()
-    game_duration: int = 0
+    game_duration: int = 0  # seconds
+    early_surrender: bool = False
     raw_json: dict = json_field(dict)
     fetched_at: datetime = dt_field(default_now=True)
 
@@ -169,3 +170,5 @@ class AppSettings(SQLModel, table=True):
     poll_interval_seconds: int = 90
     remake_threshold_seconds: int = 300
     last_used_player_ids: list[int] = json_field()
+    last_sync_at: datetime | None = dt_field()
+    last_sync_error: str | None = None

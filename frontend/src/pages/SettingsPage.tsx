@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
-import { useAction, useChampions, usePlayers, useRuns, useSettings } from '../hooks/queries'
+import { useAction, useChampions, usePlayers, useRiotStatus, useRuns, useSettings } from '../hooks/queries'
 import { allTags, filterChampions } from '../lib/champions'
 import type { AppSettings, Player } from '../types'
 
@@ -33,17 +33,44 @@ function splitRiotId(value: string): { riot_game_name: string | null; riot_tag_l
   return { riot_game_name: name || null, riot_tag_line: tag || null }
 }
 
+const REGIONS = [
+  { id: 'americas', label: 'Americas (NA, BR, LAN, LAS)' },
+  { id: 'europe', label: 'Europe (EUW, EUNE, TR, ME)' },
+  { id: 'asia', label: 'Asia (KR, JP)' },
+  { id: 'sea', label: 'SEA (OCE, SG, TW, VN)' },
+]
+
+function RegionSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <select className="input" value={value} onChange={(e) => onChange(e.target.value)} aria-label="Region">
+      {REGIONS.map((r) => (
+        <option key={r.id} value={r.id}>
+          {r.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 function PlayersSection() {
   const players = usePlayers()
   const [name, setName] = useState('')
   const [riotId, setRiotId] = useState('')
+  const [region, setRegion] = useState('americas')
+  const [warning, setWarning] = useState<string | null>(null)
   const create = useAction(api.createPlayer)
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     create.mutate(
-      { display_name: name.trim(), ...splitRiotId(riotId) },
-      { onSuccess: () => (setName(''), setRiotId('')) },
+      { display_name: name.trim(), region, ...splitRiotId(riotId) },
+      {
+        onSuccess: (p) => {
+          setName('')
+          setRiotId('')
+          setWarning(p.link_error ? `${p.display_name} was added but not linked: ${p.link_error}` : null)
+        },
+      },
     )
   }
 
@@ -61,12 +88,35 @@ function PlayersSection() {
           value={riotId}
           onChange={(e) => setRiotId(e.target.value)}
         />
+        <RegionSelect value={region} onChange={setRegion} />
         <button className="btn-primary" disabled={!name.trim() || create.isPending}>
           Add player
         </button>
       </form>
       <ErrorText error={create.error} />
+      {warning && <p className="text-sm text-amber-300">{warning}</p>}
     </Section>
+  )
+}
+
+function LinkBadge({ player }: { player: Player }) {
+  const link = useAction(() => api.linkPlayer(player.id))
+  if (!player.riot_game_name) return null
+  if (player.puuid) {
+    return (
+      <span className="rounded bg-emerald-500/15 px-2 py-0.5 text-xs text-emerald-300" title="Matches can be imported">
+        Linked
+      </span>
+    )
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-2">
+      <span className="rounded bg-slate-700/60 px-2 py-0.5 text-xs text-slate-300">Not linked</span>
+      <button className="text-xs underline" disabled={link.isPending} onClick={() => link.mutate(undefined)}>
+        {link.isPending ? 'Linking...' : 'Link now'}
+      </button>
+      {link.error && <span className="text-xs text-red-300">{link.error.message}</span>}
+    </span>
   )
 }
 
@@ -76,6 +126,7 @@ function PlayerRow({ player }: { player: Player }) {
   const [riotId, setRiotId] = useState(
     player.riot_game_name ? `${player.riot_game_name}#${player.riot_tag_line ?? ''}` : '',
   )
+  const [region, setRegion] = useState(player.region)
   const update = useAction((body: Partial<Player>) => api.updatePlayer(player.id, body))
   const remove = useAction(() => api.deletePlayer(player.id))
 
@@ -84,10 +135,15 @@ function PlayerRow({ player }: { player: Player }) {
       <li className="flex flex-wrap items-center gap-2 py-2">
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
         <input className="input" placeholder="Name#TAG" value={riotId} onChange={(e) => setRiotId(e.target.value)} />
+        <RegionSelect value={region} onChange={setRegion} />
         <button
           className="btn-primary"
+          disabled={update.isPending}
           onClick={() =>
-            update.mutate({ display_name: name.trim(), ...splitRiotId(riotId) }, { onSuccess: () => setEditing(false) })
+            update.mutate(
+              { display_name: name.trim(), region, ...splitRiotId(riotId) },
+              { onSuccess: () => setEditing(false) },
+            )
           }
         >
           Save
@@ -105,6 +161,7 @@ function PlayerRow({ player }: { player: Player }) {
       <span className="text-sm text-slate-400">
         {player.riot_game_name ? `${player.riot_game_name}#${player.riot_tag_line}` : 'No Riot ID'}
       </span>
+      <LinkBadge player={player} />
       <div className="ml-auto flex gap-2">
         <button className="btn-secondary" onClick={() => setEditing(true)}>
           Edit
@@ -317,14 +374,10 @@ function ChallengeSection() {
     })
 
   return (
-    <Section title="Riot matching">
-      <p className="text-sm text-slate-400">
-        Used when Riot auto-matching is added. Riot API key:{' '}
-        {s.riot_api_key_set ? <span className="text-emerald-300">set</span> : <span className="text-red-300">not set</span>}{' '}
-        (add <code>RIOT_API_KEY</code> to <code>.env</code>).
-      </p>
+    <Section title="Riot API">
+      <RiotStatusPanel />
       <div className="flex flex-col gap-1 text-sm">
-        <span>Queues that count for the challenge</span>
+        <span>Queues that count for the challenge (used by auto results)</span>
         <div className="flex flex-wrap gap-3">
           {QUEUES.map((q) => (
             <label key={q.id} className="flex items-center gap-1.5">
@@ -350,6 +403,59 @@ function ChallengeSection() {
       </div>
       <ErrorText error={update.error} />
     </Section>
+  )
+}
+
+function RiotStatusPanel() {
+  const [checked, setChecked] = useState(false)
+  const status = useRiotStatus(checked)
+  const sync = useAction(api.sync)
+  const st = status.data
+  if (!st) return null
+
+  let keyLabel = <span className="text-slate-300">set</span>
+  if (!st.key_set) keyLabel = <span className="text-red-300">not set</span>
+  else if (st.key_valid === true) keyLabel = <span className="text-emerald-300">working</span>
+  else if (st.key_valid === false) keyLabel = <span className="text-red-300">not working</span>
+
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span>API key:</span>
+        {keyLabel}
+        {st.key_set && (
+          <button
+            className="text-xs underline"
+            disabled={status.isFetching}
+            onClick={() => (checked ? status.refetch() : setChecked(true))}
+          >
+            {status.isFetching ? 'Testing...' : 'Test key'}
+          </button>
+        )}
+      </div>
+      {st.key_set && st.message && <p className="text-red-300">{st.message}</p>}
+      {!st.key_set && (
+        <p className="text-slate-400">
+          Get a personal key at developer.riotgames.com, put <code>RIOT_API_KEY=your-key</code> in a <code>.env</code>{' '}
+          file in the project folder, then restart the backend. Everything else works without it.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn-secondary" disabled={!st.key_set || sync.isPending} onClick={() => sync.mutate(undefined)}>
+          {sync.isPending ? 'Syncing...' : 'Sync matches now'}
+        </button>
+        <span className="text-slate-400">
+          Last sync: {st.last_sync_at ? new Date(st.last_sync_at).toLocaleString() : 'never'}
+        </span>
+      </div>
+      {sync.data && (
+        <p className="text-slate-300">
+          Synced {sync.data.players_synced} player(s), {sync.data.new_matches} new match(es).
+        </p>
+      )}
+      {st.last_sync_error && <p className="text-red-300">Last sync problem: {st.last_sync_error}</p>}
+      <ErrorText error={sync.error} />
+    </div>
   )
 }
 

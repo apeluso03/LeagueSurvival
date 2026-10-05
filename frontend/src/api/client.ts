@@ -4,10 +4,13 @@ import type {
   Game,
   Pick,
   Player,
+  PlayerStats,
   PoolEntry,
   ReviveToken,
+  RiotStatus,
   Run,
   SpinResult,
+  SyncResult,
 } from '../types'
 
 export class ApiError extends Error {
@@ -56,6 +59,12 @@ export const api = {
   createPlayer: (body: Partial<Player>) => post<Player>('/players', body),
   updatePlayer: (id: number, body: Partial<Player>) => patch<Player>(`/players/${id}`, body),
   deletePlayer: (id: number) => request<void>('DELETE', `/players/${id}`),
+  linkPlayer: (id: number) => post<Player>(`/players/${id}/link`),
+
+  riotStatus: (check = false) => get<RiotStatus>(`/riot/status${qs({ check })}`),
+  sync: () => post<SyncResult>('/sync'),
+  playerStats: (params: { run_id?: number; challenge_only: boolean }) =>
+    get<PlayerStats[]>(`/stats/players${qs(params)}`),
 
   champions: () => get<Champion[]>('/champions'),
   refreshChampions: () => post<{ count: number }>('/champions/refresh'),

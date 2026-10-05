@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
-from app.routers import champions, games, players, runs, settings, tokens
+from app.routers import champions, games, players, riot, runs, settings, stats, tokens
 from app.services import ddragon
 from app.services.rules import RuleError
 
@@ -65,5 +65,5 @@ def health():
     return {"ok": True}
 
 
-for module in (settings, players, champions, runs, games, tokens):
+for module in (settings, players, champions, runs, games, tokens, riot, stats):
     app.include_router(module.router)
