@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import { ChampionPicker } from '../components/ChampionPicker'
 import { MatchSummaryView } from '../components/MatchSummary'
 import { SlotReel } from '../components/SlotReel'
-import { ChampionPortrait, EmptyState, ErrorText, Modal } from '../components/ui'
+import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Modal } from '../components/ui'
 import {
   useAction,
   useActiveRun,
@@ -25,7 +25,7 @@ const STAGGER_MS = 350
 export function WheelsPage() {
   const { settings, run, runId } = useActiveRun()
 
-  if (settings.isLoading || run.isLoading) return <p className="text-slate-400">Loading...</p>
+  if (settings.isLoading || run.isLoading) return <LoadingState />
   if (!runId || !run.data) {
     return (
       <EmptyState title="No active run">
@@ -87,7 +87,9 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
       onSuccess: (res) => {
         setPractice(res.practice ? res.assignments : null)
         setLastResolvedId(null)
-        setAnimating({ key: Date.now(), landed: new Set() })
+        // Skip the reels for people who asked their device for reduced motion.
+        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+        setAnimating(reduced ? null : { key: Date.now(), landed: new Set() })
       },
     })
 
@@ -212,7 +214,7 @@ function PlayerCard({
             durationMs={reel.durationMs}
             onLanded={reel.onLanded}
           />
-          <span className="text-sm text-slate-400">Spinning...</span>
+          <span className="text-sm text-slate-400">Spinning... (tap to skip)</span>
         </div>
       ) : (
         <ol className="flex flex-col gap-1.5">
@@ -223,12 +225,17 @@ function PlayerCard({
                 <button
                   disabled={!game || setPick.isPending}
                   onClick={() => setPick.mutate({ option_index: idx })}
-                  className={`flex w-full items-center gap-3 rounded-lg p-1.5 text-left transition ${
+                  aria-pressed={played}
+                  className={`flex w-full items-center gap-3 rounded-lg p-1 text-left transition sm:p-1.5 ${
                     played ? 'bg-gold-500/20 ring-2 ring-gold-400' : game ? 'hover:bg-slate-800' : ''
                   }`}
                 >
                   <span className="w-5 text-center text-sm font-bold text-slate-400">{idx + 1}</span>
-                  <ChampionPortrait champion={champs.get(cid)} size={idx === 0 ? 'lg' : 'sm'} />
+                  <ChampionPortrait
+                    champion={champs.get(cid)}
+                    size={idx === 0 ? 'mdlg' : 'sm'}
+                    className={idx === 0 ? 'land-glow' : ''}
+                  />
                   <span className={idx === 0 ? 'text-lg font-semibold' : 'text-sm'}>{champs.get(cid)?.name ?? cid}</span>
                   {played && <span className="ml-auto text-xs font-bold uppercase text-gold-300">Played</span>}
                 </button>
@@ -275,6 +282,24 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
   )
   const allMarked = game.assignments.every((a) => a.played_champion_id)
   const submit = (r: 'win' | 'loss' | 'void', reason?: string) => result.mutate({ result: r, reason }, { onSuccess: onResolved })
+  const resultButtons = (
+    <>
+      <button className="btn-success px-5 sm:px-6" disabled={result.isPending} onClick={() => submit('win')}>
+        Win
+      </button>
+      <button
+        className="btn-danger px-5 sm:px-6"
+        disabled={result.isPending || !allMarked}
+        title={allMarked ? undefined : 'Mark every player first'}
+        onClick={() => submit('loss')}
+      >
+        Loss
+      </button>
+      <button className="btn-secondary" disabled={result.isPending} onClick={() => submit('void', 'remake / manual void')}>
+        Void
+      </button>
+    </>
+  )
 
   return (
     <section className="card flex flex-col gap-3 border-gold-600/40">
@@ -289,17 +314,9 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <button className="btn-success px-6" disabled={result.isPending} onClick={() => submit('win')}>
-          Win
-        </button>
-        <button className="btn-danger px-6" disabled={result.isPending || !allMarked} onClick={() => submit('loss')}>
-          Loss
-        </button>
-        <button className="btn-secondary" disabled={result.isPending} onClick={() => submit('void', 'remake / manual void')}>
-          Void (remake)
-        </button>
+        <div className="hidden gap-2 sm:flex">{resultButtons}</div>
         <button
-          className="btn-secondary ml-auto"
+          className="btn-secondary sm:ml-auto"
           disabled={result.isPending}
           onClick={() => confirm('Void this spin and re-roll? This is logged.') && submit('void', 're-roll')}
         >
@@ -307,6 +324,14 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
         </button>
       </div>
       <ErrorText error={result.error} />
+      {/* Phones: keep the result buttons in reach without scrolling past every player's card */}
+      <div className="h-16 sm:hidden" aria-hidden />
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur sm:hidden">
+        <div className="mx-auto flex max-w-6xl items-center gap-2">
+          <span className="mr-auto text-xs text-slate-400">Game #{game.id}</span>
+          {resultButtons}
+        </div>
+      </div>
     </section>
   )
 }

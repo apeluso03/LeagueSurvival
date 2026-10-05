@@ -6,6 +6,7 @@ import type {
   Player,
   PlayerStats,
   PoolEntry,
+  PoolEvent,
   ReviveToken,
   RiotStatus,
   Run,
@@ -13,29 +14,45 @@ import type {
   SyncResult,
 } from '../types'
 
+const UNREACHABLE = "Can't reach the backend. Is it running?"
+
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** True when the backend didn't answer at all (not running, or the dev proxy couldn't connect). */
+  unreachable: boolean
+  constructor(status: number, message: string, unreachable = false) {
     super(message)
     this.status = status
+    this.unreachable = unreachable
   }
 }
 
+export const isUnreachable = (e: unknown) => e instanceof ApiError && e.unreachable
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api${path}`, {
-    method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(`/api${path}`, {
+      method,
+      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+  } catch {
+    throw new ApiError(0, UNREACHABLE, true)
+  }
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`
+    let fromBackend = false
     try {
       const data = await res.json()
+      fromBackend = true
       if (typeof data.detail === 'string') message = data.detail
       else if (Array.isArray(data.detail)) message = data.detail.map((d: { msg: string }) => d.msg).join('; ')
     } catch {
       /* not JSON */
     }
+    // The backend always answers errors with JSON; a bare 5xx means the dev proxy couldn't reach it.
+    if (!fromBackend && res.status >= 500) throw new ApiError(res.status, UNREACHABLE, true)
     throw new ApiError(res.status, message)
   }
   return res.status === 204 ? (undefined as T) : res.json()
@@ -79,6 +96,7 @@ export const api = {
   eliminate: (runId: number, championId: string) => post<Run>(`/runs/${runId}/pool/${championId}/eliminate`),
   revive: (runId: number, championId: string, tokenId?: number) =>
     post<Run>(`/runs/${runId}/pool/${championId}/revive`, { token_id: tokenId ?? null }),
+  events: (runId: number) => get<PoolEvent[]>(`/runs/${runId}/events`),
   spin: (runId: number, playerIds: number[]) =>
     post<SpinResult>(`/runs/${runId}/spins`, { player_ids: playerIds }),
 

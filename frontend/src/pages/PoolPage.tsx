@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
-import { ChampionPortrait, EmptyState, ErrorText, Modal } from '../components/ui'
+import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Modal } from '../components/ui'
 import { useAction, useActiveRun, usePlayerMap, usePool, useTokens } from '../hooks/queries'
 import { allTags, filterChampions } from '../lib/champions'
 import type { PoolEntry, Run } from '../types'
@@ -17,7 +17,7 @@ export function PoolPage() {
       </EmptyState>
     )
   }
-  if (!run.data) return <p className="text-slate-400">Loading...</p>
+  if (!run.data) return <LoadingState />
   return <Pool run={run.data} />
 }
 
@@ -29,7 +29,7 @@ function Pool({ run }: { run: Run }) {
   const [showEliminated, setShowEliminated] = useState(true)
   const [selected, setSelected] = useState<PoolEntry | null>(null)
 
-  const entries = pool.data ?? []
+  const entries = useMemo(() => pool.data ?? [], [pool.data])
   const tags = useMemo(() => allTags(entries), [entries])
   const shown = filterChampions(entries, search, tag).filter((e) => showEliminated || e.status === 'alive')
 
@@ -85,7 +85,17 @@ function Pool({ run }: { run: Run }) {
           )
         })}
       </div>
-      {pool.isSuccess && shown.length === 0 && <p className="text-slate-400">No champions match.</p>}
+      {pool.isLoading && <LoadingState />}
+      <ErrorText error={pool.error} />
+      {pool.isSuccess && entries.length === 0 && <p className="text-slate-400">This run's pool is empty.</p>}
+      {pool.isSuccess && entries.length > 0 && shown.length === 0 && (
+        <p className="text-slate-400">
+          No champions match.{' '}
+          <button className="underline" onClick={() => (setSearch(''), setTag(null), setShowEliminated(true))}>
+            Clear filters
+          </button>
+        </p>
+      )}
       {selected && <ChampionActions run={run} entry={selected} onClose={() => setSelected(null)} />}
     </div>
   )

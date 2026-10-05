@@ -225,3 +225,14 @@ def test_review_flow_and_match_summary(client, session):
     done = client.post(f"/api/games/{game['id']}/review", json={"action": "accept"}).json()
     assert done["status"] == "won" and done["result_source"] == "auto" and not done["needs_review"]
     assert client.post(f"/api/games/{game['id']}/review", json={"action": "reject"}).status_code == 409
+
+
+def test_pool_events_log(client):
+    run = create_run(client)
+    rid = run["id"]
+    client.post(f"/api/runs/{rid}/pool/Champ003/eliminate")
+    client.post(f"/api/runs/{rid}/pool/Champ003/revive")
+    events = client.get(f"/api/runs/{rid}/events").json()
+    assert [e["type"] for e in events] == ["manual_revive", "manual_eliminate"]
+    assert events[0]["champion_id"] == "Champ003" and not events[0]["undone"]
+    assert client.get("/api/runs/999/events").status_code == 404

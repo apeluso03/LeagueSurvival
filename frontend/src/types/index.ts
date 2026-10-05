@@ -177,3 +177,15 @@ export interface PlayerStats {
   best_champions: ChampionStats[]
   eliminated_champions: string[]
 }
+
+export interface PoolEvent {
+  id: number
+  run_id: number
+  game_id: number | null
+  type: 'eliminate' | 'revive' | 'manual_eliminate' | 'manual_revive'
+  champion_id: string | null
+  player_id: number | null
+  token_id: number | null
+  created_at: string
+  undone: boolean
+}

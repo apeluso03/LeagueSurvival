@@ -2,7 +2,7 @@
 
 A web app for running the "League of Legends Survival" challenge with friends: a shared champion pool, spin wheels, eliminations on losses, and revive tokens for win streaks. See [SPEC.md](SPEC.md) for the full design.
 
-**Status:** milestones M0 to M4 are done. The challenge is fully playable by hand, and with a Riot API key and linked players, results apply automatically after each game (with a review step when something looks off, and undo). Polish and the online lobby (M5, M6) are next.
+**Status:** milestones M0 to M5 are done. The challenge is fully playable by hand, results apply automatically from Riot once a key is set and players are linked, and the app works on a phone. The online lobby (M6) is next.
 
 ## Running locally
 

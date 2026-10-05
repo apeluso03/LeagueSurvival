@@ -34,6 +34,9 @@ export const useRun = (id: number | null | undefined) =>
 export const usePool = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['pool', runId], queryFn: () => api.pool(runId!), enabled: runId != null })
 
+export const usePoolEvents = (runId: number | null | undefined) =>
+  useQuery({ queryKey: ['events', runId], queryFn: () => api.events(runId!), enabled: runId != null })
+
 export const useGames = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['games', runId], queryFn: () => api.games(runId!), enabled: runId != null })
 

@@ -1,24 +1,27 @@
 import { useEffect, type ReactNode } from 'react'
 import type { Champion } from '../types'
 
-const SIZES = { xs: 'h-7 w-7', sm: 'h-10 w-10', md: 'h-14 w-14', lg: 'h-20 w-20' }
+const SIZES = { xs: 'h-7 w-7', sm: 'h-10 w-10', md: 'h-14 w-14', lg: 'h-20 w-20', mdlg: 'h-14 w-14 sm:h-20 sm:w-20' }
 
 export function ChampionPortrait({
   champion,
   size = 'md',
   dim = false,
+  eager = false,
   className = '',
 }: {
   champion: Pick<Champion, 'name' | 'image_url'> | undefined
   size?: keyof typeof SIZES
   dim?: boolean
+  /** Load right away instead of when scrolled into view (needed inside the spinning reel). */
+  eager?: boolean
   className?: string
 }) {
   const base = `${SIZES[size]} shrink-0 rounded-md object-cover ${dim ? 'grayscale opacity-40' : ''} ${className}`
   if (!champion?.image_url) {
     return <div className={`${base} bg-slate-800`} title={champion?.name} />
   }
-  return <img src={champion.image_url} alt={champion.name} title={champion.name} loading="lazy" className={base} />
+  return <img src={champion.image_url} alt={champion.name} title={champion.name} loading={eager ? 'eager' : 'lazy'} className={base} />
 }
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
@@ -71,6 +74,25 @@ export function EmptyState({ title, children }: { title: string; children?: Reac
     <div className="card flex flex-col items-center gap-3 py-10 text-center">
       <h2 className="text-lg font-semibold">{title}</h2>
       {children}
+    </div>
+  )
+}
+
+export function Spinner({ className = '' }: { className?: string }) {
+  return (
+    <span
+      role="progressbar"
+      aria-label="Loading"
+      className={`inline-block h-5 w-5 animate-spin rounded-full border-2 border-slate-600 border-t-gold-400 ${className}`}
+    />
+  )
+}
+
+export function LoadingState({ label = 'Loading...' }: { label?: string }) {
+  return (
+    <div className="flex items-center justify-center gap-3 py-16 text-sm text-slate-400">
+      <Spinner />
+      {label}
     </div>
   )
 }

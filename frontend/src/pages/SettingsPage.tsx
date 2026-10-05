@@ -79,7 +79,9 @@ function PlayersSection() {
     <Section title="Players">
       <ul className="flex flex-col divide-y divide-slate-800">
         {players.data?.map((p) => <PlayerRow key={p.id} player={p} />)}
-        {players.data?.length === 0 && <li className="py-2 text-sm text-slate-400">No players yet.</li>}
+        {players.data?.length === 0 && (
+          <li className="py-2 text-sm text-slate-400">No players yet. Add everyone in your group below.</li>
+        )}
       </ul>
       <form onSubmit={submit} className="flex flex-wrap gap-2">
         <input className="input" placeholder="Display name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -219,7 +221,9 @@ function RunsSection() {
             </li>
           )
         })}
-        {runs.data?.length === 0 && <li className="py-2 text-sm text-slate-400">No runs yet.</li>}
+        {runs.data?.length === 0 && (
+          <li className="py-2 text-sm text-slate-400">No runs yet. Start one to build your champion pool.</li>
+        )}
       </ul>
       <ErrorText error={setActive.error ?? end.error} />
       <div>
@@ -234,7 +238,7 @@ function RunsSection() {
 
 function NewRunModal({ onClose }: { onClose: () => void }) {
   const champions = useChampions()
-  const [name, setName] = useState(`Run ${new Date().toLocaleDateString()}`)
+  const [name, setName] = useState(() => `Run ${new Date().toLocaleDateString()}`)
   const [options, setOptions] = useState<3 | 4>(3)
   const [custom, setCustom] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -242,7 +246,7 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
   const [tag, setTag] = useState<string | null>(null)
   const create = useAction(api.createRun)
 
-  const all = champions.data ?? []
+  const all = useMemo(() => champions.data ?? [], [champions.data])
   const tags = useMemo(() => allTags(all), [all])
   const shown = filterChampions(all, search, tag)
 

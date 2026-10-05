@@ -1,6 +1,9 @@
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useActiveRun } from '../hooks/queries'
+import { usePageTitle } from '../hooks/usePageTitle'
+import { ErrorBoundary } from './ErrorBoundary'
 import { ModeToggle } from './ModeToggle'
+import { BackendDownBanner, BackgroundResultToast, NoChampionsBanner } from './StatusBanners'
 import { Stat } from './ui'
 
 const TABS = [
@@ -12,8 +15,9 @@ const TABS = [
 ]
 
 function RunSummary() {
-  const { run } = useActiveRun()
+  const { settings, run } = useActiveRun()
   const r = run.data
+  if (!settings.data || run.isLoading) return null
   if (!r) return <span className="text-sm text-slate-400">No active run</span>
   return (
     <div className="flex items-center gap-5">
@@ -30,6 +34,8 @@ function RunSummary() {
 }
 
 export function Layout() {
+  const { pathname } = useLocation()
+  usePageTitle(TABS.find((t) => t.to === pathname)?.label ?? '')
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
@@ -57,9 +63,14 @@ export function Layout() {
           ))}
         </nav>
       </header>
+      <BackendDownBanner />
+      <NoChampionsBanner />
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        <Outlet />
+        <ErrorBoundary resetKey={pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
+      <BackgroundResultToast />
     </div>
   )
 }

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Body, Depends
 from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import Champion, PoolEntry, ReviveToken, Run
+from app.models import Champion, PoolEntry, PoolEvent, ReviveToken, Run
 from app.routers.common import game_out, get_app_settings, get_or_404, run_out
 from app.schemas import AssignmentOut, PoolEntryOut, RunIn, RunOut, SpinIn, SpinOut
 from app.services import rules
@@ -105,3 +105,10 @@ def spin(run_id: int, body: SpinIn, session: Session = Depends(get_session)):
     session.add(settings)
     session.commit()
     return result
+
+
+@router.get("/{run_id}/events", response_model=list[PoolEvent])
+def pool_events(run_id: int, session: Session = Depends(get_session)):
+    """The run's pool activity log, newest first: eliminations, revives (token or manual) and manual edits."""
+    get_or_404(session, Run, run_id, "Run")
+    return session.exec(select(PoolEvent).where(PoolEvent.run_id == run_id).order_by(col(PoolEvent.id).desc())).all()

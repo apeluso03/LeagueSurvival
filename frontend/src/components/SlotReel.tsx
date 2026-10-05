@@ -36,10 +36,13 @@ export function SlotReel({
   }, [])
 
   return (
-    <div
-      className="relative overflow-hidden rounded-lg ring-2 ring-gold-500/70"
+    <button
+      type="button"
+      onClick={onLanded}
+      title="Tap to skip"
+      className="relative shrink-0 cursor-pointer overflow-hidden rounded-lg ring-2 ring-gold-500/70"
       style={{ height: ITEM_PX, width: ITEM_PX }}
-      aria-label="Spinning"
+      aria-label="Spinning, tap to skip"
     >
       <div
         style={{
@@ -48,10 +51,10 @@ export function SlotReel({
         }}
       >
         {strip.map((id, i) => (
-          <ChampionPortrait key={i} champion={championMap.get(id)} size="lg" className="rounded-none" />
+          <ChampionPortrait key={i} champion={championMap.get(id)} size="lg" eager className="rounded-none" />
         ))}
       </div>
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/40" />
-    </div>
+    </button>
   )
 }

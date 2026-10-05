@@ -46,3 +46,18 @@ body {
 .reel-land {
   animation: reel-pop 200ms ease-out;
 }
+
+@keyframes land-glow {
+  0% { box-shadow: 0 0 0 0 rgb(228 189 91 / 0.9); }
+  100% { box-shadow: 0 0 0 14px rgb(228 189 91 / 0); }
+}
+.land-glow {
+  animation: land-glow 700ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reel-land,
+  .land-glow {
+    animation: none;
+  }
+}

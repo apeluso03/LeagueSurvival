@@ -9,6 +9,7 @@ export function ModeToggle() {
   const [confirming, setConfirming] = useState(false)
   const update = useAction(api.updateSettings)
   const on = settings.data?.challenge_mode ?? true
+  if (!settings.data) return null
 
   const toggle = () => {
     if (on && run.data?.pending_game_id) setConfirming(true)
