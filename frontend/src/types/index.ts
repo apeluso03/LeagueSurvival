@@ -83,6 +83,29 @@ export interface Game {
   assignments: Assignment[]
   eliminated: string[]
   tokens_earned: number[]
+  needs_review: boolean
+  review_reason: string | null
+  match: MatchSummary | null
+}
+
+export interface MatchPlayer {
+  player_id: number
+  champion_id: string | null
+  team_id: number
+  win: boolean
+  kills: number
+  deaths: number
+  assists: number
+  in_options: boolean
+}
+
+export interface MatchSummary {
+  match_id: string
+  queue_id: number
+  game_start: string | null
+  game_duration: number
+  early_surrender: boolean
+  players: MatchPlayer[]
 }
 
 export interface SpinResult {
@@ -114,10 +137,18 @@ export interface RiotStatus {
   last_sync_error: string | null
 }
 
+export interface MatchOutcome {
+  game_id: number
+  status: 'applied' | 'voided' | 'needs_review' | 'waiting' | 'unlinked' | 'linked' | 'skipped'
+  message: string
+  match_id: string | null
+}
+
 export interface SyncResult {
   players_synced: number
   new_matches: number
   errors: string[]
+  games: MatchOutcome[]
 }
 
 export interface ChampionStats {

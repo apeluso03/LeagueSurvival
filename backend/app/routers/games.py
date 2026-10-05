@@ -3,9 +3,9 @@ from sqlmodel import Session, col, select
 
 from app.db import get_session
 from app.models import ChallengeGame
-from app.routers.common import game_out, get_or_404
-from app.schemas import AssignmentsPatch, GameOut, ResultIn
-from app.services import rules
+from app.routers.common import game_out, get_app_settings, get_or_404
+from app.schemas import AssignmentsPatch, GameOut, ResultIn, ReviewIn
+from app.services import matcher, rules
 
 router = APIRouter(prefix="/api/games", tags=["games"])
 
@@ -43,5 +43,17 @@ def set_result(game_id: int, body: ResultIn, session: Session = Depends(get_sess
 def undo(game_id: int, session: Session = Depends(get_session)):
     game = get_or_404(session, ChallengeGame, game_id, "Game")
     rules.undo_result(session, game)
+    session.commit()
+    return game_out(session, game)
+
+
+@router.post("/{game_id}/review", response_model=GameOut)
+def review(game_id: int, body: ReviewIn, session: Session = Depends(get_session)):
+    """For a game flagged "needs review": accept the Riot match anyway, or reject it."""
+    game = get_or_404(session, ChallengeGame, game_id, "Game")
+    if body.action == "accept":
+        matcher.accept_review(session, game, get_app_settings(session))
+    else:
+        matcher.reject_review(session, game)
     session.commit()
     return game_out(session, game)

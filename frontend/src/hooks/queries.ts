@@ -20,8 +20,16 @@ export const usePlayerStats = (runId: number | null, challengeOnly: boolean) =>
 export const useChampions = () =>
   useQuery({ queryKey: ['champions'], queryFn: api.champions, staleTime: Infinity })
 
+// While a game is pending, poll so results applied by the backend's matcher show up on their own.
+const PENDING_REFRESH_MS = 15_000
+
 export const useRun = (id: number | null | undefined) =>
-  useQuery({ queryKey: ['run', id], queryFn: () => api.run(id!), enabled: id != null })
+  useQuery({
+    queryKey: ['run', id],
+    queryFn: () => api.run(id!),
+    enabled: id != null,
+    refetchInterval: (q) => (q.state.data?.pending_game_id ? PENDING_REFRESH_MS : false),
+  })
 
 export const usePool = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['pool', runId], queryFn: () => api.pool(runId!), enabled: runId != null })
@@ -30,7 +38,12 @@ export const useGames = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['games', runId], queryFn: () => api.games(runId!), enabled: runId != null })
 
 export const useGame = (id: number | null | undefined) =>
-  useQuery({ queryKey: ['game', id], queryFn: () => api.game(id!), enabled: id != null })
+  useQuery({
+    queryKey: ['game', id],
+    queryFn: () => api.game(id!),
+    enabled: id != null,
+    refetchInterval: (q) => (q.state.data?.status === 'pending' ? PENDING_REFRESH_MS : false),
+  })
 
 export const useTokens = (runId: number | null | undefined) =>
   useQuery({

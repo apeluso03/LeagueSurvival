@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,7 @@ from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
 from app.routers import champions, games, players, riot, runs, settings, stats, tokens
+from app.jobs import poller
 from app.services import ddragon
 from app.services.rules import RuleError
 
@@ -39,10 +41,14 @@ async def import_champions_if_empty() -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    poll_task = None
     if get_settings().startup_tasks:
         run_migrations()
         await import_champions_if_empty()
+        poll_task = asyncio.create_task(poller.run_forever(engine))
     yield
+    if poll_task:
+        poll_task.cancel()
 
 
 app = FastAPI(title="LoL Survival Tracker", version="0.1.0", lifespan=lifespan)

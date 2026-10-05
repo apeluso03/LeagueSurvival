@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { ChampionPicker } from '../components/ChampionPicker'
+import { MatchSummaryView } from '../components/MatchSummary'
 import { SlotReel } from '../components/SlotReel'
 import { ChampionPortrait, EmptyState, ErrorText, Modal } from '../components/ui'
 import {
@@ -13,6 +15,7 @@ import {
   usePlayerMap,
   usePlayers,
   usePool,
+  useRiotStatus,
 } from '../hooks/queries'
 import type { Assignment, Champion, Game, Run } from '../types'
 
@@ -45,6 +48,19 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const [animating, setAnimating] = useState<{ key: number; landed: Set<number> } | null>(null)
   const [lastResolvedId, setLastResolvedId] = useState<number | null>(null)
   const spin = useAction((ids: number[]) => api.spin(run.id, ids))
+  const qc = useQueryClient()
+
+  // When the pending game gets resolved elsewhere (the backend's auto-matcher, or another tab),
+  // show its result and refresh everything that the result may have changed.
+  const prevPending = useRef(run.pending_game_id)
+  useEffect(() => {
+    const prev = prevPending.current
+    prevPending.current = run.pending_game_id
+    if (prev != null && run.pending_game_id == null) {
+      setLastResolvedId(prev)
+      void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'champions' })
+    }
+  }, [run.pending_game_id, qc])
 
   // Default to the last group, once players are loaded.
   useEffect(() => {
@@ -262,14 +278,14 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
 
   return (
     <section className="card flex flex-col gap-3 border-gold-600/40">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold">Game #{game.id}: waiting for result</h2>
-        <span className="text-xs text-slate-400">Riot auto-match coming in a later milestone. Record it by hand.</span>
-      </div>
-      {!allMarked && (
+      <h2 className="font-semibold">
+        Game #{game.id}: {game.needs_review ? 'needs review' : 'waiting for result'}
+      </h2>
+      {game.needs_review ? <ReviewPanel game={game} onResolved={onResolved} /> : <AutoStatus game={game} />}
+      {!allMarked && !game.needs_review && (
         <p className="text-sm text-slate-400">
-          Click the champion each player played. On a win, anyone left unmarked counts as option 1. A loss needs
-          everyone marked.
+          Recording by hand? Click the champion each player played. On a win, anyone left unmarked counts as option 1.
+          A loss needs everyone marked.
         </p>
       )}
       <div className="flex flex-wrap gap-2">
@@ -295,6 +311,71 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
   )
 }
 
+/** Explains whether the Riot auto-matcher is watching this game, with a "Check now" button. */
+function AutoStatus({ game }: { game: Game }) {
+  const riot = useRiotStatus()
+  const { settings } = useActiveRun()
+  const playerMap = usePlayerMap()
+  const sync = useAction(api.sync)
+  const unlinked = game.assignments
+    .map((a) => playerMap.get(a.player_id))
+    .filter((p) => p && !p.puuid)
+    .map((p) => p!.display_name)
+
+  let text: string
+  let watching = false
+  if (!riot.data?.key_set) text = 'No Riot API key, so record the result by hand below.'
+  else if (!settings.data?.challenge_mode) text = 'Challenge mode is off, so this game will not be auto-matched.'
+  else if (unlinked.length) text = `Auto results need every player linked to Riot. Not linked: ${unlinked.join(', ')}.`
+  else {
+    watching = true
+    const secs = settings.data?.poll_interval_seconds ?? 90
+    text = `Waiting for the match to finish. Checking Riot every ${secs} seconds; the result applies automatically.`
+  }
+  const outcome = sync.data?.games.find((g) => g.game_id === game.id)
+
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        {watching && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
+        <span className="text-slate-300">{text}</span>
+        {watching && (
+          <button className="text-xs underline" disabled={sync.isPending} onClick={() => sync.mutate(undefined)}>
+            {sync.isPending ? 'Checking...' : 'Check now'}
+          </button>
+        )}
+      </div>
+      {outcome?.status === 'waiting' && <p className="text-xs text-slate-500">No finished match found yet.</p>}
+      {sync.data && sync.data.errors.length > 0 && <p className="text-xs text-red-300">{sync.data.errors.join('; ')}</p>}
+      <ErrorText error={sync.error} />
+    </div>
+  )
+}
+
+function ReviewPanel({ game, onResolved }: { game: Game; onResolved: (g: Game) => void }) {
+  const review = useAction((action: 'accept' | 'reject') => api.review(game.id, action))
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+      <p className="text-sm text-amber-200">Found a match, but it didn't pass every check: {game.review_reason}</p>
+      {game.match && <MatchSummaryView match={game.match} flagOptions />}
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="btn-primary"
+          disabled={review.isPending}
+          onClick={() => review.mutate('accept', { onSuccess: onResolved })}
+        >
+          Use this match anyway
+        </button>
+        <button className="btn-secondary" disabled={review.isPending} onClick={() => review.mutate('reject')}>
+          Not this game, keep looking
+        </button>
+      </div>
+      <p className="text-xs text-slate-400">Or record the result by hand with the buttons below.</p>
+      <ErrorText error={review.error} />
+    </div>
+  )
+}
+
 function LastResult({ gameId }: { gameId: number }) {
   const { data: game } = useGame(gameId)
   const champs = useChampionMap()
@@ -307,7 +388,14 @@ function LastResult({ gameId }: { gameId: number }) {
   return (
     <section className="card flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h2 className={`text-xl font-bold ${tone}`}>{label}</h2>
+        <h2 className={`text-xl font-bold ${tone}`}>
+          {label}
+          {game.result_source === 'auto' && (
+            <span className="ml-2 rounded bg-sky-500/15 px-2 py-0.5 align-middle text-xs font-medium text-sky-300">
+              from Riot{game.void_reason === 'remake' ? ' (remake)' : ''}
+            </span>
+          )}
+        </h2>
         <button className="btn-secondary" disabled={undo.isPending} onClick={() => undo.mutate(undefined)}>
           Undo
         </button>
@@ -323,6 +411,7 @@ function LastResult({ gameId }: { gameId: number }) {
           ))}
         </div>
       )}
+      {game.match && <MatchSummaryView match={game.match} />}
       {game.tokens_earned.length > 0 && (
         <p className="text-sm text-gold-300">
           3-win streak! Revive token earned by {game.tokens_earned.map((p) => playerMap.get(p)?.display_name).join(', ')}.

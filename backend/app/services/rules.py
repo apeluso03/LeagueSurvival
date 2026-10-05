@@ -13,6 +13,7 @@ from app.models import (
     ChallengeGame,
     Champion,
     Player,
+    PlayerMatchStats,
     PoolEntry,
     PoolEvent,
     ReviveToken,
@@ -297,6 +298,12 @@ def apply_result(
         game.status = "void"
         game.void_reason = void_reason or "manual void"
 
+    if game.needs_review:
+        # Resolved some other way while a flagged match was waiting: drop that match.
+        game.rejected_match_ids = [*game.rejected_match_ids, game.riot_match_id]
+        game.riot_match_id = None
+        game.needs_review = False
+        game.review_reason = None
     game.result_source = source
     game.resolved_at = now
     session.add(run)
@@ -343,6 +350,17 @@ def undo_result(session: Session, game: ChallengeGame) -> ChallengeGame:
         run.current_streak = game.prev_current_streak
         run.best_streak = game.prev_best_streak
     session.add(run)
+
+    if game.riot_match_id:
+        # Unlink the Riot match. If the matcher applied it, remember it as rejected so the
+        # next poll doesn't immediately apply the same match again.
+        if game.result_source == "auto":
+            game.rejected_match_ids = [*game.rejected_match_ids, game.riot_match_id]
+        for pms in session.exec(select(PlayerMatchStats).where(PlayerMatchStats.challenge_game_id == game.id)):
+            pms.is_challenge = False
+            pms.challenge_game_id = None
+            session.add(pms)
+        game.riot_match_id = None
 
     game.status = "pending"
     game.result_source = None

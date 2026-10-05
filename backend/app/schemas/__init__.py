@@ -102,6 +102,26 @@ class AssignmentOut(BaseModel):
     played_option_index: int | None = None
 
 
+class MatchPlayerOut(BaseModel):
+    player_id: int
+    champion_id: str | None
+    team_id: int
+    win: bool
+    kills: int
+    deaths: int
+    assists: int
+    in_options: bool
+
+
+class MatchSummaryOut(BaseModel):
+    match_id: str
+    queue_id: int
+    game_start: datetime | None
+    game_duration: int
+    early_surrender: bool
+    players: list[MatchPlayerOut]
+
+
 class GameOut(BaseModel):
     id: int
     run_id: int
@@ -114,6 +134,9 @@ class GameOut(BaseModel):
     assignments: list[AssignmentOut]
     eliminated: list[str]  # champions eliminated by this game's result
     tokens_earned: list[int]  # player ids that earned a token in this game
+    needs_review: bool = False
+    review_reason: str | None = None
+    match: MatchSummaryOut | None = None  # the linked Riot match, or the one waiting for review
 
 
 class SpinOut(BaseModel):
@@ -130,6 +153,10 @@ class PickIn(BaseModel):
 
 class AssignmentsPatch(BaseModel):
     picks: list[PickIn]
+
+
+class ReviewIn(BaseModel):
+    action: Literal["accept", "reject"]
 
 
 class ResultIn(BaseModel):
@@ -168,10 +195,18 @@ class RiotStatusOut(BaseModel):
     last_sync_error: str | None
 
 
+class MatchOutcomeOut(BaseModel):
+    game_id: int
+    status: str
+    message: str
+    match_id: str | None
+
+
 class SyncOut(BaseModel):
     players_synced: int
     new_matches: int
     errors: list[str]
+    games: list[MatchOutcomeOut] = []
 
 
 class ChampionStatsOut(BaseModel):

@@ -92,6 +92,11 @@ class ChallengeGame(SQLModel, table=True):
     riot_match_id: str | None = None
     resolved_at: datetime | None = dt_field()
     void_reason: str | None = None
+    # Auto-matching: a candidate match failed a check and is waiting for the user (riot_match_id holds it).
+    needs_review: bool = False
+    review_reason: str | None = None
+    # Matches the user rejected (or undid), so the matcher won't pick them again.
+    rejected_match_ids: list[str] = json_field()
     # Run counters captured just before the result was applied, so undo can restore them exactly.
     prev_win_count: int | None = None
     prev_current_streak: int | None = None

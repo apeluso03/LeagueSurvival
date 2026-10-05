@@ -88,6 +88,7 @@ export const api = {
   setResult: (gameId: number, result: 'win' | 'loss' | 'void', reason?: string) =>
     post<Game>(`/games/${gameId}/result`, { result, reason }),
   undo: (gameId: number) => post<Game>(`/games/${gameId}/undo`),
+  review: (gameId: number, action: 'accept' | 'reject') => post<Game>(`/games/${gameId}/review`, { action }),
 
   tokens: (params: { run_id?: number; player_id?: number; unused_only?: boolean }) =>
     get<ReviveToken[]>(`/tokens${qs(params)}`),

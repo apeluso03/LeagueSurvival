@@ -2,7 +2,7 @@
 
 A web app for running the "League of Legends Survival" challenge with friends: a shared champion pool, spin wheels, eliminations on losses, and revive tokens for win streaks. See [SPEC.md](SPEC.md) for the full design.
 
-**Status:** milestones M0 to M3 are done. The challenge is fully playable by hand, players can link Riot IDs, matches import with "Sync matches", and the Stats tab is live. Automatic results (M4) are next.
+**Status:** milestones M0 to M4 are done. The challenge is fully playable by hand, and with a Riot API key and linked players, results apply automatically after each game (with a review step when something looks off, and undo). Polish and the online lobby (M5, M6) are next.
 
 ## Running locally
 
@@ -72,3 +72,14 @@ alembic upgrade head
 5. Made a mistake? Use Undo on the latest result (Wheels or **History**), or the manual eliminate/revive fixes on the Pool tab.
 
 The header switch toggles challenge mode. When it is off, spins are practice only and change nothing.
+
+## Automatic results (Riot API)
+
+With `RIOT_API_KEY` set and every player in a game linked to their Riot ID, the backend checks Riot every 90 seconds (configurable) while a challenge game is pending. When it finds the finished match it checks that:
+
+1. the queue is one of the allowed challenge queues,
+2. everyone was on the same team,
+3. it wasn't a remake (remakes void the game), and
+4. each player's champion was one of their options.
+
+If all checks pass, the result is applied right away. If one fails, the game is marked **needs review** on the Wheels tab, where you can use the match anyway, skip it, or record the result by hand. Undoing an auto result tells the matcher to ignore that match from then on.

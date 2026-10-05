@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../api/client'
+import { MatchSummaryView } from '../components/MatchSummary'
 import { ChampionPortrait, EmptyState, ErrorText } from '../components/ui'
 import { useAction, useActiveRun, useChampionMap, useGames, usePlayerMap, useRuns } from '../hooks/queries'
 import type { Game } from '../types'
@@ -45,42 +46,47 @@ export function HistoryPage() {
         {list.map((g) => {
           const canUndo = g === latest && g.status !== 'pending' && run?.status === 'active'
           return (
-            <li key={g.id} className="card flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="flex min-w-36 items-center gap-2 sm:flex-col sm:items-start">
-                <span className={`rounded px-2 py-0.5 text-xs font-bold uppercase ${STATUS_STYLE[g.status]}`}>
-                  {g.status}
-                </span>
-                <span className="text-xs text-slate-400">
-                  #{g.id} · {new Date(g.created_at).toLocaleString()}
-                </span>
-                {g.result_source && <span className="text-xs text-slate-500">{g.result_source}</span>}
-                {g.void_reason && <span className="text-xs text-slate-500">{g.void_reason}</span>}
-              </div>
-              <div className="flex flex-1 flex-wrap gap-3">
-                {g.assignments.map((a) => {
-                  const cid = a.played_champion_id
-                  const eliminated = cid != null && g.eliminated.includes(cid)
-                  return (
-                    <div key={a.player_id} className="flex items-center gap-2">
-                      <ChampionPortrait champion={cid ? champs.get(cid) : undefined} size="sm" dim={eliminated} />
-                      <div className="text-xs leading-tight">
-                        <div className="font-semibold">{players.get(a.player_id)?.display_name}</div>
-                        <div className="text-slate-400">
-                          {cid ? champs.get(cid)?.name : 'not marked'}
-                          {a.played_option_index != null && ` (#${a.played_option_index + 1})`}
-                          {cid && a.played_option_index == null && ' (other)'}
+            <li key={g.id} className="card flex flex-col gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex min-w-36 items-center gap-2 sm:flex-col sm:items-start">
+                  <span className={`rounded px-2 py-0.5 text-xs font-bold uppercase ${STATUS_STYLE[g.status]}`}>
+                    {g.status}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    #{g.id} · {new Date(g.created_at).toLocaleString()}
+                  </span>
+                  {g.result_source && (
+                    <span className="text-xs text-slate-500">{g.result_source === 'auto' ? 'from Riot' : 'recorded by hand'}</span>
+                  )}
+                  {g.needs_review && <span className="text-xs text-amber-300">needs review</span>}
+                  {g.void_reason && <span className="text-xs text-slate-500">{g.void_reason}</span>}
+                </div>
+                <div className="flex flex-1 flex-wrap gap-3">
+                  {g.assignments.map((a) => {
+                    const cid = a.played_champion_id
+                    const eliminated = cid != null && g.eliminated.includes(cid)
+                    return (
+                      <div key={a.player_id} className="flex items-center gap-2">
+                        <ChampionPortrait champion={cid ? champs.get(cid) : undefined} size="sm" dim={eliminated} />
+                        <div className="text-xs leading-tight">
+                          <div className="font-semibold">{players.get(a.player_id)?.display_name}</div>
+                          <div className="text-slate-400">
+                            {cid ? champs.get(cid)?.name : 'not marked'}
+                            {a.played_option_index != null && ` (#${a.played_option_index + 1})`}
+                            {cid && a.played_option_index == null && ' (other)'}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+                {canUndo && (
+                  <button className="btn-secondary" disabled={undo.isPending} onClick={() => undo.mutate(g.id)}>
+                    Undo result
+                  </button>
+                )}
               </div>
-              {g.riot_match_id && <span className="text-xs text-slate-400">{g.riot_match_id}</span>}
-              {canUndo && (
-                <button className="btn-secondary" disabled={undo.isPending} onClick={() => undo.mutate(g.id)}>
-                  Undo result
-                </button>
-              )}
+              {g.match && <MatchSummaryView match={g.match} flagOptions={g.needs_review} />}
             </li>
           )
         })}

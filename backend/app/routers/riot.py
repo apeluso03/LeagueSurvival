@@ -6,7 +6,7 @@ from app.db import get_session
 from app.models import Player
 from app.routers.common import get_app_settings
 from app.schemas import RiotStatusOut, SyncOut
-from app.services import sync
+from app.services import matcher, sync
 from app.services.riot_client import RiotClient, RiotError, RiotNotConfigured
 
 router = APIRouter(prefix="/api", tags=["riot"])
@@ -39,8 +39,10 @@ async def riot_status(check: bool = False, session: Session = Depends(get_sessio
 
 @router.post("/sync", response_model=SyncOut)
 async def sync_now(session: Session = Depends(get_session)):
-    """Import recent matches for every linked player."""
-    get_app_settings(session)
+    """Import recent matches for every linked player, then try to resolve pending games."""
+    settings = get_app_settings(session)
     async with RiotClient() as client:
         result = await sync.sync_all(session, client)
-    return SyncOut(**result.__dict__)
+    outcomes = matcher.run_matcher(session) if settings.challenge_mode else []
+    session.commit()
+    return SyncOut(**result.__dict__, games=[o.__dict__ for o in outcomes])

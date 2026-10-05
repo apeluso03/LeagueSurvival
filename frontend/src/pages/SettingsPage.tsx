@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
 import { useAction, useChampions, usePlayers, useRiotStatus, useRuns, useSettings } from '../hooks/queries'
 import { allTags, filterChampions } from '../lib/champions'
+import { QUEUES } from '../lib/queues'
 import type { AppSettings, Player } from '../types'
 
 export function SettingsPage() {
@@ -353,13 +354,6 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
 
 // --- challenge settings ---------------------------------------------------------
 
-const QUEUES: { id: number; label: string }[] = [
-  { id: 400, label: 'Normal Draft' },
-  { id: 420, label: 'Ranked Solo/Duo' },
-  { id: 440, label: 'Ranked Flex' },
-  { id: 490, label: 'Quickplay' },
-  { id: 450, label: 'ARAM' },
-]
 
 function ChallengeSection() {
   const { data: s } = useSettings()

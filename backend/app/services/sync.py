@@ -115,9 +115,13 @@ async def import_player_matches(
     return new
 
 
-async def sync_all(session: Session, client: RiotClient) -> SyncResult:
+async def sync_all(session: Session, client: RiotClient, player_ids: list[int] | None = None) -> SyncResult:
+    """Import recent matches for linked players (all of them, or just `player_ids`)."""
     result = SyncResult()
-    players = session.exec(select(Player).where(col(Player.puuid).is_not(None))).all()
+    query = select(Player).where(col(Player.puuid).is_not(None))
+    if player_ids is not None:
+        query = query.where(col(Player.id).in_(player_ids))
+    players = session.exec(query).all()
     for player in players:
         try:
             result.new_matches += await import_player_matches(session, client, player)

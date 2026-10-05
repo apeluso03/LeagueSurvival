@@ -115,6 +115,7 @@ def test_ddragon_parsing():
 import pytest  # noqa: E402
 
 from app.config import get_settings  # noqa: E402
+from app.models import Player  # noqa: E402
 from app.services.riot_client import RiotError  # noqa: E402
 from tests.factories import FakeRiotClient, P, make_match  # noqa: E402
 
@@ -176,7 +177,7 @@ def test_link_endpoint_reports_errors(client, fake_riot):
 def test_sync_and_stats(client, fake_riot):
     client.post("/api/players", json={"display_name": "Gus", "riot_game_name": "Gus", "riot_tag_line": "NA1"})
     r = client.post("/api/sync").json()
-    assert r == {"players_synced": 1, "new_matches": 1, "errors": []}
+    assert r == {"players_synced": 1, "new_matches": 1, "errors": [], "games": []}
 
     status = client.get("/api/riot/status", params={"check": True}).json()
     assert status["key_set"] and status["key_valid"] and status["last_sync_at"]
@@ -195,3 +196,32 @@ def test_sync_without_key_reports_error(client):
     client.patch("/api/players/1", json={"riot_game_name": "A", "riot_tag_line": "B"})
     # no puuid -> nothing to sync, no error
     assert client.post("/api/sync").json()["players_synced"] == 0
+
+
+def test_review_flow_and_match_summary(client, session):
+    from datetime import timedelta
+
+    from app.models import ChallengeGame, Champion
+    from app.services import matcher, sync
+
+    for pid in (1, 2):
+        p = session.get(Player, pid)
+        p.puuid = f"puuid-{pid}"
+        session.add(p)
+    session.commit()
+    run = create_run(client)
+    game = client.post(f"/api/runs/{run['id']}/spins", json={"player_ids": [1, 2]}).json()["game"]
+    g = session.get(ChallengeGame, game["id"])
+    start = int((g.created_at + timedelta(minutes=2)).timestamp() * 1000)
+    parts = [P(f"puuid-{a['player_id']}", session.get(Champion, a["options"][0]).key) for a in game["assignments"]]
+    sync.store_match(session, make_match("NA1_55", parts, queue_id=450, start_ms=start))
+    matcher.run_matcher(session)
+    session.commit()
+
+    flagged = client.get(f"/api/games/{game['id']}").json()
+    assert flagged["needs_review"] and "Queue 450" in flagged["review_reason"]
+    assert flagged["match"]["match_id"] == "NA1_55" and all(p["in_options"] for p in flagged["match"]["players"])
+
+    done = client.post(f"/api/games/{game['id']}/review", json={"action": "accept"}).json()
+    assert done["status"] == "won" and done["result_source"] == "auto" and not done["needs_review"]
+    assert client.post(f"/api/games/{game['id']}/review", json={"action": "reject"}).status_code == 409
