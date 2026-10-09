@@ -32,16 +32,24 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center" onClick={onClose}>
+    <div
+      className="fade-in fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center sm:p-4"
+      onClick={onClose}
+    >
       <div
         role="dialog"
         aria-label={title}
-        className="card max-h-[85dvh] w-full max-w-lg overflow-y-auto bg-slate-900"
+        className="card sheet-in max-h-[88dvh] w-full max-w-lg overflow-y-auto bg-slate-900/90"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{title}</h2>
-          <button className="text-slate-400 hover:text-white" onClick={onClose} aria-label="Close">
+        <div className="mx-auto -mt-2 mb-3 h-1 w-10 rounded-full bg-slate-600 sm:hidden" aria-hidden />
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gold-100">{title}</h2>
+          <button
+            className="grid h-8 w-8 place-items-center rounded-full bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white active:scale-90"
+            onClick={onClose}
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>
@@ -54,7 +62,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 export function ErrorText({ error }: { error: unknown }) {
   if (!error) return null
   return (
-    <p role="alert" className="rounded-md border border-red-900 bg-red-950/60 px-3 py-2 text-sm text-red-200">
+    <p role="alert" className="rounded-2xl bg-red-950/50 px-4 py-2.5 text-sm text-red-200 ring-1 ring-red-800/60 ring-inset">
       {error instanceof Error ? error.message : String(error)}
     </p>
   )
@@ -63,8 +71,8 @@ export function ErrorText({ error }: { error: unknown }) {
 export function Stat({ label, value, accent = false }: { label: string; value: ReactNode; accent?: boolean }) {
   return (
     <div className="flex flex-col items-center leading-tight">
-      <span className={`text-lg font-bold ${accent ? 'text-gold-400' : ''}`}>{value}</span>
-      <span className="text-[11px] uppercase tracking-wide text-slate-400">{label}</span>
+      <span className={`text-lg font-bold tabular-nums ${accent ? 'gold-text' : 'text-slate-100'}`}>{value}</span>
+      <span className="text-[10px] font-medium tracking-[0.12em] text-slate-400 uppercase">{label}</span>
     </div>
   )
 }

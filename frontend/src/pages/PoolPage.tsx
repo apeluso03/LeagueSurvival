@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client'
-import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Modal } from '../components/ui'
-import { useAction, useActiveRun, usePlayerMap, usePool, useTokens } from '../hooks/queries'
+import { ChampionCard } from '../components/ChampionCard'
+import { ChampionPool } from '../components/ChampionPool'
+import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
+import { useActiveRun, usePlayerMap, usePool } from '../hooks/queries'
 import { allTags, filterChampions } from '../lib/champions'
+import { flyIntoPool, splash } from '../lib/flight'
+import { BUBBLE_PX, type Point } from '../lib/poolLayout'
 import type { PoolEntry, Run } from '../types'
+
+const VIEW_KEY = 'lol-survival:pool-view'
 
 export function PoolPage() {
   const { run, runId } = useActiveRun()
@@ -18,159 +23,229 @@ export function PoolPage() {
     )
   }
   if (!run.data) return <LoadingState />
-  return <Pool run={run.data} />
+  return <Pools run={run.data} />
 }
 
-function Pool({ run }: { run: Run }) {
+function readView(): 'pools' | 'grid' {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'pools'
+  } catch {
+    return 'pools'
+  }
+}
+
+function Pools({ run }: { run: Run }) {
   const pool = usePool(run.id)
-  const players = usePlayerMap()
   const [search, setSearch] = useState('')
   const [tag, setTag] = useState<string | null>(null)
-  const [showEliminated, setShowEliminated] = useState(true)
-  const [selected, setSelected] = useState<PoolEntry | null>(null)
+  const [view, setView] = useState<'pools' | 'grid'>(readView)
+  const [open, setOpen] = useState<{ entry: PoolEntry; reviveOnly: boolean } | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
+  const waterRef = useRef<HTMLDivElement>(null)
+  const graveRef = useRef<HTMLDivElement>(null)
+  // Revive flight: where a dragged champion was dropped, and where revived ones should land.
+  const lastDrop = useRef<{ id: string; point: Point } | null>(null)
+  const [arrivals, setArrivals] = useState<Map<string, Point>>(new Map())
+
+  const onRevived = (e: PoolEntry) => {
+    const water = waterRef.current
+    if (view !== 'pools' || !water) return
+    // The Graveyard bubble is still on the page at this point (the pool refreshes right after).
+    const src = graveRef.current
+      ?.querySelector<HTMLElement>(`[data-id="${CSS.escape(e.champion_id)}"]`)
+      ?.getBoundingClientRect()
+    const drop = lastDrop.current?.id === e.champion_id ? lastDrop.current.point : null
+    lastDrop.current = null
+    if (drop) {
+      const r = water.getBoundingClientRect()
+      setArrivals((m) => new Map(m).set(e.champion_id, { x: drop.x - r.left - BUBBLE_PX / 2, y: drop.y - r.top - BUBBLE_PX / 2 }))
+    }
+    if (!src) return
+    void flyIntoPool({
+      pool: water,
+      id: e.champion_id,
+      imageUrl: e.image_url,
+      fromDoc: { x: src.left + src.width / 2 + window.scrollX, y: src.top + src.height / 2 + window.scrollY },
+      onSplash: (x, y) => splash(water, x, y, true),
+    })
+  }
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view)
+    } catch {
+      /* per-viewer convenience only */
+    }
+  }, [view])
+
+  useEffect(() => {
+    if (!hint) return
+    const t = setTimeout(() => setHint(null), 3500)
+    return () => clearTimeout(t)
+  }, [hint])
 
   const entries = useMemo(() => pool.data ?? [], [pool.data])
   const tags = useMemo(() => allTags(entries), [entries])
-  const shown = filterChampions(entries, search, tag).filter((e) => showEliminated || e.status === 'alive')
+  const alive = useMemo(() => entries.filter((e) => e.status === 'alive'), [entries])
+  const dead = useMemo(() => entries.filter((e) => e.status === 'eliminated'), [entries])
+  const filtering = search.trim() !== '' || tag !== null
+  const matches = useMemo(() => new Set(filterChampions(entries, search, tag).map((e) => e.champion_id)), [entries, search, tag])
+  const highlight = (e: PoolEntry) => (filtering ? matches.has(e.champion_id) : null)
+
+  const inside = (ref: RefObject<HTMLDivElement | null>, p: Point) => {
+    const r = ref.current?.getBoundingClientRect()
+    return !!r && p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom
+  }
+
+  // Graveyard -> Pool is a revive (needs a token). Anything else just floats back.
+  const dropFromGrave = (e: PoolEntry, p: Point) => {
+    if (!inside(waterRef, p)) return false
+    if (run.status !== 'active') return setHint('This run has ended.'), false
+    if (run.tokens_available === 0) {
+      setHint(`No revive tokens yet. Win 3 in a row to get one, then drag ${e.name} back in.`)
+      return false
+    }
+    lastDrop.current = { id: e.champion_id, point: p }
+    setOpen({ entry: e, reviveOnly: true })
+    return true
+  }
+  const dropFromWater = (_e: PoolEntry, p: Point) => {
+    if (inside(graveRef, p)) setHint('Champs only end up in the Graveyard when you lose with them.')
+    return false
+  }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold">
-          <span className="text-gold-400">{run.alive_count}</span> alive / {run.total_count} total
+        <h1 className="mr-auto text-2xl font-bold text-gold-100">
+          <span className="gold-text">{run.alive_count}</span>
+          <span className="text-slate-400"> / {run.total_count}</span>
+          <span className="ml-2 font-sans text-sm font-medium text-slate-400">alive</span>
         </h1>
         <input
-          className="input w-48"
-          placeholder="Search..."
+          className="input w-full sm:w-52"
+          placeholder="Find a champion..."
+          aria-label="Search champions"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select className="input" value={tag ?? ''} onChange={(e) => setTag(e.target.value || null)}>
+        <select className="input" aria-label="Class" value={tag ?? ''} onChange={(e) => setTag(e.target.value || null)}>
           <option value="">All classes</option>
           {tags.map((t) => (
             <option key={t}>{t}</option>
           ))}
         </select>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={showEliminated} onChange={(e) => setShowEliminated(e.target.checked)} />
-          Show eliminated
-        </label>
+        <div className="inline-flex rounded-full bg-black/30 p-1 ring-1 ring-gold-700/25 ring-inset" role="group" aria-label="View">
+          {(['pools', 'grid'] as const).map((v) => (
+            <button
+              key={v}
+              aria-pressed={view === v}
+              onClick={() => setView(v)}
+              className={`rounded-full px-3 py-1 text-sm capitalize transition duration-150 ${
+                view === v ? 'bg-gold-700/50 text-gold-100' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </div>
-      {run.tokens_available > 0 && (
-        <p className="text-sm text-gold-300">
-          {run.tokens_available} revive token(s) available. Click an eliminated champion to revive it.
+
+      {run.tokens_available > 0 && dead.length > 0 && (
+        <p className="glass rounded-2xl px-4 py-2.5 text-sm text-gold-200">
+          ✦ You have {run.tokens_available} revive token{run.tokens_available > 1 ? 's' : ''}. Drag someone from the
+          Graveyard back into the Pool to use one.
         </p>
       )}
-
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-3">
-        {shown.map((e) => {
-          const dead = e.status === 'eliminated'
-          const by = e.eliminated_by_player_id ? players.get(e.eliminated_by_player_id)?.display_name : null
-          return (
-            <button
-              key={e.champion_id}
-              onClick={() => setSelected(e)}
-              className="group flex flex-col items-center gap-1 rounded-lg p-1 hover:bg-slate-800"
-              title={dead ? `Eliminated${by ? ` (played by ${by})` : ''}` : e.name}
-            >
-              <div className="relative">
-                <ChampionPortrait champion={e} size="lg" dim={dead} />
-                {dead && <span className="absolute inset-0 flex items-center justify-center text-3xl text-red-500/80">✕</span>}
-              </div>
-              <span className={`w-full truncate text-center text-xs ${dead ? 'text-slate-500 line-through' : ''}`}>
-                {e.name}
-              </span>
-              {dead && by && <span className="w-full truncate text-center text-[10px] text-slate-500">{by}</span>}
-            </button>
-          )
-        })}
-      </div>
+      {hint && (
+        <p role="status" className="fade-in glass rounded-2xl px-4 py-2.5 text-sm text-slate-200">
+          {hint}
+        </p>
+      )}
       {pool.isLoading && <LoadingState />}
       <ErrorText error={pool.error} />
-      {pool.isSuccess && entries.length === 0 && <p className="text-slate-400">This run's pool is empty.</p>}
-      {pool.isSuccess && entries.length > 0 && shown.length === 0 && (
-        <p className="text-slate-400">
+      {filtering && matches.size === 0 && (
+        <p className="text-sm text-slate-400">
           No champions match.{' '}
-          <button className="underline" onClick={() => (setSearch(''), setTag(null), setShowEliminated(true))}>
+          <button className="underline" onClick={() => (setSearch(''), setTag(null))}>
             Clear filters
           </button>
         </p>
       )}
-      {selected && <ChampionActions run={run} entry={selected} onClose={() => setSelected(null)} />}
+
+      {pool.isSuccess &&
+        (view === 'pools' ? (
+          <>
+            <ChampionPool
+              entries={alive}
+              variant="water"
+              poolRef={waterRef}
+              title="The Pool"
+              subtitle="Drag them around, or tap one for info"
+              highlight={highlight}
+              onOpen={(e) => setOpen({ entry: e, reviveOnly: false })}
+              onDropOutside={dropFromWater}
+              arrivals={arrivals}
+              empty="Nobody left. Every champ has been eliminated."
+            />
+            <ChampionPool
+              entries={dead}
+              variant="grave"
+              poolRef={graveRef}
+              title="The Graveyard"
+              subtitle={dead.length ? `${dead.length} eliminated` : undefined}
+              highlight={highlight}
+              onOpen={(e) => setOpen({ entry: e, reviveOnly: false })}
+              onDropOutside={dropFromGrave}
+              empty="Empty for now. Champs end up here when you lose with them."
+            />
+          </>
+        ) : (
+          <Grid entries={entries} highlight={highlight} onOpen={(e) => setOpen({ entry: e, reviveOnly: false })} />
+        ))}
+
+      {open && (
+        <ChampionCard
+          run={run}
+          entry={open.entry}
+          reviveOnly={open.reviveOnly}
+          onRevived={onRevived}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </div>
   )
 }
 
-function ChampionActions({ run, entry, onClose }: { run: Run; entry: PoolEntry; onClose: () => void }) {
+function Grid({
+  entries,
+  highlight,
+  onOpen,
+}: {
+  entries: PoolEntry[]
+  highlight: (e: PoolEntry) => boolean | null
+  onOpen: (e: PoolEntry) => void
+}) {
   const players = usePlayerMap()
-  const tokens = useTokens(run.id)
-  const done = { onSuccess: onClose }
-  const eliminate = useAction(() => api.eliminate(run.id, entry.champion_id))
-  const revive = useAction((tokenId?: number) => api.revive(run.id, entry.champion_id, tokenId))
-  const dead = entry.status === 'eliminated'
-  const active = run.status === 'active'
-  const by = entry.eliminated_by_player_id ? players.get(entry.eliminated_by_player_id)?.display_name : null
-
-  // One button per player that holds a token
-  const tokenByPlayer = new Map<number, number>()
-  for (const t of tokens.data ?? []) if (!tokenByPlayer.has(t.player_id)) tokenByPlayer.set(t.player_id, t.id)
-
   return (
-    <Modal title={entry.name} onClose={onClose}>
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <ChampionPortrait champion={entry} size="lg" dim={dead} />
-          <div className="text-sm">
-            <p className="text-slate-400">{entry.title}</p>
-            <p>{entry.tags.join(' · ')}</p>
-            {dead && (
-              <p className="mt-1 text-red-300">
-                Eliminated{by && <> (played by {by})</>}
-                {entry.eliminated_at && <> on {new Date(entry.eliminated_at).toLocaleString()}</>}
-                {entry.eliminated_in_game_id && <> in game #{entry.eliminated_in_game_id}</>}
-              </p>
-            )}
-          </div>
-        </div>
-
-        {active && dead && (
-          <div className="flex flex-col gap-2">
-            {tokenByPlayer.size > 0 ? (
-              <>
-                <p className="text-sm font-semibold">Revive with a token:</p>
-                <div className="flex flex-wrap gap-2">
-                  {[...tokenByPlayer].map(([pid, tid]) => (
-                    <button key={tid} className="btn-primary" disabled={revive.isPending} onClick={() => revive.mutate(tid, done)}>
-                      Use {players.get(pid)?.display_name}'s token
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <p className="text-sm text-slate-400">No revive tokens available.</p>
-            )}
-          </div>
-        )}
-
-        {active && (
-          <details className="text-sm">
-            <summary className="cursor-pointer text-slate-400">Fix a mistake</summary>
-            <div className="mt-2 flex gap-2">
-              {dead ? (
-                <button className="btn-secondary" disabled={revive.isPending} onClick={() => revive.mutate(undefined, done)}>
-                  Manual revive (no token)
-                </button>
-              ) : (
-                <button className="btn-danger" disabled={eliminate.isPending} onClick={() => eliminate.mutate(undefined, done)}>
-                  Manual eliminate
-                </button>
-              )}
-            </div>
-            <p className="mt-1 text-xs text-slate-500">Manual changes are logged.</p>
-          </details>
-        )}
-        <ErrorText error={eliminate.error ?? revive.error} />
-      </div>
-    </Modal>
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2">
+      {entries.map((e) => {
+        const dead = e.status === 'eliminated'
+        const by = e.eliminated_by_player_id ? players.get(e.eliminated_by_player_id)?.display_name : null
+        const hl = highlight(e)
+        return (
+          <button
+            key={e.champion_id}
+            onClick={() => onOpen(e)}
+            className="flex flex-col items-center gap-1 rounded-2xl p-1.5 transition duration-150 hover:bg-white/5 active:scale-95"
+            style={{ opacity: hl === false ? 0.2 : 1 }}
+            title={dead ? `Eliminated${by ? ` (${by})` : ''}` : e.name}
+          >
+            <ChampionPortrait champion={e} size="lg" dim={dead} className="rounded-2xl" />
+            <span className={`w-full truncate text-center text-xs ${dead ? 'text-slate-500 line-through' : ''}`}>{e.name}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }

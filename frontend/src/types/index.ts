@@ -189,3 +189,29 @@ export interface PoolEvent {
   created_at: string
   undone: boolean
 }
+
+export interface PlayerChampionLine {
+  player_id: number
+  games: number
+  wins: number
+}
+
+export interface ChampionReport {
+  champion_id: string
+  in_run: boolean
+  status: 'alive' | 'eliminated' | null
+  eliminated_at: string | null
+  eliminated_by_player_id: number | null
+  eliminated_in_game_id: number | null
+  times_offered: number
+  times_played: number
+  wins: number
+  losses: number
+  played_by: PlayerChampionLine[]
+  all_runs_played: number
+  all_runs_wins: number
+  riot_games: number
+  riot_wins: number
+  riot_kda: number | null
+  riot_players: PlayerChampionLine[]
+}

@@ -55,7 +55,13 @@ def run_out(session: Session, run: Run) -> RunOut:
     )
 
 
-def match_summary(session: Session, game: ChallengeGame, assignments) -> MatchSummaryOut | None:
+def champion_keys(session: Session) -> dict[int, str]:
+    return {c.key: c.id for c in session.exec(select(Champion)).all()}
+
+
+def match_summary(
+    session: Session, game: ChallengeGame, assignments, champ_by_key: dict[int, str] | None = None
+) -> MatchSummaryOut | None:
     match = session.get(RiotMatch, game.riot_match_id) if game.riot_match_id else None
     if match is None:
         return None
@@ -65,7 +71,7 @@ def match_summary(session: Session, game: ChallengeGame, assignments) -> MatchSu
             PlayerMatchStats.match_id == match.match_id, PlayerMatchStats.player_id.in_(list(options))
         )
     ).all()
-    champ_by_key = {c.key: c.id for c in session.exec(select(Champion)).all()}
+    champ_by_key = champ_by_key if champ_by_key is not None else champion_keys(session)
     players = []
     for r in rows:
         cid = champ_by_key.get(r.champion_key)
@@ -81,7 +87,7 @@ def match_summary(session: Session, game: ChallengeGame, assignments) -> MatchSu
     )
 
 
-def game_out(session: Session, game: ChallengeGame) -> GameOut:
+def game_out(session: Session, game: ChallengeGame, champ_by_key: dict[int, str] | None = None) -> GameOut:
     eliminated = session.exec(
         select(PoolEvent.champion_id).where(
             PoolEvent.game_id == game.id, PoolEvent.type == "eliminate", PoolEvent.undone == False  # noqa: E712
@@ -94,5 +100,5 @@ def game_out(session: Session, game: ChallengeGame) -> GameOut:
         assignments=[AssignmentOut(**a.model_dump()) for a in assignments],
         eliminated=list(eliminated),
         tokens_earned=list(earned),
-        match=match_summary(session, game, assignments),
+        match=match_summary(session, game, assignments, champ_by_key),
     )

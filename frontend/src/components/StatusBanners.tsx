@@ -13,10 +13,9 @@ export function BackendDownBanner() {
   return (
     <div role="alert" className="border-b border-red-900 bg-red-950/80 px-4 py-2 text-sm text-red-100">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1">
-        <b>Can't reach the backend.</b>
+        <b>Can't reach the server.</b>
         <span>
-          Start it with <code>.\dev.ps1</code> (or <code>uvicorn app.main:app</code> in the backend folder). This page
-          will reconnect on its own.
+          Start the app with <code>.\dev.ps1</code>. This page will reconnect by itself.
         </span>
         <button className="ml-auto underline" onClick={() => settings.refetch()}>
           Retry now
@@ -38,10 +37,10 @@ export function NoChampionsBanner() {
   return (
     <div role="alert" className="border-b border-amber-900 bg-amber-950/70 px-4 py-2 text-sm text-amber-100">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1">
-        <b>No champion list yet.</b>
-        <span>It downloads from Riot's Data Dragon; check your internet connection.</span>
+        <b>The champion list didn't load.</b>
+        <span>Check your internet connection and try again.</span>
         <button className="ml-auto underline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-          {refresh.isPending ? 'Downloading...' : 'Download now'}
+          {refresh.isPending ? 'Loading...' : 'Try again'}
         </button>
         {refresh.error && <span className="w-full text-red-200">{refresh.error.message}</span>}
       </div>
@@ -65,7 +64,7 @@ export function BackgroundResultToast() {
   useEffect(() => {
     const before = prev.current
     prev.current = pendingId
-    if (before != null && pendingId == null && location.pathname !== '/') {
+    if (before != null && pendingId == null && location.pathname !== '/wheels') {
       api.game(before).then((g) => g.status !== 'pending' && setGame(g)).catch(() => {})
     }
   }, [pendingId, location.pathname])
@@ -92,7 +91,7 @@ export function BackgroundResultToast() {
           <div className="text-slate-400">{game.eliminated.length} champion(s) eliminated</div>
         )}
       </div>
-      <Link to="/" className="btn-secondary" onClick={() => setGame(null)}>
+      <Link to="/wheels" className="btn-secondary" onClick={() => setGame(null)}>
         View
       </Link>
       <button aria-label="Dismiss" className="text-slate-400 hover:text-white" onClick={() => setGame(null)}>

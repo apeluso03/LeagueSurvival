@@ -14,22 +14,8 @@ export function allTags(list: Searchable[]): string[] {
   return [...new Set(list.flatMap((c) => c.tags))].sort()
 }
 
-/**
- * The strip of champion ids a slot reel scrolls through before it lands.
- * Random fillers, never the same id twice in a row, always ending on `finalId`.
- */
-export function reelSequence(pool: string[], finalId: string, length: number, rng: () => number = Math.random): string[] {
-  const seq: string[] = []
-  const fillers = pool.length > 1 ? pool : [finalId]
-  for (let i = 0; i < length - 1; i++) {
-    let pick = fillers[Math.floor(rng() * fillers.length)]
-    if (fillers.length > 1) {
-      while (pick === seq[i - 1] || (i === length - 2 && pick === finalId)) {
-        pick = fillers[Math.floor(rng() * fillers.length)]
-      }
-    }
-    seq.push(pick)
-  }
-  seq.push(finalId)
-  return seq
+/** Splash art from Data Dragon (it lives outside the versioned path the portraits use). */
+export function splashUrl(entry: { champion_id: string; image_url: string }): string | null {
+  const m = entry.image_url.match(/^(.*)\/cdn\/[^/]+\/img\/champion\//)
+  return m ? `${m[1]}/cdn/img/champion/splash/${entry.champion_id}_0.jpg` : null
 }

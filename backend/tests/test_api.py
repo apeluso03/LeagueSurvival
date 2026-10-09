@@ -236,3 +236,10 @@ def test_pool_events_log(client):
     assert [e["type"] for e in events] == ["manual_revive", "manual_eliminate"]
     assert events[0]["champion_id"] == "Champ003" and not events[0]["undone"]
     assert client.get("/api/runs/999/events").status_code == 404
+
+
+def test_champion_stats_endpoint(client):
+    run = create_run(client)
+    r = client.get("/api/champions/Champ002/stats", params={"run_id": run["id"]})
+    assert r.status_code == 200 and r.json()["status"] == "alive" and r.json()["in_run"]
+    assert client.get("/api/champions/Nope/stats").status_code == 404

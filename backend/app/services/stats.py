@@ -9,7 +9,7 @@ A player's games are turned into `GameRecord`s from two sources:
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from app.models import (
     AppSettings,
@@ -171,3 +171,97 @@ def player_stats(
         s.eliminated_champions = eliminated[pid]
         result.append(s)
     return result
+
+
+# --- one champion (Pool tab card, SPEC 17.4) ---------------------------------------------
+
+
+@dataclass
+class PlayerChampionLine:
+    player_id: int
+    games: int
+    wins: int
+
+
+@dataclass
+class ChampionReport:
+    champion_id: str
+    # This run
+    in_run: bool = False
+    status: str | None = None  # "alive" | "eliminated"
+    eliminated_at: object = None
+    eliminated_by_player_id: int | None = None
+    eliminated_in_game_id: int | None = None
+    times_offered: int = 0
+    times_played: int = 0
+    wins: int = 0
+    losses: int = 0
+    played_by: list[PlayerChampionLine] = field(default_factory=list)
+    # Every run
+    all_runs_played: int = 0
+    all_runs_wins: int = 0
+    # Imported Riot matches for the group (remakes skipped)
+    riot_games: int = 0
+    riot_wins: int = 0
+    riot_kda: float | None = None
+    riot_players: list[PlayerChampionLine] = field(default_factory=list)
+
+
+def _lines(rows: list[tuple[int, bool]]) -> list[PlayerChampionLine]:
+    by: dict[int, list[bool]] = defaultdict(list)
+    for pid, win in rows:
+        by[pid].append(win)
+    lines = [PlayerChampionLine(pid, len(w), sum(w)) for pid, w in by.items()]
+    return sorted(lines, key=lambda line: (-line.games, -line.wins))
+
+
+def champion_report(session: Session, champion: Champion, run_id: int | None) -> ChampionReport:
+    from app.models import PoolEntry  # local: only needed here
+
+    rep = ChampionReport(champion_id=champion.id)
+
+    played = session.exec(
+        select(SpinAssignment, ChallengeGame)
+        .join(ChallengeGame, col(ChallengeGame.id) == col(SpinAssignment.game_id))
+        .where(SpinAssignment.played_champion_id == champion.id, col(ChallengeGame.status).in_(["won", "lost"]))
+    ).all()
+    rep.all_runs_played = len(played)
+    rep.all_runs_wins = sum(g.status == "won" for _, g in played)
+
+    if run_id is not None:
+        entry = session.get(PoolEntry, (run_id, champion.id))
+        if entry:
+            rep.in_run = True
+            rep.status = entry.status
+            rep.eliminated_at = entry.eliminated_at
+            rep.eliminated_by_player_id = entry.eliminated_by_player_id
+            rep.eliminated_in_game_id = entry.eliminated_in_game_id
+        run_played = [(a, g) for a, g in played if g.run_id == run_id]
+        rep.times_played = len(run_played)
+        rep.wins = sum(g.status == "won" for _, g in run_played)
+        rep.losses = rep.times_played - rep.wins
+        rep.played_by = _lines([(a.player_id, g.status == "won") for a, g in run_played])
+        offers = session.exec(
+            select(SpinAssignment.options)
+            .join(ChallengeGame, col(ChallengeGame.id) == col(SpinAssignment.game_id))
+            # Re-rolled spins don't count as offers (NULL-safe: most games have no void reason)
+            .where(ChallengeGame.run_id == run_id, func.coalesce(ChallengeGame.void_reason, "") != "re-roll")
+        ).all()
+        rep.times_offered = sum(champion.id in opts for opts in offers)
+
+    settings = session.get(AppSettings, 1) or AppSettings()
+    riot = [
+        pms
+        for pms, match in session.exec(
+            select(PlayerMatchStats, RiotMatch)
+            .join(RiotMatch, col(RiotMatch.match_id) == col(PlayerMatchStats.match_id))
+            .where(PlayerMatchStats.champion_key == champion.key)
+        ).all()
+        if not _is_remake(match, settings.remake_threshold_seconds)
+    ]
+    rep.riot_games = len(riot)
+    rep.riot_wins = sum(r.win for r in riot)
+    if riot:
+        rep.riot_kda = kda(sum(r.kills for r in riot), sum(r.deaths for r in riot), sum(r.assists for r in riot))
+    rep.riot_players = _lines([(r.player_id, r.win) for r in riot])
+    return rep

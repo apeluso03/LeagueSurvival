@@ -16,7 +16,7 @@ describe('ErrorBoundary', () => {
         <Flaky />
       </ErrorBoundary>,
     )
-    expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong')
+    expect(screen.getByRole('alert')).toHaveTextContent('Something broke')
     expect(screen.getByText('boom')).toBeInTheDocument()
 
     shouldThrow = false

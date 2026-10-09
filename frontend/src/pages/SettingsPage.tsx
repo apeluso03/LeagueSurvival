@@ -222,7 +222,7 @@ function RunsSection() {
           )
         })}
         {runs.data?.length === 0 && (
-          <li className="py-2 text-sm text-slate-400">No runs yet. Start one to build your champion pool.</li>
+          <li className="py-2 text-sm text-slate-400">No runs yet.</li>
         )}
       </ul>
       <ErrorText error={setActive.error ?? end.error} />
@@ -375,7 +375,7 @@ function ChallengeSection() {
     <Section title="Riot API">
       <RiotStatusPanel />
       <div className="flex flex-col gap-1 text-sm">
-        <span>Queues that count for the challenge (used by auto results)</span>
+        <span>Game modes that count for the challenge</span>
         <div className="flex flex-wrap gap-3">
           {QUEUES.map((q) => (
             <label key={q.id} className="flex items-center gap-1.5">

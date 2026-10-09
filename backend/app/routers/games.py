@@ -3,7 +3,7 @@ from sqlmodel import Session, col, select
 
 from app.db import get_session
 from app.models import ChallengeGame
-from app.routers.common import game_out, get_app_settings, get_or_404
+from app.routers.common import champion_keys, game_out, get_app_settings, get_or_404
 from app.schemas import AssignmentsPatch, GameOut, ResultIn, ReviewIn
 from app.services import matcher, rules
 
@@ -15,7 +15,8 @@ def list_games(run_id: int | None = None, session: Session = Depends(get_session
     query = select(ChallengeGame).order_by(col(ChallengeGame.id).desc())
     if run_id is not None:
         query = query.where(ChallengeGame.run_id == run_id)
-    return [game_out(session, g) for g in session.exec(query).all()]
+    keys = champion_keys(session)  # once for the whole list, not once per game
+    return [game_out(session, g, keys) for g in session.exec(query).all()]
 
 
 @router.get("/{game_id}", response_model=GameOut)

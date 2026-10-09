@@ -64,13 +64,13 @@ export function HistoryPage() {
             </option>
           ))}
         </select>
-        <div className="flex overflow-hidden rounded-md ring-1 ring-slate-700" role="group" aria-label="View">
+        <div className="inline-flex gap-0.5 rounded-full bg-black/30 p-1 ring-1 ring-gold-700/25 ring-inset" role="group" aria-label="View">
           {(['games', 'activity'] as const).map((v) => (
             <button
               key={v}
               aria-pressed={view === v}
               onClick={() => setView(v)}
-              className={`px-3 py-1.5 text-sm ${view === v ? 'bg-gold-500 text-slate-950' : 'bg-slate-900 hover:bg-slate-800'}`}
+              className={`rounded-full px-3 py-1 text-sm transition duration-150 ${view === v ? 'bg-gold-700/50 text-gold-100' : 'text-slate-400 hover:text-slate-100'}`}
             >
               {v === 'games' ? 'Games' : 'Pool activity'}
             </button>
@@ -162,7 +162,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                   <button
                     className="btn-secondary"
                     disabled={undo.isPending}
-                    onClick={() => confirm(`Undo the result of game #${g.id}? It goes back to pending.`) && undo.mutate(g.id)}
+                    onClick={() => confirm(`Undo game ${g.id}? It'll go back to waiting for a result.`) && undo.mutate(g.id)}
                   >
                     Undo result
                   </button>
@@ -195,9 +195,9 @@ function ActivityLog({ runId }: { runId: number }) {
       case 'revive':
         return `${who(e.player_id)} used a revive token on ${name(e.champion_id)}`
       case 'manual_eliminate':
-        return `${name(e.champion_id)} eliminated by hand (fix)`
+        return `${name(e.champion_id)} removed by hand`
       case 'manual_revive':
-        return `${name(e.champion_id)} revived by hand (fix)`
+        return `${name(e.champion_id)} brought back by hand`
     }
   }
   const tone: Record<PoolEvent['type'], string> = {

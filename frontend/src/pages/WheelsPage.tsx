@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { ChampionPicker } from '../components/ChampionPicker'
 import { MatchSummaryView } from '../components/MatchSummary'
-import { SlotReel } from '../components/SlotReel'
+import { CaseReel } from '../components/CaseReel'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Modal } from '../components/ui'
 import {
   useAction,
@@ -17,10 +17,18 @@ import {
   usePool,
   useRiotStatus,
 } from '../hooks/queries'
+import { preloadImages } from '../lib/preload'
+import { SPIN_MS, buildStrip, randomLandingOffset } from '../lib/reel'
+import { playReveal, playStart, unlock } from '../lib/sound'
 import type { Assignment, Champion, Game, Run } from '../types'
 
-const BASE_SPIN_MS = 1800
-const STAGGER_MS = 350
+type SpinStage = {
+  key: number
+  startAt: number // shared clock (performance.now) so every reel moves together
+  reels: { playerId: number; strip: string[]; offset: number }[]
+  done: boolean
+  skipped: boolean
+}
 
 export function WheelsPage() {
   const { settings, run, runId } = useActiveRun()
@@ -29,7 +37,7 @@ export function WheelsPage() {
   if (!runId || !run.data) {
     return (
       <EmptyState title="No active run">
-        <p className="text-sm text-slate-400">Add your players and start a run to begin spinning.</p>
+        <p className="text-sm text-slate-400">Add your players and start a run first.</p>
         <Link to="/settings" className="btn-primary">
           Go to Settings
         </Link>
@@ -43,9 +51,11 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const players = usePlayers()
   const pool = usePool(run.id)
   const pendingGame = useGame(run.pending_game_id)
+  const champs = useChampionMap()
+  const playerMap = usePlayerMap()
   const [selected, setSelected] = useState<number[] | null>(null)
   const [practice, setPractice] = useState<Assignment[] | null>(null)
-  const [animating, setAnimating] = useState<{ key: number; landed: Set<number> } | null>(null)
+  const [stage, setStage] = useState<SpinStage | null>(null)
   const [lastResolvedId, setLastResolvedId] = useState<number | null>(null)
   const spin = useAction((ids: number[]) => api.spin(run.id, ids))
   const qc = useQueryClient()
@@ -74,6 +84,8 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
     () => (pool.data ?? []).filter((e) => e.status === 'alive').map((e) => e.champion_id),
     [pool.data],
   )
+  // Decode every portrait the reels might show before anyone presses Spin.
+  useEffect(() => preloadImages((pool.data ?? []).filter((e) => e.status === 'alive').map((e) => e.image_url)), [pool.data])
 
   const chosen = selected ?? []
   const toggle = (id: number) =>
@@ -82,21 +94,43 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const pending = run.pending_game_id != null
   const canSpin = run.status === 'active' && !pending && chosen.length >= 2 && chosen.length <= 5
 
-  const doSpin = () =>
+  const doSpin = () => {
+    unlock() // browsers only allow sound after a click
     spin.mutate(chosen, {
       onSuccess: (res) => {
         setPractice(res.practice ? res.assignments : null)
         setLastResolvedId(null)
         // Skip the reels for people who asked their device for reduced motion.
         const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-        setAnimating(reduced ? null : { key: Date.now(), landed: new Set() })
+        if (reduced) return setStage(null)
+        const fillers = alivePool.length ? alivePool : res.assignments.flatMap((a) => a.options)
+        setStage({
+          key: Date.now(),
+          // Motion starts a beat after the click, so mounting the reels never stutters on screen.
+          startAt: performance.now() + 250,
+          reels: res.assignments.map((a) => ({
+            playerId: a.player_id,
+            strip: buildStrip(fillers, a.options[0]),
+            offset: randomLandingOffset(),
+          })),
+          done: false,
+          skipped: false,
+        })
+        playStart()
       },
     })
+  }
+
+  const spinning = stage != null && !stage.done
+  // Hold on the glowing winners for a moment before the option cards slide in.
+  const finishSpin = () => {
+    playReveal()
+    const hold = stage?.skipped ? 500 : 1300
+    const key = stage?.key
+    setTimeout(() => setStage((s) => (s && s.key === key ? { ...s, done: true } : s)), hold)
+  }
 
   const shownAssignments = pending ? pendingGame.data?.assignments : practice ?? undefined
-  const allLanded = !animating || (shownAssignments ?? []).every((a) => animating.landed.has(a.player_id))
-  const markLanded = (pid: number) =>
-    setAnimating((a) => (a ? { ...a, landed: new Set(a.landed).add(pid) } : a))
 
   if (players.data && players.data.length < 2) {
     return (
@@ -111,19 +145,19 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   return (
     <div className="flex flex-col gap-6">
       {run.status === 'ended' && (
-        <p className="rounded-md bg-red-950/60 px-3 py-2 text-sm text-red-200">
+        <p className="rounded-2xl bg-red-950/50 px-4 py-2.5 text-sm text-red-200 ring-1 ring-red-800/60 ring-inset">
           This run has ended with <b>{run.win_count}</b> wins. Start a new one in Settings.
         </p>
       )}
 
-      {!pending && (
+      {!pending && !spinning && (
         <section className="card flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">
               Who's playing? <span className="text-sm font-normal text-slate-400">({chosen.length}/5, need 2+)</span>
             </h2>
             {!challengeMode && (
-              <span className="rounded bg-slate-700 px-2 py-0.5 text-xs uppercase tracking-wide">Practice spin</span>
+              <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs tracking-wide uppercase">Practice spin</span>
             )}
           </div>
           <div className="flex flex-wrap gap-2">
@@ -134,8 +168,10 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
                   key={p.id}
                   onClick={() => toggle(p.id)}
                   aria-pressed={on}
-                  className={`rounded-full px-3 py-1.5 text-sm ring-1 transition ${
-                    on ? 'bg-gold-500 text-slate-950 ring-gold-400' : 'bg-slate-800 ring-slate-700 hover:bg-slate-700'
+                  className={`rounded-full px-4 py-2 text-sm font-medium ring-1 transition duration-150 ring-inset active:scale-95 ${
+                    on
+                      ? 'bg-gradient-to-b from-gold-400 to-gold-600 text-slate-950 ring-gold-300/60'
+                      : 'bg-white/5 text-slate-200 ring-slate-700 hover:bg-white/10'
                   }`}
                 >
                   {p.display_name}
@@ -144,8 +180,12 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
             })}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button className="btn-primary px-8 py-2.5 text-base" disabled={!canSpin || spin.isPending} onClick={doSpin}>
-              {spin.isPending ? 'Spinning...' : 'Spin'}
+            <button
+              className="btn-primary px-10 py-3 text-base tracking-[0.15em] uppercase"
+              disabled={!canSpin || spin.isPending || spinning}
+              onClick={doSpin}
+            >
+              {spin.isPending ? 'Opening...' : 'Spin'}
             </button>
             <span className="text-sm text-slate-400">
               {run.options_per_player} options each · {run.alive_count} champions alive
@@ -158,24 +198,42 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
         </section>
       )}
 
-      {shownAssignments && (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {shownAssignments.map((a, i) => (
-            <PlayerCard
-              key={`${animating?.key}-${a.player_id}`}
-              assignment={a}
-              game={pending ? pendingGame.data! : null}
-              reel={
-                animating && !animating.landed.has(a.player_id)
-                  ? { pool: alivePool, durationMs: BASE_SPIN_MS + i * STAGGER_MS, onLanded: () => markLanded(a.player_id) }
-                  : null
-              }
+      {spinning && (
+        <section className="card flex flex-col gap-4" aria-live="polite">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-gold-100">Opening...</h2>
+            <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => setStage((s) => (s ? { ...s, skipped: true } : s))}>
+              Skip
+            </button>
+          </div>
+          {stage.reels.map((r, i) => (
+            <CaseReel
+              key={`${stage.key}-${r.playerId}`}
+              label={playerMap.get(r.playerId)?.display_name ?? `Player ${r.playerId}`}
+              strip={r.strip}
+              championMap={champs}
+              startAt={stage.startAt}
+              durationMs={SPIN_MS}
+              offset={r.offset}
+              master={i === 0}
+              skipped={stage.skipped}
+              onDone={i === 0 ? finishSpin : undefined}
             />
           ))}
         </section>
       )}
 
-      {pending && pendingGame.data && allLanded && (
+      {shownAssignments && !spinning && (
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {shownAssignments.map((a, i) => (
+            <div key={`${stage?.key}-${a.player_id}`} className="reel-land" style={{ animationDelay: `${i * 70}ms` }}>
+              <PlayerCard assignment={a} game={pending ? pendingGame.data! : null} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {pending && pendingGame.data && !spinning && (
         <PendingGamePanel game={pendingGame.data} onResolved={(g) => setLastResolvedId(g.id)} />
       )}
       {!pending && lastResolvedId != null && <LastResult gameId={lastResolvedId} />}
@@ -183,15 +241,7 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   )
 }
 
-function PlayerCard({
-  assignment,
-  game,
-  reel,
-}: {
-  assignment: Assignment
-  game: Game | null
-  reel: { pool: string[]; durationMs: number; onLanded: () => void } | null
-}) {
+function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game | null }) {
   const champs = useChampionMap()
   const playerMap = usePlayerMap()
   const [pickingOther, setPickingOther] = useState(false)
@@ -203,48 +253,35 @@ function PlayerCard({
   const isOther = assignment.played_champion_id != null && assignment.played_option_index == null
 
   return (
-    <div className="card flex flex-col gap-3">
-      <h3 className="font-semibold">{player?.display_name ?? `Player ${assignment.player_id}`}</h3>
-      {reel ? (
-        <div className="flex items-center gap-3">
-          <SlotReel
-            pool={reel.pool.length ? reel.pool : assignment.options}
-            finalId={first}
-            championMap={champs}
-            durationMs={reel.durationMs}
-            onLanded={reel.onLanded}
-          />
-          <span className="text-sm text-slate-400">Spinning... (tap to skip)</span>
-        </div>
-      ) : (
-        <ol className="flex flex-col gap-1.5">
-          {[first, ...backups].map((cid, idx) => {
-            const played = assignment.played_option_index === idx
-            return (
-              <li key={cid} className="reel-land" style={{ animationDelay: `${idx * 80}ms` }}>
-                <button
-                  disabled={!game || setPick.isPending}
-                  onClick={() => setPick.mutate({ option_index: idx })}
-                  aria-pressed={played}
-                  className={`flex w-full items-center gap-3 rounded-lg p-1 text-left transition sm:p-1.5 ${
-                    played ? 'bg-gold-500/20 ring-2 ring-gold-400' : game ? 'hover:bg-slate-800' : ''
-                  }`}
-                >
-                  <span className="w-5 text-center text-sm font-bold text-slate-400">{idx + 1}</span>
-                  <ChampionPortrait
-                    champion={champs.get(cid)}
-                    size={idx === 0 ? 'mdlg' : 'sm'}
-                    className={idx === 0 ? 'land-glow' : ''}
-                  />
-                  <span className={idx === 0 ? 'text-lg font-semibold' : 'text-sm'}>{champs.get(cid)?.name ?? cid}</span>
-                  {played && <span className="ml-auto text-xs font-bold uppercase text-gold-300">Played</span>}
-                </button>
-              </li>
-            )
-          })}
-        </ol>
-      )}
-      {game && !reel && (
+    <div className="card flex h-full flex-col gap-3">
+      <h3 className="font-display font-bold text-gold-100">{player?.display_name ?? `Player ${assignment.player_id}`}</h3>
+      <ol className="flex flex-col gap-1.5">
+        {[first, ...backups].map((cid, idx) => {
+          const played = assignment.played_option_index === idx
+          return (
+            <li key={cid} className="reel-land" style={{ animationDelay: `${idx * 80}ms` }}>
+              <button
+                disabled={!game || setPick.isPending}
+                onClick={() => setPick.mutate({ option_index: idx })}
+                aria-pressed={played}
+                className={`flex w-full items-center gap-3 rounded-2xl p-1.5 text-left transition duration-150 active:scale-[0.98] ${
+                  played ? 'bg-gold-500/15 ring-2 ring-gold-400 ring-inset' : game ? 'hover:bg-white/5' : ''
+                }`}
+              >
+                <span className="w-5 text-center text-sm font-bold text-slate-400">{idx + 1}</span>
+                <ChampionPortrait
+                  champion={champs.get(cid)}
+                  size={idx === 0 ? 'mdlg' : 'sm'}
+                  className={idx === 0 ? 'land-glow rounded-xl' : 'rounded-lg'}
+                />
+                <span className={idx === 0 ? 'text-lg font-semibold' : 'text-sm'}>{champs.get(cid)?.name ?? cid}</span>
+                {played && <span className="ml-auto text-xs font-bold uppercase text-gold-300">Played</span>}
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+      {game && (
         <div className="flex items-center gap-2 border-t border-slate-800 pt-2 text-sm">
           {isOther ? (
             <>
@@ -254,7 +291,7 @@ function PlayerCard({
               </span>
             </>
           ) : (
-            <span className="text-slate-400">{assignment.played_champion_id ? '' : 'Click the champion they played.'}</span>
+            <span className="text-slate-400">{assignment.played_champion_id ? '' : 'Tap the one they played.'}</span>
           )}
           <button className="ml-auto text-xs text-slate-400 underline hover:text-slate-200" onClick={() => setPickingOther(true)}>
             Other...
@@ -290,7 +327,7 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
       <button
         className="btn-danger px-5 sm:px-6"
         disabled={result.isPending || !allMarked}
-        title={allMarked ? undefined : 'Mark every player first'}
+        title={allMarked ? undefined : 'Mark everyone first'}
         onClick={() => submit('loss')}
       >
         Loss
@@ -304,13 +341,13 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
   return (
     <section className="card flex flex-col gap-3 border-gold-600/40">
       <h2 className="font-semibold">
-        Game #{game.id}: {game.needs_review ? 'needs review' : 'waiting for result'}
+        Game {game.id} · {game.needs_review ? 'check this one' : 'waiting on the result'}
       </h2>
       {game.needs_review ? <ReviewPanel game={game} onResolved={onResolved} /> : <AutoStatus game={game} />}
       {!allMarked && !game.needs_review && (
         <p className="text-sm text-slate-400">
-          Recording by hand? Click the champion each player played. On a win, anyone left unmarked counts as option 1.
-          A loss needs everyone marked.
+          Entering it yourself? Tap what everyone played. On a win, anyone you skip counts as their first pick. For a
+          loss, mark everyone.
         </p>
       )}
       <div className="flex flex-wrap gap-2">
@@ -318,7 +355,7 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
         <button
           className="btn-secondary sm:ml-auto"
           disabled={result.isPending}
-          onClick={() => confirm('Void this spin and re-roll? This is logged.') && submit('void', 're-roll')}
+          onClick={() => confirm('Throw out this spin and re-roll?') && submit('void', 're-roll')}
         >
           Void spin (re-roll)
         </button>
@@ -326,7 +363,7 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
       <ErrorText error={result.error} />
       {/* Phones: keep the result buttons in reach without scrolling past every player's card */}
       <div className="h-16 sm:hidden" aria-hidden />
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur sm:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-[#020b16]/97 px-4 py-3 sm:hidden">
         <div className="mx-auto flex max-w-6xl items-center gap-2">
           <span className="mr-auto text-xs text-slate-400">Game #{game.id}</span>
           {resultButtons}
@@ -349,13 +386,13 @@ function AutoStatus({ game }: { game: Game }) {
 
   let text: string
   let watching = false
-  if (!riot.data?.key_set) text = 'No Riot API key, so record the result by hand below.'
-  else if (!settings.data?.challenge_mode) text = 'Challenge mode is off, so this game will not be auto-matched.'
-  else if (unlinked.length) text = `Auto results need every player linked to Riot. Not linked: ${unlinked.join(', ')}.`
+  if (!riot.data?.key_set) text = 'No Riot key set up, so enter the result yourself below.'
+  else if (!settings.data?.challenge_mode) text = "Challenge mode is off, so this game won't be picked up from Riot."
+  else if (unlinked.length) text = `To get results from Riot, everyone needs a linked Riot ID. Missing: ${unlinked.join(', ')}.`
   else {
     watching = true
     const secs = settings.data?.poll_interval_seconds ?? 90
-    text = `Waiting for the match to finish. Checking Riot every ${secs} seconds; the result applies automatically.`
+    text = `Waiting for the game to end. We check Riot every ${secs} seconds and fill in the result for you.`
   }
   const outcome = sync.data?.games.find((g) => g.game_id === game.id)
 
@@ -370,7 +407,7 @@ function AutoStatus({ game }: { game: Game }) {
           </button>
         )}
       </div>
-      {outcome?.status === 'waiting' && <p className="text-xs text-slate-500">No finished match found yet.</p>}
+      {outcome?.status === 'waiting' && <p className="text-xs text-slate-500">Nothing yet.</p>}
       {sync.data && sync.data.errors.length > 0 && <p className="text-xs text-red-300">{sync.data.errors.join('; ')}</p>}
       <ErrorText error={sync.error} />
     </div>
@@ -381,7 +418,7 @@ function ReviewPanel({ game, onResolved }: { game: Game; onResolved: (g: Game) =
   const review = useAction((action: 'accept' | 'reject') => api.review(game.id, action))
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
-      <p className="text-sm text-amber-200">Found a match, but it didn't pass every check: {game.review_reason}</p>
+      <p className="text-sm text-amber-200">Found the game, but something looks off: {game.review_reason}</p>
       {game.match && <MatchSummaryView match={game.match} flagOptions />}
       <div className="flex flex-wrap gap-2">
         <button
@@ -389,13 +426,13 @@ function ReviewPanel({ game, onResolved }: { game: Game; onResolved: (g: Game) =
           disabled={review.isPending}
           onClick={() => review.mutate('accept', { onSuccess: onResolved })}
         >
-          Use this match anyway
+          Use it anyway
         </button>
         <button className="btn-secondary" disabled={review.isPending} onClick={() => review.mutate('reject')}>
-          Not this game, keep looking
+          Wrong game
         </button>
       </div>
-      <p className="text-xs text-slate-400">Or record the result by hand with the buttons below.</p>
+      <p className="text-xs text-slate-400">Or just enter the result below.</p>
       <ErrorText error={review.error} />
     </div>
   )
@@ -409,7 +446,7 @@ function LastResult({ gameId }: { gameId: number }) {
   if (!game || game.status === 'pending') return null
 
   const tone = { won: 'text-emerald-300', lost: 'text-red-300', void: 'text-slate-300', pending: '' }[game.status]
-  const label = { won: 'Victory!', lost: 'Defeat', void: 'Voided', pending: '' }[game.status]
+  const label = { won: 'Win!', lost: 'Loss', void: 'Thrown out', pending: '' }[game.status]
   return (
     <section className="card flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -439,7 +476,7 @@ function LastResult({ gameId }: { gameId: number }) {
       {game.match && <MatchSummaryView match={game.match} />}
       {game.tokens_earned.length > 0 && (
         <p className="text-sm text-gold-300">
-          3-win streak! Revive token earned by {game.tokens_earned.map((p) => playerMap.get(p)?.display_name).join(', ')}.
+          3 in a row! Revive token for {game.tokens_earned.map((p) => playerMap.get(p)?.display_name).join(', ')}.
         </p>
       )}
       <ErrorText error={undo.error} />
@@ -451,7 +488,7 @@ function EndRunButton({ run }: { run: Run }) {
   const end = useAction(() => api.endRun(run.id))
   return (
     <div className="flex items-center gap-3 text-sm">
-      <span className="text-slate-400">Not enough champions left and no tokens.</span>
+      <span className="text-slate-400">Not enough champs left, and no tokens to bring any back.</span>
       <button className="btn-danger" onClick={() => confirm(`End "${run.name}" with ${run.win_count} wins?`) && end.mutate(undefined)}>
         End run
       </button>

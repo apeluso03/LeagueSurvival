@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allTags, filterChampions, reelSequence } from './champions'
+import { allTags, filterChampions, splashUrl } from './champions'
 
 const champs = [
   { name: "Kai'Sa", tags: ['Marksman'] },
@@ -30,23 +30,12 @@ describe('allTags', () => {
   })
 })
 
-describe('reelSequence', () => {
-  const pool = ['A', 'B', 'C', 'D']
-
-  it('ends on the final id and has the requested length', () => {
-    const seq = reelSequence(pool, 'C', 20)
-    expect(seq).toHaveLength(20)
-    expect(seq.at(-1)).toBe('C')
-  })
-
-  it('never repeats the same id twice in a row', () => {
-    for (let i = 0; i < 50; i++) {
-      const seq = reelSequence(pool, 'A', 30)
-      seq.slice(1).forEach((id, j) => expect(id).not.toBe(seq[j]))
-    }
-  })
-
-  it('works with a single-champion pool', () => {
-    expect(reelSequence(['Z'], 'Z', 5)).toEqual(['Z', 'Z', 'Z', 'Z', 'Z'])
+describe('splashUrl', () => {
+  it('builds the unversioned splash path from a portrait url', () => {
+    const image_url = 'https://ddragon.leagueoflegends.com/cdn/16.19.1/img/champion/MonkeyKing.png'
+    expect(splashUrl({ champion_id: 'MonkeyKing', image_url })).toBe(
+      'https://ddragon.leagueoflegends.com/cdn/img/champion/splash/MonkeyKing_0.jpg',
+    )
+    expect(splashUrl({ champion_id: 'X', image_url: '' })).toBeNull()
   })
 })

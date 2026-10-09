@@ -26,7 +26,7 @@ export function ModeToggle() {
         disabled={!settings.data || update.isPending}
         aria-pressed={on}
         title={on ? 'Spins count for the challenge' : 'Spins are practice only'}
-        className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ring-1 transition ${
+        className={`flex items-center gap-2 rounded-full px-3 py-1 whitespace-nowrap text-xs font-bold uppercase tracking-wide ring-1 transition ${
           on
             ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/60 hover:bg-emerald-500/25'
             : 'bg-slate-700/40 text-slate-300 ring-slate-500 hover:bg-slate-700/60'
@@ -36,9 +36,9 @@ export function ModeToggle() {
         {on ? 'Challenge on' : 'Practice'}
       </button>
       {confirming && (
-        <Modal title="A challenge game is pending" onClose={() => setConfirming(false)}>
+        <Modal title="There's a game going" onClose={() => setConfirming(false)}>
           <p className="mb-4 text-sm text-slate-300">
-            Turning challenge mode off stops results from changing the pool. What should happen to the pending game?
+            With challenge mode off, results won't touch the pool. What do you want to do with the current game?
           </p>
           <ErrorText error={update.error} />
           <div className="mt-3 flex flex-wrap justify-end gap-2">
@@ -46,10 +46,10 @@ export function ModeToggle() {
               Cancel
             </button>
             <button className="btn-secondary" onClick={() => turnOff(false)}>
-              Keep it pending
+              Keep it
             </button>
             <button className="btn-danger" onClick={() => turnOff(true)}>
-              Void the game
+              Throw it out
             </button>
           </div>
         </Modal>

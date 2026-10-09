@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   Champion,
+  ChampionReport,
   Game,
   Pick,
   Player,
@@ -85,6 +86,8 @@ export const api = {
 
   champions: () => get<Champion[]>('/champions'),
   refreshChampions: () => post<{ count: number }>('/champions/refresh'),
+  championStats: (championId: string, runId?: number) =>
+    get<ChampionReport>(`/champions/${championId}/stats${qs({ run_id: runId })}`),
 
   runs: () => get<Run[]>('/runs'),
   run: (id: number) => get<Run>(`/runs/${id}`),

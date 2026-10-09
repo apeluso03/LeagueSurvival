@@ -36,7 +36,7 @@ export function StatsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">Stats</h1>
-        <div className="flex overflow-hidden rounded-md ring-1 ring-slate-700" role="group" aria-label="Games to include">
+        <div className="inline-flex gap-0.5 rounded-full bg-black/30 p-1 ring-1 ring-gold-700/25 ring-inset" role="group" aria-label="Games to include">
           {[
             [true, 'Challenge only'],
             [false, 'All tracked games'],
@@ -45,7 +45,7 @@ export function StatsPage() {
               key={String(value)}
               onClick={() => setChallengeOnly(value as boolean)}
               aria-pressed={challengeOnly === value}
-              className={`px-3 py-1.5 text-sm ${challengeOnly === value ? 'bg-gold-500 text-slate-950' : 'bg-slate-900 hover:bg-slate-800'}`}
+              className={`rounded-full px-3 py-1 text-sm transition duration-150 ${challengeOnly === value ? 'bg-gold-700/50 text-gold-100' : 'text-slate-400 hover:text-slate-100'}`}
             >
               {label as string}
             </button>
@@ -73,8 +73,8 @@ export function StatsPage() {
       <ErrorText error={sync.error ?? stats.error} />
       {riot.data && !riot.data.key_set && (
         <p className="text-sm text-slate-400">
-          KDA, KP and per-minute stats need Riot match data. Add a Riot API key (see Settings) and link players' Riot IDs.
-          Win/loss stats from challenge games work without it.
+          KDA and the other detailed stats come from Riot. Add a Riot key in Settings to see them. Wins and losses
+          work either way.
         </p>
       )}
 
@@ -192,8 +192,8 @@ function PlayerCard({ stats: s, challengeOnly }: { stats: PlayerStats; challenge
         </p>
       ) : s.detailed_games === 0 ? (
         <p className="text-sm text-slate-400">
-          No Riot match data yet, so only wins and losses are shown.{' '}
-          {player?.puuid ? 'Sync matches to pull in KDA and more.' : 'Link their Riot ID in Settings to get KDA and more.'}
+          No Riot data yet, so it's just wins and losses for now.{' '}
+          {player?.puuid ? 'Sync matches to fill in the rest.' : 'Link their Riot ID in Settings for the rest.'}
         </p>
       ) : (
         <>
@@ -207,7 +207,7 @@ function PlayerCard({ stats: s, challengeOnly }: { stats: PlayerStats; challenge
           </div>
           {s.detailed_games < s.games && (
             <p className="text-xs text-slate-500">
-              Riot stats from {s.detailed_games} of {s.games} games. The rest were recorded by hand.
+              Based on {s.detailed_games} of {s.games} games. The others were entered by hand.
             </p>
           )}
         </>
@@ -216,7 +216,7 @@ function PlayerCard({ stats: s, challengeOnly }: { stats: PlayerStats; challenge
       <div className="flex flex-col gap-2">
         <h3 className="text-xs uppercase tracking-wide text-slate-400">Best champions (2+ games)</h3>
         {s.best_champions.length === 0 ? (
-          <p className="text-sm text-slate-500">Not enough games on any champion yet.</p>
+          <p className="text-sm text-slate-500">Not enough games on one champ yet.</p>
         ) : (
           <ul className="flex flex-col gap-1.5">
             {s.best_champions.slice(0, 5).map((c) => (
@@ -236,7 +236,7 @@ function PlayerCard({ stats: s, challengeOnly }: { stats: PlayerStats; challenge
       {s.eliminated_champions.length > 0 && (
         <div className="flex flex-col gap-2">
           <h3 className="text-xs uppercase tracking-wide text-slate-400">
-            Eliminated in challenge losses ({s.eliminated_champions.length})
+            Champs they lost ({s.eliminated_champions.length})
           </h3>
           <div className="flex flex-wrap gap-1.5">
             {s.eliminated_champions.map((cid, i) => (

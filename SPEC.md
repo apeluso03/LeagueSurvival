@@ -339,6 +339,7 @@ What it will need later:
 | M3 | Riot linking and stats | Players link Riot IDs, matches import, Stats tab shows all listed stats |
 | M4 | Auto results | Poller and matcher link games, auto elimination, "needs review" flow, challenge mode switch fully enforced |
 | M5 | Polish | Wheel animation, History tab, mobile layout, empty and error states |
+| M5.5 | Visual overhaul | Section 17: landing page, League-client look, case-opening wheels with sound, interactive pools |
 | M6 | Online lobby | Section 12 |
 
 ## 14. Testing Priorities
@@ -367,3 +368,45 @@ What it will need later:
 - Champion role filter (needs a lane data source, since Data Dragon only has class tags).
 - Achievements (first pentakill in a run, flawless 5-game streak).
 - Shareable run summary image.
+
+## 17. Visual Design and UX Overhaul (v0.2)
+
+Goal: the app should feel like a polished companion to the League client, not a spreadsheet. Two influences: the **League client's palette and ornament** (deep navy, hextech blue, gold trim) and **iOS-style shapes and motion** (rounded continuous corners, frosted-glass panels, quick spring-like animations).
+
+### 17.1 Visual language
+- **Palette (League client):** background navy-black `#010A13` / `#0A1428`; panels `#0A1428` → `#1E2328` with ~70% opacity and backdrop blur; gold trim `#785A28` / `#C8AA6E` / `#C89B3C`, light gold text `#F0E6D2`; hextech blue accents `#0AC8B9` / `#0397AB` / `#005A82` / `#CDFAFA`. Win = hextech teal, loss = muted red.
+- **Type:** a display serif with small caps feel for headings (Cinzel, standing in for the client's Beaufort) and a clean sans for body (Inter, standing in for Spiegel).
+- **Shapes:** large radii (16–24px) on panels and sheets, pill-shaped controls and segmented tabs, thin gold hairline borders, soft layered shadows. No hard boxy edges.
+- **Motion:** snappy by default (120–200ms, ease-out); buttons compress slightly when pressed; pages fade/slide in; modals rise as sheets; everything respects "reduce motion".
+
+### 17.2 Landing page (`/`)
+- Full-screen title page: logo/wordmark, a short tagline, and the active run at a glance (wins, streak, champions left, tokens).
+- Large tiles to open each section: Wheels, Champion Pool, Stats, History, Settings.
+- A "Sign in" area reserved for online lobby accounts (Section 12); shown as "coming soon" for now.
+- The Wheels tab moves to `/wheels`.
+
+### 17.3 Case-opening wheels
+- Each player's wheel is a horizontal strip of champion cards sliding past a center marker, like a CS:GO case opening.
+- **All wheels spin together, synced:** same start, same duration, all land at the same moment.
+- Longer spin for suspense (~6–7 seconds) with a long ease-out; the landing spot varies slightly within the card so it isn't predictable.
+- Cards carry a colored strip by champion class (Fighter, Mage, Assassin, Tank, Marksman, Support), like item rarity.
+- **Sound effects** (generated in the browser, no audio files): a tick each time a card passes the marker, slowing with the reel, and a reveal chime on landing. One mute toggle, remembered per browser.
+- After landing, the winning card glows and the backup options slide in below. "Skip" lands all wheels at once. Reduced-motion users skip straight to the result.
+
+### 17.4 Champion pools
+- The Pool tab shows two "pools" instead of a flat grid:
+  - **The Pool** (alive champions): a still water surface with round portrait tokens.
+  - **The Graveyard** (eliminated): a darker, murkier pool beside/below it.
+- **Nothing animates at rest** (an idle Pool tab should cost nothing). The fun comes from interaction:
+  - **Hover lift:** the champion under the mouse rises, tilts and glows.
+  - **Drag and fling:** portraits can be dragged around just for fun and drift to a stop; dropping one makes a small splash.
+  - **Revive flight:** a revived champion arcs out of the Graveyard (spinning, color returning) and splashes into the Pool, landing where it was dropped if it was dragged.
+- **Click a portrait** to open its card: art, title, classes, and its numbers — times offered and played this run, wins/losses on it, who eliminated it and when, and group stats from imported Riot matches.
+- **Drag to revive:** if any revive tokens are available, dragging a champion from the Graveyard into the Pool revives it (asking whose token to spend). Without tokens, it drifts back.
+- Ideas for later: bumping (flung champions knock others aside), a "Stir the pool" button, "Fish one out" (random champion), an occasional single champion surfacing.
+- Search highlights matching champions instead of hiding the rest; a compact grid view stays available as a toggle for quick scanning.
+
+### 17.5 Other polish
+- Header becomes a frosted bar with a segmented, pill-shaped tab control.
+- Toasts and sheets slide up from the bottom; consistent focus rings for keyboard use.
+

@@ -132,3 +132,32 @@ def test_undone_elimination_not_listed(session, setup):
     session.commit()
     [alex] = stats.player_stats(session, [1], setup.id)
     assert alex.eliminated_champions == []
+
+
+def test_champion_report(session, setup):
+    from app.models import Champion
+
+    g1 = challenge_game(session, setup, "win", seed=1)
+    alex_pick = rules.assignments_for(session, g1.id)[0].played_champion_id
+    champ = session.get(Champion, alex_pick)
+    sync.store_match(session, make_match("NA1_77", [P("puuid-alex", champ.key, kills=6, deaths=2, assists=4)]))
+    session.commit()
+
+    rep = stats.champion_report(session, champ, setup.id)
+    assert rep.in_run and rep.status == "alive"
+    assert (rep.times_offered, rep.times_played, rep.wins, rep.losses) == (1, 1, 1, 0)
+    assert [(line.player_id, line.games, line.wins) for line in rep.played_by] == [(1, 1, 1)]
+    assert (rep.all_runs_played, rep.all_runs_wins) == (1, 1)
+    assert rep.riot_games == 1 and rep.riot_kda == 5.0
+
+    g2 = challenge_game(session, setup, "loss", seed=2)
+    bea_pick = rules.assignments_for(session, g2.id)[1].played_champion_id
+    dead = stats.champion_report(session, session.get(Champion, bea_pick), setup.id)
+    assert dead.status == "eliminated" and dead.eliminated_by_player_id == 2 and dead.eliminated_in_game_id == g2.id
+
+
+def test_champion_report_outside_run(session):
+    from app.models import Champion
+
+    rep = stats.champion_report(session, session.get(Champion, "Champ001"), None)
+    assert not rep.in_run and rep.times_offered == 0 and rep.riot_games == 0
