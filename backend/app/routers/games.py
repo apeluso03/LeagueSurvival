@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import ChallengeGame
+from app.models import ChallengeGame, Player, RiotMatch
 from app.routers.common import champion_keys, game_out, get_app_settings, get_or_404
-from app.schemas import AssignmentsPatch, GameOut, ResultIn, ReviewIn
-from app.services import matcher, rules
+from app.schemas import AssignmentsPatch, GameOut, LinkMatchIn, ResultIn, ReviewIn
+from app.services import matcher, rules, sync
+from app.services.riot_client import RiotClient, RiotError
 
 router = APIRouter(prefix="/api/games", tags=["games"])
 
@@ -56,5 +57,26 @@ def review(game_id: int, body: ReviewIn, session: Session = Depends(get_session)
         matcher.accept_review(session, game, get_app_settings(session))
     else:
         matcher.reject_review(session, game)
+    session.commit()
+    return game_out(session, game)
+
+
+@router.post("/{game_id}/link-match", response_model=GameOut)
+async def link_match(game_id: int, body: LinkMatchIn, session: Session = Depends(get_session)):
+    """Attach a Riot match to a hand-recorded game and pay out its gold (SPEC 7.7). The recorded
+    result stays as it is. Fetches the match from Riot if it hasn't been imported yet."""
+    game = get_or_404(session, ChallengeGame, game_id, "Game")
+    match_id = body.riot_match_id.strip().upper()
+    if "_" not in match_id:
+        raise HTTPException(400, "Match IDs look like NA1_1234567890")
+    if session.get(RiotMatch, match_id) is None:
+        first = rules.assignments_for(session, game.id)[0]
+        region = session.get(Player, first.player_id).region
+        try:
+            async with RiotClient() as client:
+                sync.store_match(session, await client.match(region, match_id))
+        except RiotError as e:
+            raise HTTPException(404 if e.status == 404 else 502, str(e)) from e
+    matcher.link_match_by_id(session, game, match_id)
     session.commit()
     return game_out(session, game)

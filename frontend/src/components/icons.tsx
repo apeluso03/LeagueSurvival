@@ -104,3 +104,59 @@ export function LogoMark({ className = '' }: { className?: string }) {
     </svg>
   )
 }
+
+// --- shop items -----------------------------------------------------------------------------
+
+export const ShieldIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M12 3 5 6v6c0 4.4 3 7.9 7 9 4-1.1 7-4.6 7-9V6l-7-3Z" />
+  </svg>
+)
+
+export const RerollIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M20 11a8 8 0 0 0-14.9-3.5M4 4v4h4M4 13a8 8 0 0 0 14.9 3.5M20 20v-4h-4" />
+  </svg>
+)
+
+export const SwapIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M7 4 3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7" />
+  </svg>
+)
+
+export const ChooseIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+  </svg>
+)
+
+export const BlacklistIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m5.6 5.6 12.8 12.8" />
+  </svg>
+)
+
+export const ContractIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M7 3h8l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+    <path d="M15 3v4h4M9 12h6M9 16h4" />
+  </svg>
+)
+
+export const CoinIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" aria-hidden {...p}>
+    <circle cx="12" cy="12" r="9.5" fill="#c89b3c" stroke="#f0e6d2" strokeWidth="1.2" />
+    <circle cx="12" cy="12" r="6.5" fill="none" stroke="#785a28" strokeWidth="1.2" />
+    <path d="M12 8.2v7.6M9.6 10.2h4.8" stroke="#463714" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+)
+
+export const ShopIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M4 9h16l-1.5 11h-13L4 9ZM8 9V7a4 4 0 0 1 8 0v2" />
+  </svg>
+)

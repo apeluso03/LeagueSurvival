@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
-import { useAction, usePlayerMap, useTokens } from '../hooks/queries'
+import { useAction, useEconomy, usePlayerMap, useTokens } from '../hooks/queries'
 import { splashUrl } from '../lib/champions'
 import { classColor } from '../lib/reel'
 import { num, pct } from '../lib/stats'
 import type { PoolEntry, Run } from '../types'
+import { useOwnedItem } from '../hooks/useItems'
+import { ShieldIcon } from './icons'
 import { ErrorText, Modal, Spinner } from './ui'
 
 function Fact({ label, value }: { label: string; value: ReactNode }) {
@@ -113,6 +115,14 @@ export function ChampionCard({
         </div>
 
         {active && dead && reviveButtons}
+        {!dead && entry.shield_item_id && (
+          <p className="flex items-center gap-2 text-sm text-emerald-200">
+            <ShieldIcon className="h-4 w-4" />
+            Shielded{entry.shield_player_id ? ` by ${name(entry.shield_player_id)}` : ''}. The next loss with it breaks the
+            shield instead.
+          </p>
+        )}
+        {active && !dead && !entry.shield_item_id && !reviveOnly && <ShieldPlacer run={run} entry={entry} onDone={onClose} />}
 
         {!reviveOnly && (
           <>
@@ -193,5 +203,38 @@ export function ChampionCard({
         <ErrorText error={eliminate.error ?? revive.error} />
       </div>
     </Modal>
+  )
+}
+
+/** Place an owned Shield on this champion (SPEC 10.3 shield flow). */
+function ShieldPlacer({ run, entry, onDone }: { run: Run; entry: PoolEntry; onDone: () => void }) {
+  const economy = useEconomy(run.id)
+  const players = usePlayerMap()
+  const owned = useOwnedItem(run.id)
+  const holders = (economy.data ?? []).filter((e) => (e.unused.shield ?? 0) > 0)
+  if (!holders.length) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold text-gold-100">Protect {entry.name} with a shield:</p>
+      <div className="flex flex-wrap gap-2">
+        {holders.map((h) => (
+          <button
+            key={h.player_id}
+            className="btn-secondary"
+            disabled={owned.isPending}
+            onClick={() =>
+              owned.mutate(
+                { playerId: h.player_id, type: 'shield', body: { champion_id: entry.champion_id } },
+                { onSuccess: onDone },
+              )
+            }
+          >
+            <ShieldIcon className="h-4 w-4 text-emerald-300" />
+            Use {players.get(h.player_id)?.display_name}'s shield
+          </button>
+        ))}
+      </div>
+      <ErrorText error={owned.error} />
+    </div>
   )
 }

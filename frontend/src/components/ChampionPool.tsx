@@ -11,6 +11,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { splash } from '../lib/flight'
+import { ShieldIcon } from './icons'
 import { BUBBLE_PX, clampToPool, initialLayout, poolHeight, step, type Point } from '../lib/poolLayout'
 import type { PoolEntry } from '../types'
 
@@ -76,6 +77,14 @@ const Bubble = memo(function Bubble({ entry: e, x, y, grave, hl, onPointerDown, 
           grave ? 'opacity-70 grayscale-[0.85] ring-slate-600/80' : 'ring-hex-100/50'
         } ${hl ? 'ring-gold-300' : ''}`}
       />
+      {e.shield_item_id && (
+        <span
+          className="pointer-events-none absolute -right-1 -bottom-1 grid h-5 w-5 place-items-center rounded-full bg-emerald-600 text-white ring-2 ring-[#052231]"
+          title="Shielded"
+        >
+          <ShieldIcon className="h-3 w-3" strokeWidth={2.4} />
+        </span>
+      )}
     </button>
   )
 })

@@ -49,6 +49,8 @@ class Player(SQLModel, table=True):
     puuid: str | None = Field(default=None, index=True)
     platform: str = "na1"
     region: str = "americas"
+    pin_hash: str | None = None  # future login (SPEC 12)
+    discord_id: str | None = None  # future login (SPEC 12)
     created_at: datetime = dt_field(default_now=True)
 
 
@@ -66,10 +68,14 @@ class Run(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     status: str = "active"  # "active" | "ended"
+    owner_player_id: int | None = None
+    lobby_code: str | None = None
     options_per_player: int = 3  # 3 | 4
     win_count: int = 0
     current_streak: int = 0
     best_streak: int = 0
+    # Overrides of the default prices, gold rates and contract targets (see services/shop_config.py).
+    shop_config: dict = json_field(dict)
     started_at: datetime = dt_field(default_now=True)
     ended_at: datetime | None = dt_field()
 
@@ -78,6 +84,7 @@ class PoolEntry(SQLModel, table=True):
     run_id: int = Field(foreign_key="run.id", primary_key=True)
     champion_id: str = Field(foreign_key="champion.id", primary_key=True)
     status: str = "alive"  # "alive" | "eliminated"
+    shield_item_id: int | None = None  # the Shield item protecting this champion, if any
     eliminated_at: datetime | None = dt_field()
     eliminated_in_game_id: int | None = Field(default=None, foreign_key="challengegame.id")
     eliminated_by_player_id: int | None = Field(default=None, foreign_key="player.id")
@@ -107,7 +114,8 @@ class SpinAssignment(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     game_id: int = Field(foreign_key="challengegame.id", index=True)
     player_id: int = Field(foreign_key="player.id")
-    options: list[str] = json_field()  # ordered champion ids
+    options: list[str] = json_field()  # ordered champion ids (after any items)
+    original_options: list[str] = json_field()  # the list as first spun, before items
     played_champion_id: str | None = Field(default=None, foreign_key="champion.id")
     played_option_index: int | None = None  # 0-based; None with a champion set means "other"
 
@@ -125,11 +133,12 @@ class PoolEvent(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     run_id: int = Field(foreign_key="run.id", index=True)
     game_id: int | None = Field(default=None, foreign_key="challengegame.id")
-    # "eliminate" | "revive" | "manual_eliminate" | "manual_revive"
+    # "eliminate" | "revive" | "manual_eliminate" | "manual_revive" | "shield_placed" | "shield_consumed"
     type: str
     champion_id: str | None = Field(default=None, foreign_key="champion.id")
     player_id: int | None = Field(default=None, foreign_key="player.id")
     token_id: int | None = Field(default=None, foreign_key="revivetoken.id")
+    item_id: int | None = None
     created_at: datetime = dt_field(default_now=True)
     undone: bool = False
 
@@ -149,19 +158,68 @@ class PlayerMatchStats(SQLModel, table=True):
     player_id: int = Field(foreign_key="player.id", primary_key=True)
     champion_key: int
     team_id: int
+    team_position: str = ""  # "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | ""
     win: bool
     kills: int = 0
     deaths: int = 0
     assists: int = 0
     team_kills: int = 0
+    double_kills: int = 0
+    triple_kills: int = 0
+    quadra_kills: int = 0
+    penta_kills: int = 0
     cs: int = 0
     gold: int = 0
     damage_to_champs: int = 0
+    heals_on_teammates: int = 0
+    shields_on_teammates: int = 0
     vision_score: int = 0
+    rating_grade: str | None = None
     game_duration: int = 0
     queue_id: int = 0
     is_challenge: bool = False
     challenge_game_id: int | None = Field(default=None, foreign_key="challengegame.id")
+
+
+# --- gold and shop (SPEC 7.7 to 7.9) ----------------------------------------------------
+
+
+class GoldLedger(SQLModel, table=True):
+    """Every gold change. A balance is always the sum of its non-undone rows."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: int = Field(foreign_key="run.id", index=True)
+    player_id: int = Field(foreign_key="player.id", index=True)
+    amount: int
+    reason: str  # "game" | "contract_payout" | "purchase" | "refund" | "manual_adjust"
+    game_id: int | None = Field(default=None, foreign_key="challengegame.id")
+    item_id: int | None = Field(default=None, foreign_key="inventoryitem.id")
+    breakdown: dict = json_field(dict)  # per-source amounts for "game"; note for "manual_adjust"
+    created_at: datetime = dt_field(default_now=True)
+    undone: bool = False
+
+
+class InventoryItem(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: int = Field(foreign_key="run.id", index=True)
+    player_id: int = Field(foreign_key="player.id", index=True)
+    type: str  # "shield" | "reroll" | "swap" | "choose" | "blacklist" | "contract"
+    price_paid: int
+    purchased_at: datetime = dt_field(default_now=True)
+    status: str = "unused"  # "unused" | "armed" | "active" | "used" | "refunded"
+    used_at: datetime | None = dt_field()
+    used_in_game_id: int | None = Field(default=None, foreign_key="challengegame.id")
+    # champion id for shield/choose, player id for swap, champion ids for blacklist
+    target: dict = json_field(dict)
+
+
+class Contract(SQLModel, table=True):
+    item_id: int = Field(foreign_key="inventoryitem.id", primary_key=True)
+    goal_type: str  # "kills" | "assists" | "win" | "rating"
+    target: str  # number or grade, stored as text
+    payout: int
+    game_id: int | None = Field(default=None, foreign_key="challengegame.id")
+    status: str = "pending"  # "pending" | "won" | "lost" | "refunded"
 
 
 DEFAULT_QUEUE_IDS = [400, 420, 440, 490]  # Normal Draft, Ranked Solo/Duo, Flex, Quickplay

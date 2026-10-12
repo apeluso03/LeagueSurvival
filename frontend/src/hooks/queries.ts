@@ -48,6 +48,27 @@ export const useGame = (id: number | null | undefined) =>
     refetchInterval: (q) => (q.state.data?.status === 'pending' ? PENDING_REFRESH_MS : false),
   })
 
+export const useShop = (runId: number | null | undefined) =>
+  useQuery({ queryKey: ['shop', runId], queryFn: () => api.shop(runId!), enabled: runId != null })
+
+/** Gold and item status for every player in the run. */
+export const useEconomy = (runId: number | null | undefined) =>
+  useQuery({ queryKey: ['economy', runId], queryFn: () => api.economy(runId!), enabled: runId != null })
+
+export const useGold = (runId: number | null | undefined, playerId: number | null | undefined) =>
+  useQuery({
+    queryKey: ['gold', runId, playerId],
+    queryFn: () => api.gold(runId!, playerId!),
+    enabled: runId != null && playerId != null,
+  })
+
+export const useInventory = (runId: number | null | undefined, playerId: number | null | undefined) =>
+  useQuery({
+    queryKey: ['inventory', runId, playerId],
+    queryFn: () => api.inventory(runId!, playerId!),
+    enabled: runId != null && playerId != null,
+  })
+
 export const useTokens = (runId: number | null | undefined) =>
   useQuery({
     queryKey: ['tokens', runId],

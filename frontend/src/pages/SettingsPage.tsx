@@ -2,16 +2,19 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
-import { useAction, useChampions, usePlayers, useRiotStatus, useRuns, useSettings } from '../hooks/queries'
+import { useAction, useActiveRun, useChampions, usePlayers, useRiotStatus, useRuns, useSettings, useShop } from '../hooks/queries'
+import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { allTags, filterChampions } from '../lib/champions'
 import { QUEUES } from '../lib/queues'
-import type { AppSettings, Player } from '../types'
+import type { AppSettings, Player, Run, ShopConfig } from '../types'
 
 export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PlayersSection />
       <RunsSection />
+      <ShopSettingsSection />
+      <GoldAdjustSection />
       <ChallengeSection />
       <ChampionsSection />
     </div>
@@ -189,6 +192,7 @@ function RunsSection() {
   const setActive = useAction((id: number) => api.updateSettings({ active_run_id: id }))
   const end = useAction((id: number) => api.endRun(id))
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<Run | null>(null)
 
   return (
     <Section title="Runs">
@@ -202,6 +206,7 @@ function RunsSection() {
               <span className="text-sm text-slate-400">
                 {r.status === 'ended' ? 'Ended' : 'Active'} · {r.win_count} wins · best streak {r.best_streak} ·{' '}
                 {r.alive_count}/{r.total_count} alive · {r.options_per_player} options
+                {r.lobby_code && <> · lobby code {r.lobby_code}</>}
               </span>
               <div className="ml-auto flex gap-2">
                 {!active && (
@@ -217,6 +222,13 @@ function RunsSection() {
                     End run
                   </button>
                 )}
+                <button
+                  className="btn-secondary text-red-300 hover:text-red-200"
+                  title="Delete this run for good"
+                  onClick={() => setDeleting(r)}
+                >
+                  Delete
+                </button>
               </div>
             </li>
           )
@@ -226,6 +238,7 @@ function RunsSection() {
         )}
       </ul>
       <ErrorText error={setActive.error ?? end.error} />
+      {deleting && <DeleteRunModal run={deleting} onClose={() => setDeleting(null)} />}
       <div>
         <button className="btn-primary" onClick={() => setCreating(true)}>
           Start a new run
@@ -240,6 +253,8 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
   const champions = useChampions()
   const [name, setName] = useState(() => `Run ${new Date().toLocaleDateString()}`)
   const [options, setOptions] = useState<3 | 4>(3)
+  const players = usePlayers()
+  const [owner, setOwner] = useState<number | ''>('')
   const [custom, setCustom] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -266,7 +281,12 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
 
   const submit = () =>
     create.mutate(
-      { name: name.trim(), options_per_player: options, champion_ids: custom ? [...picked] : null },
+      {
+        name: name.trim(),
+        options_per_player: options,
+        champion_ids: custom ? [...picked] : null,
+        owner_player_id: owner === '' ? null : owner,
+      },
       { onSuccess: onClose },
     )
 
@@ -276,6 +296,17 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
         <label className="flex flex-col gap-1 text-sm">
           Name
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Run owner (the one who runs the wheels)
+          <select className="input" value={owner} onChange={(e) => setOwner(e.target.value ? Number(e.target.value) : '')}>
+            <option value="">Not set</option>
+            {players.data?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.display_name}
+              </option>
+            ))}
+          </select>
         </label>
         <div className="flex flex-col gap-1 text-sm">
           Options per player
@@ -502,5 +533,191 @@ function ChampionsSection() {
       </div>
       <ErrorText error={refresh.error} />
     </Section>
+  )
+}
+
+// --- shop settings (SPEC 10.6) ------------------------------------------------------------------
+
+const GOLD_FIELDS: { key: string; label: string }[] = [
+  { key: 'kill', label: 'Per kill' },
+  { key: 'assist', label: 'Per assist' },
+  { key: 'damage_gold', label: 'Per damage step' },
+  { key: 'damage_step', label: 'Damage step' },
+  { key: 'vision_gold', label: 'Per vision step' },
+  { key: 'vision_step', label: 'Vision step' },
+  { key: 'double', label: 'Double kill' },
+  { key: 'triple', label: 'Triple kill' },
+  { key: 'quadra', label: 'Quadra kill' },
+  { key: 'penta', label: 'Penta kill' },
+]
+const GRADE_OPTIONS = ['S+', 'S', 'S-', 'A+', 'A', 'A-', 'B+', 'B', 'B-']
+
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+  return (
+    <label className="flex flex-col gap-1 text-xs text-slate-400">
+      {label}
+      <input
+        className="input w-28 text-slate-100"
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+      />
+    </label>
+  )
+}
+
+function ShopSettingsSection() {
+  const { run } = useActiveRun()
+  const shop = useShop(run.data?.id)
+  if (!run.data || run.data.status !== 'active' || !shop.data) return null
+  return <ShopSettingsForm key={`${run.data.id}-${JSON.stringify(shop.data.config)}`} runId={run.data.id} config={shop.data.config} />
+}
+
+function ShopSettingsForm({ runId, config }: { runId: number; config: ShopConfig }) {
+  const [draft, setDraft] = useState<ShopConfig>(config)
+  const save = useAction((body: ShopConfig) => api.updateShopConfig(runId, body as unknown as Record<string, unknown>))
+  const changed = JSON.stringify(draft) !== JSON.stringify(config)
+  const set = <K extends keyof ShopConfig>(section: K, key: string, value: unknown) =>
+    setDraft((d) => ({ ...d, [section]: { ...(d[section] as object), [key]: value } }))
+
+  return (
+    <Section title="Shop settings (this run)">
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-slate-300">Prices</span>
+        <div className="flex flex-wrap gap-3">
+          {ITEM_ORDER.map((t) => (
+            <NumberField key={t} label={ITEM_META[t].name} value={draft.prices[t]} onChange={(n) => set('prices', t, n)} />
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-slate-300">Gold from games</span>
+        <div className="flex flex-wrap gap-3">
+          {GOLD_FIELDS.map((f) => (
+            <NumberField key={f.key} label={f.label} value={Number(draft.gold[f.key])} onChange={(n) => set('gold', f.key, n)} />
+          ))}
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Multikills
+            <select className="input text-slate-100" value={String(draft.gold.multikill_mode)} onChange={(e) => set('gold', 'multikill_mode', e.target.value)}>
+              <option value="stack">Every multikill pays</option>
+              <option value="highest">Only the biggest one</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-slate-300">Contracts and Blacklist</span>
+        <div className="flex flex-wrap gap-3">
+          <NumberField label="Contract payout" value={draft.contract.payout} onChange={(n) => set('contract', 'payout', n)} />
+          <NumberField label="Kills goal" value={draft.contract.kills} onChange={(n) => set('contract', 'kills', n)} />
+          <NumberField label="Assists goal" value={draft.contract.assists} onChange={(n) => set('contract', 'assists', n)} />
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Rating goal
+            <select className="input text-slate-100" value={draft.contract.rating} onChange={(e) => set('contract', 'rating', e.target.value)}>
+              {GRADE_OPTIONS.map((g) => (
+                <option key={g}>{g}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Blacklist size (% of alive)
+            <input
+              className="input w-28 text-slate-100"
+              type="number"
+              min={1}
+              max={50}
+              value={Math.round(draft.blacklist_pct * 100)}
+              onChange={(e) => setDraft((d) => ({ ...d, blacklist_pct: Math.min(50, Math.max(1, Number(e.target.value) || 1)) / 100 }))}
+            />
+          </label>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn-primary" disabled={!changed || save.isPending} onClick={() => save.mutate(draft)}>
+          Save shop settings
+        </button>
+        {changed && (
+          <button className="btn-secondary" onClick={() => setDraft(config)}>
+            Reset
+          </button>
+        )}
+      </div>
+      <ErrorText error={save.error} />
+    </Section>
+  )
+}
+
+function GoldAdjustSection() {
+  const { run } = useActiveRun()
+  const players = usePlayers()
+  const [playerId, setPlayerId] = useState<number | ''>('')
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const adjust = useAction(({ pid, n, text }: { pid: number; n: number; text: string }) =>
+    api.adjustGold(run.data!.id, pid, n, text || undefined),
+  )
+  if (!run.data || run.data.status !== 'active') return null
+  const n = Math.round(Number(amount))
+  return (
+    <Section title="Adjust gold">
+      <p className="text-sm text-slate-400">For fixing mistakes. Every change is logged in that player's gold history.</p>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (playerId === '' || !n) return
+          adjust.mutate({ pid: playerId, n, text: note }, { onSuccess: () => (setAmount(''), setNote('')) })
+        }}
+      >
+        <select className="input" value={playerId} onChange={(e) => setPlayerId(e.target.value ? Number(e.target.value) : '')} aria-label="Player">
+          <option value="">Player...</option>
+          {players.data?.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.display_name}
+            </option>
+          ))}
+        </select>
+        <input className="input w-32" type="number" placeholder="+50 or -50" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Amount" />
+        <input className="input w-56" placeholder="Why? (optional)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
+        <button className="btn-secondary" disabled={playerId === '' || !n || adjust.isPending}>
+          Apply
+        </button>
+      </form>
+      {adjust.isSuccess && <p className="text-sm text-gold-300">Done. New balance: {adjust.data.balance}</p>}
+      <ErrorText error={adjust.error} />
+    </Section>
+  )
+}
+
+function DeleteRunModal({ run, onClose }: { run: Run; onClose: () => void }) {
+  const [typed, setTyped] = useState('')
+  const del = useAction(() => api.deleteRun(run.id))
+  const matches = typed.trim().toLowerCase() === run.name.trim().toLowerCase()
+  return (
+    <Modal title={`Delete "${run.name}"?`} onClose={onClose}>
+      <div className="flex flex-col gap-4 text-sm">
+        <p className="text-slate-300">
+          This removes the run for good: its {run.games_played} game{run.games_played === 1 ? '' : 's'}, champion pool,
+          eliminations, revive tokens, gold, items and contracts. It can't be undone.
+        </p>
+        <p className="text-slate-400">
+          Players and their imported Riot matches stay. If you just want to stop playing it, use End run instead.
+        </p>
+        <label className="flex flex-col gap-1">
+          Type the run name to confirm
+          <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={run.name} autoFocus />
+        </label>
+        <ErrorText error={del.error} />
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn-danger" disabled={!matches || del.isPending} onClick={() => del.mutate(undefined, { onSuccess: onClose })}>
+            {del.isPending ? 'Deleting...' : 'Delete run'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }

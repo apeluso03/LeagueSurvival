@@ -121,6 +121,9 @@ function Pools({ run }: { run: Run }) {
           <span className="gold-text">{run.alive_count}</span>
           <span className="text-slate-400"> / {run.total_count}</span>
           <span className="ml-2 font-sans text-sm font-medium text-slate-400">alive</span>
+          {run.shielded_count > 0 && (
+            <span className="ml-3 font-sans text-sm font-medium text-emerald-300">· {run.shielded_count} shielded</span>
+          )}
         </h1>
         <input
           className="input w-full sm:w-52"

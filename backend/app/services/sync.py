@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from sqlmodel import Session, col, select
 
 from app.models import AppSettings, Player, PlayerMatchStats, RiotMatch, utcnow
+from app.services import rating
 from app.services.riot_client import RiotClient, RiotError
 
 RECENT_MATCH_COUNT = 20
@@ -51,21 +52,31 @@ def team_kills(raw: dict) -> dict[int, int]:
     return kills
 
 
-def participant_stats(match: RiotMatch, player_id: int, p: dict, kills_by_team: dict[int, int]) -> PlayerMatchStats:
+def participant_stats(
+    match: RiotMatch, player_id: int, p: dict, kills_by_team: dict[int, int], grade: str | None = None
+) -> PlayerMatchStats:
     return PlayerMatchStats(
         match_id=match.match_id,
         player_id=player_id,
         champion_key=p["championId"],
         team_id=p["teamId"],
+        team_position=p.get("teamPosition") or "",
         win=bool(p.get("win")),
         kills=p.get("kills", 0),
         deaths=p.get("deaths", 0),
         assists=p.get("assists", 0),
         team_kills=kills_by_team.get(p["teamId"], 0),
+        double_kills=p.get("doubleKills", 0),
+        triple_kills=p.get("tripleKills", 0),
+        quadra_kills=p.get("quadraKills", 0),
+        penta_kills=p.get("pentaKills", 0),
         cs=p.get("totalMinionsKilled", 0) + p.get("neutralMinionsKilled", 0),
         gold=p.get("goldEarned", 0),
         damage_to_champs=p.get("totalDamageDealtToChampions", 0),
+        heals_on_teammates=p.get("totalHealsOnTeammates", 0),
+        shields_on_teammates=p.get("totalDamageShieldedOnTeammates", 0),
         vision_score=p.get("visionScore", 0),
+        rating_grade=grade,
         game_duration=match.game_duration,
         queue_id=match.queue_id,
     )
@@ -79,11 +90,18 @@ def store_match(session: Session, raw: dict) -> RiotMatch:
         p.puuid: p.id for p in session.exec(select(Player).where(col(Player.puuid).is_not(None))).all()
     }
     kills_by_team = team_kills(raw)
+    grades = rating.grades_for_match(raw)
     for p in raw["info"]["participants"]:
         player_id = by_puuid.get(p.get("puuid"))
-        if player_id is None or session.get(PlayerMatchStats, (match.match_id, player_id)):
+        if player_id is None:
             continue
-        session.add(participant_stats(match, player_id, p, kills_by_team))
+        existing = session.get(PlayerMatchStats, (match.match_id, player_id))
+        if existing:
+            if existing.rating_grade is None:  # imported before grades existed
+                existing.rating_grade = grades.get(p.get("puuid"))
+                session.add(existing)
+            continue
+        session.add(participant_stats(match, player_id, p, kills_by_team, grades.get(p.get("puuid"))))
     session.flush()
     return match
 

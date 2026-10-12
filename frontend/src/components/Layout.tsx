@@ -11,6 +11,7 @@ import { Stat } from './ui'
 const TABS = [
   { to: '/wheels', label: 'Wheels' },
   { to: '/pool', label: 'Pool' },
+  { to: '/shop', label: 'Shop' },
   { to: '/stats', label: 'Stats' },
   { to: '/history', label: 'History' },
   { to: '/settings', label: 'Settings' },

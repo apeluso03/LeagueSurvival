@@ -24,6 +24,13 @@ class P:
     damage: int = 15000
     vision: int = 20
     early_surrender: bool = False
+    position: str = "MIDDLE"
+    doubles: int = 0
+    triples: int = 0
+    quadras: int = 0
+    pentas: int = 0
+    heals: int = 0
+    shields: int = 0
 
 
 def make_match(
@@ -63,6 +70,13 @@ def make_match(
                     "totalDamageDealtToChampions": p.damage,
                     "visionScore": p.vision,
                     "gameEndedInEarlySurrender": p.early_surrender,
+                    "teamPosition": p.position,
+                    "doubleKills": p.doubles,
+                    "tripleKills": p.triples,
+                    "quadraKills": p.quadras,
+                    "pentaKills": p.pentas,
+                    "totalHealsOnTeammates": p.heals,
+                    "totalDamageShieldedOnTeammates": p.shields,
                 }
                 for p in people
             ],

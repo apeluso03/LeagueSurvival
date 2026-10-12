@@ -47,6 +47,9 @@ export interface Run {
   tokens_available: number
   pending_game_id: number | null
   games_played: number
+  owner_player_id: number | null
+  lobby_code: string | null
+  shielded_count: number
 }
 
 export interface PoolEntry {
@@ -60,11 +63,14 @@ export interface PoolEntry {
   eliminated_at: string | null
   eliminated_in_game_id: number | null
   eliminated_by_player_id: number | null
+  shield_item_id: number | null
+  shield_player_id: number | null
 }
 
 export interface Assignment {
   player_id: number
   options: string[]
+  original_options?: string[]
   played_champion_id: string | null
   played_option_index: number | null
 }
@@ -86,6 +92,11 @@ export interface Game {
   needs_review: boolean
   review_reason: string | null
   match: MatchSummary | null
+  gold: Record<string, number> // player id -> gold from this game
+  grades: Record<string, string> // player id -> rating grade
+  items_used: { player_id: number; type: ItemType; target: Record<string, unknown> }[]
+  shields_saved: string[]
+  contracts: { player_id: number; description: string; status: string; payout: number }[]
 }
 
 export interface MatchPlayer {
@@ -176,6 +187,10 @@ export interface PlayerStats {
   vision_per_min: number | null
   best_champions: ChampionStats[]
   eliminated_champions: string[]
+  avg_grade: string | null
+  gold_balance: number | null
+  gold_earned: number | null
+  gold_spent: number | null
 }
 
 export interface PoolEvent {
@@ -214,4 +229,87 @@ export interface ChampionReport {
   riot_wins: number
   riot_kda: number | null
   riot_players: PlayerChampionLine[]
+}
+
+// --- gold and shop (SPEC 7.7 to 7.9) ---
+
+export type ItemType = 'reroll' | 'blacklist' | 'swap' | 'shield' | 'choose' | 'contract'
+
+export interface ShopItem {
+  type: ItemType
+  name: string
+  price: number
+  when: string
+  description: string
+}
+
+export interface ShopConfig {
+  prices: Record<ItemType, number>
+  gold: Record<string, number | string>
+  contract: { payout: number; kills: number; assists: number; rating: string }
+  blacklist_pct: number
+}
+
+export interface Shop {
+  items: ShopItem[]
+  blacklist_cap: number
+  contract_payout: number
+  config: ShopConfig
+}
+
+export interface ContractInfo {
+  goal_type: 'kills' | 'assists' | 'win' | 'rating'
+  target: string
+  payout: number
+  status: 'pending' | 'won' | 'lost' | 'refunded'
+  game_id: number | null
+  description: string
+}
+
+export interface InventoryItem {
+  id: number
+  player_id: number
+  type: ItemType
+  status: 'unused' | 'armed' | 'active' | 'used' | 'refunded'
+  price_paid: number
+  purchased_at: string
+  used_at: string | null
+  used_in_game_id: number | null
+  target: Record<string, unknown>
+  contract: ContractInfo | null
+}
+
+export interface LedgerRow {
+  id: number
+  amount: number
+  reason: 'game' | 'contract_payout' | 'purchase' | 'refund' | 'manual_adjust'
+  game_id: number | null
+  item_id: number | null
+  breakdown: Record<string, unknown>
+  created_at: string
+  undone: boolean
+}
+
+export interface GoldInfo {
+  balance: number
+  earned: number
+  spent: number
+  ledger: LedgerRow[]
+}
+
+export interface PlayerEconomy {
+  player_id: number
+  balance: number
+  earned: number
+  spent: number
+  unused: Partial<Record<ItemType, number>>
+  armed_blacklist: string[] | null
+  active_contract: ContractInfo | null
+}
+
+export interface ItemUse {
+  champion_id?: string
+  game_id?: number
+  other_player_id?: number
+  champion_ids?: string[]
 }

@@ -373,3 +373,16 @@ h2,
 @media (prefers-reduced-motion: reduce) {
   .case-reel[data-landed] .reel-card-winner { animation: none; }
 }
+
+/* Contract goal reveal: a quick card flip. */
+@keyframes contract-flip {
+  0% { transform: perspective(700px) rotateY(90deg) scale(0.9); opacity: 0; }
+  60% { transform: perspective(700px) rotateY(-8deg) scale(1.02); opacity: 1; }
+  100% { transform: perspective(700px) rotateY(0) scale(1); }
+}
+.contract-reveal {
+  animation: contract-flip 520ms var(--ease-spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .contract-reveal { animation: none; }
+}

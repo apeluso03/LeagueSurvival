@@ -161,3 +161,21 @@ def test_champion_report_outside_run(session):
 
     rep = stats.champion_report(session, session.get(Champion, "Champ001"), None)
     assert not rep.in_run and rep.times_offered == 0 and rep.riot_games == 0
+
+
+def test_avg_grade_and_gold_in_player_stats(session, setup):
+    from app.services import economy as econ
+
+    d1 = detail(k=5)
+    d1.rating_grade = "A+"
+    d2 = detail(k=5)
+    d2.rating_grade = "A-"
+    s = compute(1, [GameRecord("Ahri", True, d1), GameRecord("Ahri", True, d2)])
+    assert s.avg_grade == "A"
+    econ.record(session, setup.id, 1, 500, "manual_adjust")
+    econ.record(session, setup.id, 1, -250, "purchase")
+    session.commit()
+    [alex] = stats.player_stats(session, [1], setup.id)
+    assert (alex.gold_balance, alex.gold_earned, alex.gold_spent) == (250, 500, 250)
+    [alex_all] = stats.player_stats(session, [1], None)
+    assert alex_all.gold_balance is None

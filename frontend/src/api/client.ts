@@ -3,6 +3,12 @@ import type {
   Champion,
   ChampionReport,
   Game,
+  GoldInfo,
+  InventoryItem,
+  ItemType,
+  ItemUse,
+  PlayerEconomy,
+  Shop,
   Pick,
   Player,
   PlayerStats,
@@ -91,9 +97,15 @@ export const api = {
 
   runs: () => get<Run[]>('/runs'),
   run: (id: number) => get<Run>(`/runs/${id}`),
-  createRun: (body: { name: string; options_per_player: 3 | 4; champion_ids?: string[] | null }) =>
+  createRun: (body: {
+    name: string
+    options_per_player: 3 | 4
+    champion_ids?: string[] | null
+    owner_player_id?: number | null
+  }) =>
     post<Run>('/runs', body),
   endRun: (id: number) => post<Run>(`/runs/${id}/end`),
+  deleteRun: (id: number) => request<void>('DELETE', `/runs/${id}`),
   pool: (runId: number, includeEliminated = true) =>
     get<PoolEntry[]>(`/runs/${runId}/pool${qs({ include_eliminated: includeEliminated })}`),
   eliminate: (runId: number, championId: string) => post<Run>(`/runs/${runId}/pool/${championId}/eliminate`),
@@ -109,6 +121,18 @@ export const api = {
   setResult: (gameId: number, result: 'win' | 'loss' | 'void', reason?: string) =>
     post<Game>(`/games/${gameId}/result`, { result, reason }),
   undo: (gameId: number) => post<Game>(`/games/${gameId}/undo`),
+  linkMatch: (gameId: number, matchId: string) => post<Game>(`/games/${gameId}/link-match`, { riot_match_id: matchId }),
+
+  shop: (runId: number) => get<Shop>(`/runs/${runId}/shop`),
+  updateShopConfig: (runId: number, body: Record<string, unknown>) => patch<Shop>(`/runs/${runId}/shop-config`, body),
+  economy: (runId: number) => get<PlayerEconomy[]>(`/runs/${runId}/economy`),
+  gold: (runId: number, playerId: number) => get<GoldInfo>(`/runs/${runId}/players/${playerId}/gold`),
+  adjustGold: (runId: number, playerId: number, amount: number, note?: string) =>
+    post<GoldInfo>(`/runs/${runId}/players/${playerId}/gold/adjust`, { amount, note }),
+  inventory: (runId: number, playerId: number) => get<InventoryItem[]>(`/runs/${runId}/players/${playerId}/inventory`),
+  purchase: (runId: number, playerId: number, type: ItemType) =>
+    post<{ item: InventoryItem; balance: number }>(`/runs/${runId}/players/${playerId}/purchase`, { type }),
+  useItem: (itemId: number, body: ItemUse) => post<InventoryItem>(`/items/${itemId}/use`, body),
   review: (gameId: number, action: 'accept' | 'reject') => post<Game>(`/games/${gameId}/review`, { action }),
 
   tokens: (params: { run_id?: number; player_id?: number; unused_only?: boolean }) =>

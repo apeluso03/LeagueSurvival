@@ -28,7 +28,7 @@ from app.models import (
     Run,
     SpinAssignment,
 )
-from app.services import rules
+from app.services import economy, rules
 
 # Matches that started a little before the spin still count (clock drift, spinning in champ select).
 START_BUFFER = timedelta(minutes=5)
@@ -159,6 +159,7 @@ def match_pending(session: Session, game: ChallengeGame, settings: AppSettings) 
     rules.set_played(session, game, _picks(result))
     rules.apply_result(session, game, "win" if result.win else "loss", source="auto")
     link_stats(session, game, cand)
+    economy.award_game(session, game)
     session.flush()
     return Outcome(game.id, "applied", "Win" if result.win else "Loss", cand.match.match_id)
 
@@ -190,6 +191,7 @@ def accept_review(session: Session, game: ChallengeGame, settings: AppSettings) 
         rules.set_played(session, game, _picks(result))
         rules.apply_result(session, game, "win" if result.win else "loss", source="auto")
     link_stats(session, game, cand)
+    economy.award_game(session, game)
     session.flush()
     return game
 
@@ -232,6 +234,7 @@ def link_manual_game(session: Session, game: ChallengeGame, settings: AppSetting
         a.played_option_index = a.options.index(cid)
         session.add(a)
     link_stats(session, game, cand)
+    economy.award_game(session, game)  # linking a hand-recorded game earns its gold
     session.flush()
     return Outcome(game.id, "linked", "", cand.match.match_id)
 
@@ -264,3 +267,37 @@ def run_matcher(session: Session, recent_manual_days: int = 7) -> list[Outcome]:
         if outcome.status == "linked":
             outcomes.append(outcome)
     return outcomes
+
+
+def link_match_by_id(session: Session, game: ChallengeGame, match_id: str) -> ChallengeGame:
+    """"Link match" (SPEC 7.7): attach a specific Riot match to a hand-recorded game and pay out
+    its gold. The recorded result and the pool are left exactly as they are."""
+    if game.status not in ("won", "lost"):
+        raise rules.RuleError("Only games with a win or loss recorded can be linked", 409)
+    if game.riot_match_id:
+        raise rules.RuleError("This game is already linked to a Riot match", 409)
+    taken = session.exec(
+        select(ChallengeGame.id).where(ChallengeGame.riot_match_id == match_id, ChallengeGame.id != game.id)
+    ).first()
+    if taken:
+        raise rules.RuleError(f"That match is already linked to game {taken}", 409)
+    match = session.get(RiotMatch, match_id)
+    if match is None:
+        raise rules.RuleError("That match hasn't been imported", 404)
+    player_ids = [a.player_id for a in rules.assignments_for(session, game.id)]
+    rows = {
+        r.player_id: r
+        for r in session.exec(
+            select(PlayerMatchStats).where(
+                PlayerMatchStats.match_id == match_id, col(PlayerMatchStats.player_id).in_(player_ids)
+            )
+        ).all()
+    }
+    missing = [pid for pid in player_ids if pid not in rows]
+    if missing:
+        names = session.exec(select(Player.display_name).where(col(Player.id).in_(missing))).all()
+        raise rules.RuleError(f"Not everyone from this game is in that match: {', '.join(names)}", 409)
+    link_stats(session, game, Candidate(match, rows))
+    economy.award_game(session, game)
+    session.flush()
+    return game

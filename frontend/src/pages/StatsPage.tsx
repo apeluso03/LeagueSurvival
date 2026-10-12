@@ -11,6 +11,9 @@ import {
   useRuns,
 } from '../hooks/queries'
 import { num, pct, sortRows } from '../lib/stats'
+import { GoldBadge } from '../components/Gold'
+
+const GRADES = ['S+', 'S', 'S-', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D']
 import type { PlayerStats, Run } from '../types'
 
 type Column = {
@@ -133,13 +136,25 @@ function Leaderboard({ rows }: { rows: PlayerStats[] }) {
       value: (s) => s.eliminated_champions.length,
       show: (s) => String(s.eliminated_champions.length),
     },
+    {
+      label: 'Grade',
+      title: 'Average rating grade (games with Riot data)',
+      value: (s) => (s.avg_grade ? GRADES.length - GRADES.indexOf(s.avg_grade) : null),
+      show: (s) => s.avg_grade ?? '—',
+    },
+    {
+      label: 'Gold',
+      title: 'Gold earned this run',
+      value: (s) => s.gold_earned,
+      show: (s) => (s.gold_earned == null ? '—' : s.gold_earned.toLocaleString()),
+    },
   ]
   const [sort, setSort] = useState<{ col: number; desc: boolean }>({ col: 4, desc: true })
   const sorted = sortRows(rows, columns[sort.col].value, sort.desc)
 
   return (
     <div className="card overflow-x-auto p-0">
-      <table className="w-full min-w-[720px] text-sm">
+      <table className="w-full min-w-[860px] text-sm">
         <thead>
           <tr className="border-b border-slate-800 text-left text-xs uppercase tracking-wide text-slate-400">
             {columns.map((c, i) => (
@@ -183,6 +198,11 @@ function PlayerCard({ stats: s, challengeOnly }: { stats: PlayerStats; challenge
         <h2 className="text-lg font-semibold">{player?.display_name}</h2>
         <span className="text-sm text-slate-400">
           {s.wins}W {s.losses}L · {pct(s.win_rate)}
+          {s.gold_balance != null && (
+            <span className="ml-2 inline-flex items-center gap-1" title={`Earned ${s.gold_earned}, spent ${s.gold_spent}`}>
+              · <GoldBadge amount={s.gold_balance} />
+            </span>
+          )}
         </span>
       </div>
 
@@ -204,6 +224,7 @@ function PlayerCard({ stats: s, challengeOnly }: { stats: PlayerStats; challenge
             <Stat label="CS/m" value={num(s.cs_per_min)} />
             <Stat label="DPM" value={num(s.damage_per_min, 0)} />
             <Stat label="VS/m" value={num(s.vision_per_min, 2)} />
+            {s.avg_grade && <Stat label="Avg grade" value={s.avg_grade} />}
           </div>
           {s.detailed_games < s.games && (
             <p className="text-xs text-slate-500">

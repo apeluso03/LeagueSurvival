@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 
 from sqlmodel import Session, col, func, select
 
+from app.services import economy, rating
+
 from app.models import (
     AppSettings,
     ChallengeGame,
@@ -58,6 +60,10 @@ class PlayerStats:
     vision_per_min: float | None = None
     best_champions: list[ChampionStats] = field(default_factory=list)
     eliminated_champions: list[str] = field(default_factory=list)
+    avg_grade: str | None = None  # average of the rating grades of games with Riot data
+    gold_balance: int | None = None  # gold fields only when a single run is selected
+    gold_earned: int | None = None
+    gold_spent: int | None = None
 
 
 def kda(kills: int, deaths: int, assists: int) -> float:
@@ -92,6 +98,9 @@ def compute(player_id: int, records: list[GameRecord]) -> PlayerStats:
         s.cs_per_min = _per_min(sum(d.cs for d in details), secs)
         s.damage_per_min = _per_min(sum(d.damage_to_champs for d in details), secs)
         s.vision_per_min = _per_min(sum(d.vision_score for d in details), secs)
+        graded = [rating.GRADES.index(d.rating_grade) for d in details if d.rating_grade in rating.GRADES]
+        if graded:
+            s.avg_grade = rating.GRADES[round(sum(graded) / len(graded))]
 
     by_champ: dict[str, list[GameRecord]] = defaultdict(list)
     for r in records:
@@ -169,6 +178,9 @@ def player_stats(
     for pid in player_ids:
         s = compute(pid, records[pid])
         s.eliminated_champions = eliminated[pid]
+        if run_id is not None:
+            t = economy.totals(session, run_id, pid)
+            s.gold_balance, s.gold_earned, s.gold_spent = t["balance"], t["earned"], t["spent"]
         result.append(s)
     return result
 

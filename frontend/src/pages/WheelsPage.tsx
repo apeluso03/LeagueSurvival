@@ -5,6 +5,10 @@ import { api } from '../api/client'
 import { ChampionPicker } from '../components/ChampionPicker'
 import { MatchSummaryView } from '../components/MatchSummary'
 import { CaseReel } from '../components/CaseReel'
+import { ContractReveal } from '../components/ContractReveal'
+import { GoldBadge } from '../components/Gold'
+import { BlacklistDialog, PickChampionDialog, SwapDialog } from '../components/ItemDialogs'
+import { ShieldIcon } from '../components/icons'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Modal } from '../components/ui'
 import {
   useAction,
@@ -14,13 +18,17 @@ import {
   useGame,
   usePlayerMap,
   usePlayers,
+  useEconomy,
   usePool,
   useRiotStatus,
+  useShop,
 } from '../hooks/queries'
+import { useBuy, useOwnedItem } from '../hooks/useItems'
+import { ITEM_META } from '../lib/items'
 import { preloadImages } from '../lib/preload'
 import { SPIN_MS, buildStrip, randomLandingOffset } from '../lib/reel'
 import { playReveal, playStart, unlock } from '../lib/sound'
-import type { Assignment, Champion, Game, Run } from '../types'
+import type { Assignment, Champion, ContractInfo, Game, ItemType, PlayerEconomy, Run } from '../types'
 
 type SpinStage = {
   key: number
@@ -179,6 +187,7 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
               )
             })}
           </div>
+          {challengeMode && chosen.length > 0 && run.status === 'active' && <PrepRow run={run} playerIds={chosen} />}
           <div className="flex flex-wrap items-center gap-3">
             <button
               className="btn-primary px-10 py-3 text-base tracking-[0.15em] uppercase"
@@ -245,6 +254,19 @@ function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game |
   const champs = useChampionMap()
   const playerMap = usePlayerMap()
   const [pickingOther, setPickingOther] = useState(false)
+  const [replay, setReplay] = useState<{ key: number; startAt: number; strip: string[]; offset: number } | null>(null)
+  const pool = usePool(game?.run_id)
+  const shielded = useMemo(
+    () => new Set((pool.data ?? []).filter((e) => e.shield_item_id).map((e) => e.champion_id)),
+    [pool.data],
+  )
+  const onRerolled = (newFirst: string) => {
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduced) return
+    const alive = (pool.data ?? []).filter((e) => e.status === 'alive').map((e) => e.champion_id)
+    setReplay({ key: Date.now(), startAt: performance.now() + 150, strip: buildStrip(alive.length ? alive : [newFirst], newFirst), offset: randomLandingOffset() })
+    playStart()
+  }
   const setPick = useAction((pick: { option_index?: number; champion_id?: string }) =>
     api.setPicks(game!.id, [{ player_id: assignment.player_id, ...pick }]),
   )
@@ -255,6 +277,23 @@ function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game |
   return (
     <div className="card flex h-full flex-col gap-3">
       <h3 className="font-display font-bold text-gold-100">{player?.display_name ?? `Player ${assignment.player_id}`}</h3>
+      {replay ? (
+        <CaseReel
+          key={replay.key}
+          label="Rerolling..."
+          strip={replay.strip}
+          championMap={champs}
+          startAt={replay.startAt}
+          durationMs={SPIN_MS}
+          offset={replay.offset}
+          master
+          skipped={false}
+          onDone={() => {
+            playReveal()
+            setTimeout(() => setReplay(null), 900)
+          }}
+        />
+      ) : (
       <ol className="flex flex-col gap-1.5">
         {[first, ...backups].map((cid, idx) => {
           const played = assignment.played_option_index === idx
@@ -275,12 +314,21 @@ function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game |
                   className={idx === 0 ? 'land-glow rounded-xl' : 'rounded-lg'}
                 />
                 <span className={idx === 0 ? 'text-lg font-semibold' : 'text-sm'}>{champs.get(cid)?.name ?? cid}</span>
+                {shielded.has(cid) && (
+                  <span title="Shielded: a loss won't eliminate it" className="text-emerald-300">
+                    <ShieldIcon className="h-4 w-4" />
+                  </span>
+                )}
                 {played && <span className="ml-auto text-xs font-bold uppercase text-gold-300">Played</span>}
               </button>
             </li>
           )
         })}
       </ol>
+      )}
+      {game && game.status === 'pending' && !assignment.played_champion_id && !replay && (
+        <SpinItems game={game} assignment={assignment} onRerolled={onRerolled} />
+      )}
       {game && (
         <div className="flex items-center gap-2 border-t border-slate-800 pt-2 text-sm">
           {isOther ? (
@@ -300,6 +348,172 @@ function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game |
       )}
       <ErrorText error={setPick.error} />
       {pickingOther && <OtherPicker onClose={() => setPickingOther(false)} onPick={(c) => setPick.mutate({ champion_id: c.id }, { onSuccess: () => setPickingOther(false) })} />}
+    </div>
+  )
+}
+
+/** Gold, armed Blacklist and Contract for each player about to spin (SPEC 10.1). */
+function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
+  const economy = useEconomy(run.id)
+  const playerMap = usePlayerMap()
+  const champs = useChampionMap()
+  const shop = useShop(run.id)
+  const pool = usePool(run.id)
+  const buy = useBuy(run.id)
+  const owned = useOwnedItem(run.id)
+  const [blacklistFor, setBlacklistFor] = useState<number | null>(null)
+  const [revealed, setRevealed] = useState<{ contract: ContractInfo; name?: string } | null>(null)
+  const price = (t: ItemType) => shop.data?.config.prices[t] ?? 0
+  const byId = new Map((economy.data ?? []).map((e) => [e.player_id, e]))
+  const alive = (pool.data ?? []).filter((e) => e.status === 'alive')
+
+  const armBlacklist = async (pid: number, econ: PlayerEconomy | undefined) => {
+    if (!econ?.unused.blacklist) await buy.mutateAsync({ playerId: pid, type: 'blacklist' })
+    setBlacklistFor(pid)
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {playerIds.map((pid) => {
+          const econ = byId.get(pid)
+          const name = playerMap.get(pid)?.display_name
+          const hasBl = (econ?.unused.blacklist ?? 0) > 0
+          return (
+            <div key={pid} className="flex flex-col gap-2 rounded-2xl bg-white/[0.03] p-3 ring-1 ring-white/5 ring-inset">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-semibold text-slate-100">{name}</span>
+                <GoldBadge amount={econ?.balance ?? 0} />
+              </div>
+              {econ?.armed_blacklist && (
+                <div className="text-xs text-red-200">
+                  Banned next spin: {econ.armed_blacklist.map((c) => champs.get(c)?.name ?? c).join(', ')}
+                </div>
+              )}
+              {econ?.active_contract && <div className="text-xs text-gold-200">Contract: {econ.active_contract.description}</div>}
+              <div className="flex flex-wrap gap-1.5">
+                {!econ?.armed_blacklist && (
+                  <button
+                    className="btn-secondary px-2.5 py-1 text-xs"
+                    disabled={buy.isPending || (!hasBl && (econ?.balance ?? 0) < price('blacklist'))}
+                    onClick={() => void armBlacklist(pid, econ).catch(() => {})}
+                  >
+                    <ITEM_META.blacklist.Icon className="h-3.5 w-3.5" />
+                    {hasBl ? 'Blacklist' : `Blacklist · ${price('blacklist')}g`}
+                  </button>
+                )}
+                <button
+                  className="btn-secondary px-2.5 py-1 text-xs"
+                  disabled={buy.isPending || (econ?.balance ?? 0) < price('contract')}
+                  onClick={() =>
+                    buy.mutate(
+                      { playerId: pid, type: 'contract' },
+                      { onSuccess: (r) => r.item.contract && setRevealed({ contract: r.item.contract, name }) },
+                    )
+                  }
+                >
+                  <ITEM_META.contract.Icon className="h-3.5 w-3.5" />
+                  {`Contract · ${price('contract')}g`}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <ErrorText error={buy.error} />
+      {blacklistFor != null && (
+        <BlacklistDialog
+          champions={alive}
+          cap={shop.data?.blacklist_cap ?? 1}
+          busy={owned.isPending}
+          error={owned.error}
+          onClose={() => setBlacklistFor(null)}
+          onConfirm={(ids) =>
+            owned.mutate(
+              { playerId: blacklistFor, type: 'blacklist', body: { champion_ids: ids } },
+              { onSuccess: () => setBlacklistFor(null) },
+            )
+          }
+        />
+      )}
+      {revealed && <ContractReveal contract={revealed.contract} playerName={revealed.name} onClose={() => setRevealed(null)} />}
+    </div>
+  )
+}
+
+/** Reroll / Swap / Choose a Champ for one player after the spin, before lock-in. */
+function SpinItems({ game, assignment, onRerolled }: { game: Game; assignment: Assignment; onRerolled: (first: string) => void }) {
+  const economy = useEconomy(game.run_id)
+  const pool = usePool(game.run_id)
+  const playerMap = usePlayerMap()
+  const owned = useOwnedItem(game.run_id)
+  const [dialog, setDialog] = useState<'swap' | 'choose' | null>(null)
+  const econ = economy.data?.find((e) => e.player_id === assignment.player_id)
+  const others = game.assignments.filter((a) => a.player_id !== assignment.player_id)
+  const taken = new Set(others.flatMap((a) => a.options))
+  const choosable = (pool.data ?? []).filter((e) => e.status === 'alive' && !taken.has(e.champion_id))
+
+  const button = (type: 'reroll' | 'swap' | 'choose', onClick: () => void) => {
+    const n = econ?.unused[type] ?? 0
+    const meta = ITEM_META[type]
+    return (
+      <button
+        key={type}
+        className="btn-secondary px-2.5 py-1 text-xs"
+        disabled={!n || owned.isPending}
+        title={n ? `${n} owned` : 'Buy one in the Shop'}
+        onClick={onClick}
+      >
+        <meta.Icon className="h-3.5 w-3.5" style={{ color: n ? meta.color : undefined }} />
+        {meta.name}
+        {n > 0 && <span className="text-slate-400">×{n}</span>}
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap gap-1.5">
+        {button('reroll', () =>
+          owned.mutate(
+            { playerId: assignment.player_id, type: 'reroll', body: { game_id: game.id } },
+            { onSuccess: (item) => onRerolled(String((item.target.new as string[])?.[0] ?? '')) },
+          ),
+        )}
+        {button('swap', () => setDialog('swap'))}
+        {button('choose', () => setDialog('choose'))}
+      </div>
+      <ErrorText error={owned.error} />
+      {dialog === 'swap' && (
+        <SwapDialog
+          players={others.map((a) => playerMap.get(a.player_id)!).filter(Boolean)}
+          busy={owned.isPending}
+          error={owned.error}
+          onClose={() => setDialog(null)}
+          onPick={(pid) =>
+            owned.mutate(
+              { playerId: assignment.player_id, type: 'swap', body: { game_id: game.id, other_player_id: pid } },
+              { onSuccess: () => setDialog(null) },
+            )
+          }
+        />
+      )}
+      {dialog === 'choose' && (
+        <PickChampionDialog
+          title="Choose a champion"
+          hint="It becomes this player's only option for the game."
+          champions={choosable}
+          busy={owned.isPending}
+          error={owned.error}
+          onClose={() => setDialog(null)}
+          onPick={(cid) =>
+            owned.mutate(
+              { playerId: assignment.player_id, type: 'choose', body: { game_id: game.id, champion_id: cid } },
+              { onSuccess: () => setDialog(null) },
+            )
+          }
+        />
+      )}
     </div>
   )
 }
@@ -473,6 +687,29 @@ function LastResult({ gameId }: { gameId: number }) {
           ))}
         </div>
       )}
+      {game.shields_saved.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-200">
+          <ShieldIcon className="h-4 w-4" />
+          Shield saved {game.shields_saved.map((c) => champs.get(c)?.name ?? c).join(', ')}
+        </div>
+      )}
+      {Object.keys(game.gold).length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(game.gold).map(([pid, amount]) => (
+            <span key={pid} className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm">
+              {playerMap.get(Number(pid))?.display_name}
+              <GoldBadge amount={amount} />
+              {game.grades[pid] && <span className="rounded-full bg-hex-800/70 px-1.5 text-xs text-hex-100">{game.grades[pid]}</span>}
+            </span>
+          ))}
+        </div>
+      )}
+      {game.contracts.map((c) => (
+        <p key={c.player_id} className={`text-sm ${c.status === 'won' ? 'text-gold-200' : 'text-slate-400'}`}>
+          {playerMap.get(c.player_id)?.display_name}'s contract ({c.description}):{' '}
+          {c.status === 'won' ? `done, +${c.payout} gold` : 'missed'}
+        </p>
+      ))}
       {game.match && <MatchSummaryView match={game.match} />}
       {game.tokens_earned.length > 0 && (
         <p className="text-sm text-gold-300">
