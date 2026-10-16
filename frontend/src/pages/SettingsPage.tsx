@@ -1,11 +1,13 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
 import { useAction, useActiveRun, useChampions, usePlayers, useRiotStatus, useRuns, useSettings, useShop } from '../hooks/queries'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { allTags, filterChampions } from '../lib/champions'
 import { QUEUES } from '../lib/queues'
+import { TEAM_COLORS, teamColor } from '../lib/teams'
 import type { AppSettings, Player, Run, ShopConfig } from '../types'
 
 export function SettingsPage() {
@@ -16,6 +18,8 @@ export function SettingsPage() {
       <ShopSettingsSection />
       <GoldAdjustSection />
       <ChallengeSection />
+      <MetaSection />
+      <OverlaySection />
       <ChampionsSection />
     </div>
   )
@@ -163,6 +167,7 @@ function PlayerRow({ player }: { player: Player }) {
   }
   return (
     <li className="flex flex-wrap items-center gap-3 py-2">
+      <TeamColorPicker player={player} />
       <span className="font-medium">{player.display_name}</span>
       <span className="text-sm text-slate-400">
         {player.riot_game_name ? `${player.riot_game_name}#${player.riot_tag_line}` : 'No Riot ID'}
@@ -184,6 +189,58 @@ function PlayerRow({ player }: { player: Player }) {
   )
 }
 
+/** The player's broadcast team colour: a swatch that opens a small palette. */
+function TeamColorPicker({ player }: { player: Player }) {
+  const [open, setOpen] = useState(false)
+  const update = useAction((color: string | null) => api.updatePlayer(player.id, { color }))
+  const current = teamColor(player.id)
+  const pick = (color: string | null) => update.mutate(color, { onSuccess: () => setOpen(false) })
+  return (
+    <span className="relative">
+      <button
+        className="block h-6 w-6 rounded-sm ring-2 ring-white/20 transition hover:ring-white/60"
+        style={{ background: current }}
+        title="Team colour"
+        aria-label={`${player.display_name}'s team colour`}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      />
+      {open && (
+        <span className="absolute top-8 left-0 z-30 flex w-56 flex-col gap-2 rounded-sm bg-[#0c1017] p-3 shadow-2xl ring-1 ring-white/15">
+          <span className="text-[10px] font-bold tracking-[0.14em] text-slate-400 uppercase">Team colour</span>
+          <span className="flex flex-wrap gap-1.5">
+            {TEAM_COLORS.map((c) => (
+              <button
+                key={c}
+                className={`h-7 w-7 rounded-sm ring-2 transition ${current.toLowerCase() === c ? 'ring-white' : 'ring-transparent hover:ring-white/50'}`}
+                style={{ background: c }}
+                aria-label={c}
+                disabled={update.isPending}
+                onClick={() => pick(c)}
+              />
+            ))}
+          </span>
+          <label className="flex items-center gap-2 text-xs text-slate-300">
+            Custom
+            <input
+              type="color"
+              value={current}
+              onChange={(e) => pick(e.target.value)}
+              className="h-7 w-12 cursor-pointer rounded-sm bg-transparent"
+            />
+          </label>
+          {player.color && (
+            <button className="self-start text-xs text-slate-400 underline" onClick={() => pick(null)}>
+              Back to default
+            </button>
+          )}
+          <ErrorText error={update.error} />
+        </span>
+      )}
+    </span>
+  )
+}
+
 // --- runs --------------------------------------------------------------------
 
 function RunsSection() {
@@ -191,6 +248,7 @@ function RunsSection() {
   const settings = useSettings()
   const setActive = useAction((id: number) => api.updateSettings({ active_run_id: id }))
   const end = useAction((id: number) => api.endRun(id))
+  const navigate = useNavigate()
   const [creating, setCreating] = useState(false)
   const [deleting, setDeleting] = useState<Run | null>(null)
 
@@ -209,6 +267,9 @@ function RunsSection() {
                 {r.lobby_code && <> · lobby code {r.lobby_code}</>}
               </span>
               <div className="ml-auto flex gap-2">
+                <Link to={`/runs/${r.id}/recap`} className="btn-secondary">
+                  Recap
+                </Link>
                 {!active && (
                   <button className="btn-secondary" onClick={() => setActive.mutate(r.id)}>
                     Select
@@ -217,7 +278,7 @@ function RunsSection() {
                 {r.status === 'active' && (
                   <button
                     className="btn-danger"
-                    onClick={() => confirm(`End "${r.name}" with ${r.win_count} wins?`) && end.mutate(r.id)}
+                    onClick={() => confirm(`End "${r.name}" with ${r.win_count} wins?`) && end.mutate(r.id, { onSuccess: () => navigate(`/runs/${r.id}/recap`) })}
                   >
                     End run
                   </button>
@@ -719,5 +780,119 @@ function DeleteRunModal({ run, onClose }: { run: Run; onClose: () => void }) {
         </div>
       </div>
     </Modal>
+  )
+}
+
+// --- high-elo crawler (comp suggestions) ----------------------------------------------------
+
+const PLATFORMS: [string, string, string][] = [
+  ['na1', 'americas', 'North America'],
+  ['euw1', 'europe', 'EU West'],
+  ['eun1', 'europe', 'EU Nordic & East'],
+  ['kr', 'asia', 'Korea'],
+  ['br1', 'americas', 'Brazil'],
+  ['la1', 'americas', 'Latin America North'],
+  ['oc1', 'sea', 'Oceania'],
+]
+
+function MetaSection() {
+  const settings = useSettings()
+  const status = useQuery({ queryKey: ['meta-status'], queryFn: api.metaStatus, refetchInterval: 15_000 })
+  const update = useAction(api.updateSettings)
+  const positions = useAction(api.refreshPositions)
+  const s = status.data
+  const on = settings.data?.meta_crawl ?? true
+  return (
+    <Section title="High-elo data (comp suggestions)">
+      <p className="text-sm text-slate-400">
+        Riot doesn't publish global win rates, so the app collects its own: it downloads recent ranked games from the
+        Challenger, Grandmaster and Master ladders and counts each champion's roles, rune pages and items. It runs in the
+        background at about half your Riot key's rate limit, and keeps the two newest patches.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          className={on ? 'btn-secondary' : 'btn-primary'}
+          disabled={update.isPending || !settings.data}
+          onClick={() => update.mutate({ meta_crawl: !on })}
+        >
+          {on ? 'Pause collecting' : 'Start collecting'}
+        </button>
+        <select
+          className="input"
+          aria-label="Ladder region"
+          value={settings.data?.meta_platform ?? 'na1'}
+          onChange={(e) => {
+            const p = PLATFORMS.find(([id]) => id === e.target.value)!
+            update.mutate({ meta_platform: p[0], meta_region: p[1] })
+          }}
+        >
+          {PLATFORMS.map(([id, , label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <button className="btn-secondary" disabled={positions.isPending} onClick={() => positions.mutate(undefined)}>
+          {positions.isPending ? 'Updating roles...' : 'Update champion roles'}
+        </button>
+      </div>
+      {s && (
+        <div className="grid grid-cols-2 gap-px overflow-hidden bg-white/[0.06] sm:grid-cols-4">
+          {(
+            [
+              ['Matches', s.matches.toLocaleString()],
+              ['Champions covered', s.champions_covered],
+              ['Patches', s.patches.join(', ') || '—'],
+              ['Ladder', s.ladder_size ? `${s.ladder_position}/${s.ladder_size} players` : '—'],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="flex flex-col bg-[#0b0e14] px-3 py-2">
+              <span className="font-display text-lg text-white">{value}</span>
+              <span className="text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {s && !s.key_set && <p className="text-sm text-amber-300">Add a Riot key in .env to start collecting.</p>}
+      {s?.key_set && on && (
+        <p className="text-xs text-slate-500">
+          {s.last_run_at ? `Last batch ${new Date(s.last_run_at).toLocaleTimeString()}.` : 'Starting up...'} Roughly 30,000 matches a day; rarely played champs fill in last.
+        </p>
+      )}
+      {s?.last_error && <p className="text-sm text-red-300">Last error: {s.last_error}</p>}
+      {positions.data && <p className="text-sm text-hex-200">Updated roles for {positions.data.count} champions.</p>}
+      <ErrorText error={update.error ?? positions.error ?? status.error} />
+    </Section>
+  )
+}
+
+// --- stream overlay ----------------------------------------------------------------------
+
+function OverlaySection() {
+  const url = `${window.location.origin}/overlay`
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    void navigator.clipboard?.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <Section title="Stream overlay">
+      <p className="text-sm text-slate-400">
+        Add this page to OBS (Sources → + → Browser, width 1920, height 1080). It has a see-through background and shows
+        the run's score bug, the current picks, and the VICTORY / ELIMINATED / LOCKED IN moments. Add{' '}
+        <code>?picks=0</code> or <code>?moments=0</code> to hide parts.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="rounded-sm bg-black/50 px-3 py-2 text-sm text-hex-200">{url}</code>
+        <button className="btn-secondary" onClick={copy}>
+          {copied ? 'Copied!' : 'Copy link'}
+        </button>
+        <a className="btn-secondary" href="/overlay" target="_blank" rel="noreferrer">
+          Open
+        </a>
+      </div>
+    </Section>
   )
 }

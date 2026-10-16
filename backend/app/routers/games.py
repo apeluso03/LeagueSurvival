@@ -1,3 +1,5 @@
+from dataclasses import asdict
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, col, select
 
@@ -5,7 +7,7 @@ from app.db import get_session
 from app.models import ChallengeGame, Player, RiotMatch
 from app.routers.common import champion_keys, game_out, get_app_settings, get_or_404
 from app.schemas import AssignmentsPatch, GameOut, LinkMatchIn, ResultIn, ReviewIn
-from app.services import matcher, rules, sync
+from app.services import matcher, rules, stats, sync
 from app.services.riot_client import RiotClient, RiotError
 
 router = APIRouter(prefix="/api/games", tags=["games"])
@@ -23,6 +25,15 @@ def list_games(run_id: int | None = None, session: Session = Depends(get_session
 @router.get("/{game_id}", response_model=GameOut)
 def get_game(game_id: int, session: Session = Depends(get_session)):
     return game_out(session, get_or_404(session, ChallengeGame, game_id, "Game"))
+
+
+@router.get("/{game_id}/option-facts")
+def option_facts(game_id: int, session: Session = Depends(get_session)):
+    """Short numbers under each rolled champion: the player's record on it, their Riot games and the group's record."""
+    game = get_or_404(session, ChallengeGame, game_id, "Game")
+    return {
+        pid: {cid: asdict(f) for cid, f in facts.items()} for pid, facts in stats.option_facts(session, game).items()
+    }
 
 
 @router.patch("/{game_id}/assignments", response_model=GameOut)

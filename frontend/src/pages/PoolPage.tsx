@@ -1,15 +1,45 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ChampionCard } from '../components/ChampionCard'
-import { ChampionPool } from '../components/ChampionPool'
-import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
-import { useActiveRun, usePlayerMap, usePool } from '../hooks/queries'
-import { allTags, filterChampions } from '../lib/champions'
-import { flyIntoPool, splash } from '../lib/flight'
-import { BUBBLE_PX, type Point } from '../lib/poolLayout'
-import type { PoolEntry, Run } from '../types'
+import { PoolCard, type CardAction } from '../components/PoolCard'
+import { EmptyState, ErrorText, LoadingState } from '../components/ui'
+import { useActiveRun, useChampionLines, useEconomy, usePlayerMap, usePool } from '../hooks/queries'
+import { docRect, flyCardTo } from '../lib/cardFlight'
+import {
+  POOL_SORTS,
+  QUICK_FILTERS,
+  allTags,
+  filterChampions,
+  loadingUrl,
+  matchesQuick,
+  sortPool,
+  type PoolSort,
+  type QuickFilter,
+} from '../lib/champions'
+import { CLASS_COLORS } from '../lib/reel'
+import type { ChampionLine, PoolEntry, Run } from '../types'
 
-const VIEW_KEY = 'lol-survival:pool-view'
+const SIZE_KEY = 'lol-survival:pool-card-size'
+const DEAD_OPEN_KEY = 'lol-survival:pool-eliminated-open'
+const SORT_KEY = 'lol-survival:pool-sort'
+const NO_LINES: Record<string, ChampionLine> = {}
+
+function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const v = localStorage.getItem(key) as T | null
+    return v && allowed.includes(v) ? v : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    /* per-viewer convenience only */
+  }
+}
 
 export function PoolPage() {
   const { run, runId } = useActiveRun()
@@ -23,232 +53,249 @@ export function PoolPage() {
     )
   }
   if (!run.data) return <LoadingState />
-  return <Pools run={run.data} />
+  return <Pool run={run.data} />
 }
 
-function readView(): 'pools' | 'grid' {
-  try {
-    return localStorage.getItem(VIEW_KEY) === 'grid' ? 'grid' : 'pools'
-  } catch {
-    return 'pools'
-  }
+function Chip({
+  active,
+  onClick,
+  children,
+  color,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+  color?: string
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-sm px-3 py-1 text-xs font-semibold whitespace-nowrap ring-1 transition duration-150 ring-inset active:scale-95 ${
+        active ? 'bg-hex-500/40 text-white ring-hex-300/70' : 'bg-black/25 text-slate-300 ring-white/10 hover:text-slate-100 hover:ring-hex-400/50'
+      }`}
+    >
+      {color && <span className="h-2 w-2 rounded-full" style={{ background: color }} aria-hidden />}
+      {children}
+    </button>
+  )
 }
 
-function Pools({ run }: { run: Run }) {
+function Pool({ run }: { run: Run }) {
   const pool = usePool(run.id)
+  const linesQuery = useChampionLines(run.id)
+  const economy = useEconomy(run.id)
+  const players = usePlayerMap()
   const [search, setSearch] = useState('')
   const [tag, setTag] = useState<string | null>(null)
-  const [view, setView] = useState<'pools' | 'grid'>(readView)
-  const [open, setOpen] = useState<{ entry: PoolEntry; reviveOnly: boolean } | null>(null)
-  const [hint, setHint] = useState<string | null>(null)
-  const waterRef = useRef<HTMLDivElement>(null)
-  const graveRef = useRef<HTMLDivElement>(null)
-  // Revive flight: where a dragged champion was dropped, and where revived ones should land.
-  const lastDrop = useRef<{ id: string; point: Point } | null>(null)
-  const [arrivals, setArrivals] = useState<Map<string, Point>>(new Map())
+  const [quick, setQuick] = useState<QuickFilter | null>(null)
+  const [sort, setSort] = useState<PoolSort>(() => readPref(SORT_KEY, POOL_SORTS.map((s) => s.id), 'name'))
+  const [compact, setCompact] = useState(() => readPref(SIZE_KEY, ['large', 'compact'] as const, 'large') === 'compact')
+  const [deadOpen, setDeadOpen] = useState(() => readPref(DEAD_OPEN_KEY, ['1', '0'] as const, '1') === '1')
+  const [open, setOpen] = useState<{ entry: PoolEntry; focus?: CardAction } | null>(null)
+  const aliveRef = useRef<HTMLDivElement>(null)
+  const deadRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => writePref(SORT_KEY, sort), [sort])
+  useEffect(() => writePref(SIZE_KEY, compact ? 'compact' : 'large'), [compact])
+  useEffect(() => writePref(DEAD_OPEN_KEY, deadOpen ? '1' : '0'), [deadOpen])
+
+  const lines = linesQuery.data ?? NO_LINES
+  const entries = useMemo(() => pool.data ?? [], [pool.data])
+  const active = run.status === 'active'
+  const canRevive = active && run.tokens_available > 0
+  const canShield = active && (economy.data ?? []).some((e) => (e.unused.shield ?? 0) > 0)
+
+  // Search + quick filter first; class counts are taken from that, then the class filter applies.
+  const searched = useMemo(
+    () => filterChampions(entries, search).filter((e) => matchesQuick(e, lines[e.champion_id], quick)),
+    [entries, search, quick, lines],
+  )
+  const tags = useMemo(() => allTags(entries), [entries])
+  const tagCounts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of searched) for (const t of e.tags) m.set(t, (m.get(t) ?? 0) + 1)
+    return m
+  }, [searched])
+  const shown = useMemo(() => sortPool(tag ? searched.filter((e) => e.tags.includes(tag)) : searched, lines, sort), [searched, tag, lines, sort])
+  const alive = useMemo(() => shown.filter((e) => e.status === 'alive'), [shown])
+  const dead = useMemo(() => shown.filter((e) => e.status === 'eliminated'), [shown])
+  const deadTotal = run.total_count - run.alive_count
+  const filtering = search.trim() !== '' || tag !== null || quick !== null
+  const clear = () => (setSearch(''), setTag(null), setQuick(null))
+
+  const onOpen = useCallback((e: PoolEntry) => setOpen({ entry: e }), [])
+  const onAction = useCallback((e: PoolEntry, focus: CardAction) => setOpen({ entry: e, focus }), [])
 
   const onRevived = (e: PoolEntry) => {
-    const water = waterRef.current
-    if (view !== 'pools' || !water) return
-    // The Graveyard bubble is still on the page at this point (the pool refreshes right after).
-    const src = graveRef.current
-      ?.querySelector<HTMLElement>(`[data-id="${CSS.escape(e.champion_id)}"]`)
-      ?.getBoundingClientRect()
-    const drop = lastDrop.current?.id === e.champion_id ? lastDrop.current.point : null
-    lastDrop.current = null
-    if (drop) {
-      const r = water.getBoundingClientRect()
-      setArrivals((m) => new Map(m).set(e.champion_id, { x: drop.x - r.left - BUBBLE_PX / 2, y: drop.y - r.top - BUBBLE_PX / 2 }))
+    // The Eliminated card is still on the page at this point (the pool refreshes right after).
+    const src = deadRef.current?.querySelector(`[data-card-id="${CSS.escape(e.champion_id)}"]`)
+    const from = src ? docRect(src) : null
+    // Make sure the card is visible in the Alive grid even if filters would hide it.
+    if (filtering) clear()
+    if (aliveRef.current) {
+      void flyCardTo({ root: aliveRef.current, id: e.champion_id, imageUrl: loadingUrl(e), from })
     }
-    if (!src) return
-    void flyIntoPool({
-      pool: water,
-      id: e.champion_id,
-      imageUrl: e.image_url,
-      fromDoc: { x: src.left + src.width / 2 + window.scrollX, y: src.top + src.height / 2 + window.scrollY },
-      onSplash: (x, y) => splash(water, x, y, true),
-    })
   }
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(VIEW_KEY, view)
-    } catch {
-      /* per-viewer convenience only */
-    }
-  }, [view])
-
-  useEffect(() => {
-    if (!hint) return
-    const t = setTimeout(() => setHint(null), 3500)
-    return () => clearTimeout(t)
-  }, [hint])
-
-  const entries = useMemo(() => pool.data ?? [], [pool.data])
-  const tags = useMemo(() => allTags(entries), [entries])
-  const alive = useMemo(() => entries.filter((e) => e.status === 'alive'), [entries])
-  const dead = useMemo(() => entries.filter((e) => e.status === 'eliminated'), [entries])
-  const filtering = search.trim() !== '' || tag !== null
-  const matches = useMemo(() => new Set(filterChampions(entries, search, tag).map((e) => e.champion_id)), [entries, search, tag])
-  const highlight = (e: PoolEntry) => (filtering ? matches.has(e.champion_id) : null)
-
-  const inside = (ref: RefObject<HTMLDivElement | null>, p: Point) => {
-    const r = ref.current?.getBoundingClientRect()
-    return !!r && p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom
-  }
-
-  // Graveyard -> Pool is a revive (needs a token). Anything else just floats back.
-  const dropFromGrave = (e: PoolEntry, p: Point) => {
-    if (!inside(waterRef, p)) return false
-    if (run.status !== 'active') return setHint('This run has ended.'), false
-    if (run.tokens_available === 0) {
-      setHint(`No revive tokens yet. Win 3 in a row to get one, then drag ${e.name} back in.`)
-      return false
-    }
-    lastDrop.current = { id: e.champion_id, point: p }
-    setOpen({ entry: e, reviveOnly: true })
-    return true
-  }
-  const dropFromWater = (_e: PoolEntry, p: Point) => {
-    if (inside(graveRef, p)) setHint('Champs only end up in the Graveyard when you lose with them.')
-    return false
-  }
+  const grid = `grid gap-3 ${
+    compact ? 'grid-cols-[repeat(auto-fill,minmax(104px,1fr))]' : 'grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(158px,1fr))]'
+  }`
+  const card = (e: PoolEntry) => (
+    <PoolCard
+      key={e.champion_id}
+      entry={e}
+      line={lines[e.champion_id]}
+      players={players}
+      compact={compact}
+      action={e.status === 'eliminated' ? (canRevive ? 'revive' : null) : canShield && !e.shield_item_id ? 'shield' : null}
+      onOpen={onOpen}
+      onAction={onAction}
+    />
+  )
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="mr-auto text-2xl font-bold text-gold-100">
-          <span className="gold-text">{run.alive_count}</span>
-          <span className="text-slate-400"> / {run.total_count}</span>
-          <span className="ml-2 font-sans text-sm font-medium text-slate-400">alive</span>
+      {/* Header + summary */}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-bold text-gold-100">Champion Pool</h1>
+        <p className="text-sm text-slate-400">
+          <b className="text-hex-200">{run.alive_count}</b> alive · <b className="text-slate-200">{deadTotal}</b> eliminated
           {run.shielded_count > 0 && (
-            <span className="ml-3 font-sans text-sm font-medium text-emerald-300">· {run.shielded_count} shielded</span>
-          )}
-        </h1>
-        <input
-          className="input w-full sm:w-52"
-          placeholder="Find a champion..."
-          aria-label="Search champions"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        <select className="input" aria-label="Class" value={tag ?? ''} onChange={(e) => setTag(e.target.value || null)}>
-          <option value="">All classes</option>
+            <>
+              {' '}
+              · <b className="text-emerald-300">{run.shielded_count}</b> shielded
+            </>
+          )}{' '}
+          · <b className="text-gold-300">{run.tokens_available}</b> revive token{run.tokens_available === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      {/* Toolbar */}
+      <div className="glass flex flex-col gap-3 rounded-2xl p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className="input min-w-0 flex-1 sm:max-w-64"
+            placeholder="Find a champion..."
+            aria-label="Search champions"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select className="input" aria-label="Sort" value={sort} onChange={(e) => setSort(e.target.value as PoolSort)}>
+            {POOL_SORTS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <div className="ml-auto inline-flex rounded-sm bg-black/30 p-1 ring-1 ring-white/10 ring-inset" role="group" aria-label="Card size">
+            {(['large', 'compact'] as const).map((v) => (
+              <button
+                key={v}
+                aria-pressed={(v === 'compact') === compact}
+                onClick={() => setCompact(v === 'compact')}
+                className={`rounded-sm px-3 py-1 text-sm capitalize transition duration-150 ${
+                  (v === 'compact') === compact ? 'bg-hex-500/60 text-white' : 'text-slate-400 hover:text-slate-100'
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Class">
+          <Chip active={tag === null} onClick={() => setTag(null)}>
+            All <span className="opacity-60">{searched.length}</span>
+          </Chip>
           {tags.map((t) => (
-            <option key={t}>{t}</option>
+            <Chip key={t} active={tag === t} onClick={() => setTag(tag === t ? null : t)} color={CLASS_COLORS[t]}>
+              {t} <span className="opacity-60">{tagCounts.get(t) ?? 0}</span>
+            </Chip>
           ))}
-        </select>
-        <div className="inline-flex rounded-full bg-black/30 p-1 ring-1 ring-gold-700/25 ring-inset" role="group" aria-label="View">
-          {(['pools', 'grid'] as const).map((v) => (
-            <button
-              key={v}
-              aria-pressed={view === v}
-              onClick={() => setView(v)}
-              className={`rounded-full px-3 py-1 text-sm capitalize transition duration-150 ${
-                view === v ? 'bg-gold-700/50 text-gold-100' : 'text-slate-400 hover:text-slate-100'
-              }`}
-            >
-              {v}
+        </div>
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Quick filters">
+          {QUICK_FILTERS.map((f) => (
+            <Chip key={f.id} active={quick === f.id} onClick={() => setQuick(quick === f.id ? null : f.id)}>
+              {f.label}
+            </Chip>
+          ))}
+          {filtering && (
+            <button className="ml-auto shrink-0 px-2 text-xs text-slate-400 underline hover:text-slate-200" onClick={clear}>
+              Clear filters
             </button>
-          ))}
+          )}
         </div>
       </div>
 
-      {run.tokens_available > 0 && dead.length > 0 && (
+      {canRevive && deadTotal > 0 && (
         <p className="glass rounded-2xl px-4 py-2.5 text-sm text-gold-200">
-          ✦ You have {run.tokens_available} revive token{run.tokens_available > 1 ? 's' : ''}. Drag someone from the
-          Graveyard back into the Pool to use one.
-        </p>
-      )}
-      {hint && (
-        <p role="status" className="fade-in glass rounded-2xl px-4 py-2.5 text-sm text-slate-200">
-          {hint}
+          ✦ You have {run.tokens_available} revive token{run.tokens_available > 1 ? 's' : ''}. Hit Revive on an eliminated
+          champion to bring them back.
         </p>
       )}
       {pool.isLoading && <LoadingState />}
-      <ErrorText error={pool.error} />
-      {filtering && matches.size === 0 && (
-        <p className="text-sm text-slate-400">
-          No champions match.{' '}
-          <button className="underline" onClick={() => (setSearch(''), setTag(null))}>
-            Clear filters
-          </button>
-        </p>
-      )}
+      <ErrorText error={pool.error ?? linesQuery.error} />
 
-      {pool.isSuccess &&
-        (view === 'pools' ? (
-          <>
-            <ChampionPool
-              entries={alive}
-              variant="water"
-              poolRef={waterRef}
-              title="The Pool"
-              subtitle="Drag them around, or tap one for info"
-              highlight={highlight}
-              onOpen={(e) => setOpen({ entry: e, reviveOnly: false })}
-              onDropOutside={dropFromWater}
-              arrivals={arrivals}
-              empty="Nobody left. Every champ has been eliminated."
-            />
-            <ChampionPool
-              entries={dead}
-              variant="grave"
-              poolRef={graveRef}
-              title="The Graveyard"
-              subtitle={dead.length ? `${dead.length} eliminated` : undefined}
-              highlight={highlight}
-              onOpen={(e) => setOpen({ entry: e, reviveOnly: false })}
-              onDropOutside={dropFromGrave}
-              empty="Empty for now. Champs end up here when you lose with them."
-            />
-          </>
-        ) : (
-          <Grid entries={entries} highlight={highlight} onOpen={(e) => setOpen({ entry: e, reviveOnly: false })} />
-        ))}
+      {pool.isSuccess && (
+        <>
+          <section className="flex flex-col gap-3">
+            <h2 className="flex items-baseline gap-2 px-1 text-lg font-bold text-hex-100">
+              Alive
+              <span className="font-sans text-sm font-medium text-slate-400">
+                {filtering ? `${alive.length} of ${run.alive_count}` : run.alive_count}
+              </span>
+            </h2>
+            <div ref={aliveRef} className={grid}>
+              {alive.map(card)}
+            </div>
+            {alive.length === 0 && (
+              <p className="px-1 text-sm text-slate-400">
+                {filtering ? 'No alive champions match.' : 'Nobody left. Every champ has been eliminated.'}
+              </p>
+            )}
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setDeadOpen((o) => !o)}
+              aria-expanded={deadOpen}
+              className="flex items-baseline gap-2 self-start px-1 text-lg font-bold text-slate-300 hover:text-slate-100"
+            >
+              <span className={`inline-block text-sm transition-transform duration-150 ${deadOpen ? 'rotate-90' : ''}`} aria-hidden>
+                ▸
+              </span>
+              Eliminated
+              <span className="font-sans text-sm font-medium text-slate-400">
+                {filtering ? `${dead.length} of ${deadTotal}` : deadTotal}
+              </span>
+            </button>
+            {deadOpen && (
+              <>
+                <div ref={deadRef} className={grid}>
+                  {dead.map(card)}
+                </div>
+                {dead.length === 0 && (
+                  <p className="px-1 text-sm text-slate-400">
+                    {filtering ? 'No eliminated champions match.' : 'Nobody yet. Champs end up here when you lose with them.'}
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+        </>
+      )}
 
       {open && (
         <ChampionCard
           run={run}
           entry={open.entry}
-          reviveOnly={open.reviveOnly}
+          focus={open.focus}
           onRevived={onRevived}
           onClose={() => setOpen(null)}
         />
       )}
-    </div>
-  )
-}
-
-function Grid({
-  entries,
-  highlight,
-  onOpen,
-}: {
-  entries: PoolEntry[]
-  highlight: (e: PoolEntry) => boolean | null
-  onOpen: (e: PoolEntry) => void
-}) {
-  const players = usePlayerMap()
-  return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(84px,1fr))] gap-2">
-      {entries.map((e) => {
-        const dead = e.status === 'eliminated'
-        const by = e.eliminated_by_player_id ? players.get(e.eliminated_by_player_id)?.display_name : null
-        const hl = highlight(e)
-        return (
-          <button
-            key={e.champion_id}
-            onClick={() => onOpen(e)}
-            className="flex flex-col items-center gap-1 rounded-2xl p-1.5 transition duration-150 hover:bg-white/5 active:scale-95"
-            style={{ opacity: hl === false ? 0.2 : 1 }}
-            title={dead ? `Eliminated${by ? ` (${by})` : ''}` : e.name}
-          >
-            <ChampionPortrait champion={e} size="lg" dim={dead} className="rounded-2xl" />
-            <span className={`w-full truncate text-center text-xs ${dead ? 'text-slate-500 line-through' : ''}`}>{e.name}</span>
-          </button>
-        )
-      })}
     </div>
   )
 }

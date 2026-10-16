@@ -3,8 +3,10 @@ import {
   CARD_PX,
   FINAL_INDEX,
   STRIDE_PX,
+  STRIP_LENGTH,
   buildStrip,
   cardIndexAt,
+  optionIndexes,
   easeOutQuart,
   randomLandingOffset,
   reelPosition,
@@ -57,7 +59,7 @@ describe('buildStrip', () => {
   const pool = ['A', 'B', 'C', 'D', 'E']
   it('puts the winner at the final index', () => {
     const strip = buildStrip(pool, 'C')
-    expect(strip).toHaveLength(50)
+    expect(strip).toHaveLength(STRIP_LENGTH)
     expect(strip[FINAL_INDEX]).toBe('C')
   })
   it('avoids back-to-back repeats and copies of the winner right next to it', () => {
@@ -70,6 +72,20 @@ describe('buildStrip', () => {
   })
   it('works with a tiny pool', () => {
     expect(buildStrip(['Z'], 'Z', 5, 3)).toEqual(['Z', 'Z', 'Z', 'Z', 'Z'])
+  })
+  it('puts the backup options right next to the landing card', () => {
+    const big = 'ABCDEFGHIJKLMNOP'.split('')
+    for (let i = 0; i < 30; i++) {
+      const strip = buildStrip(big, ['C', 'H', 'K'])
+      expect([strip[FINAL_INDEX], strip[FINAL_INDEX - 1], strip[FINAL_INDEX + 1]]).toEqual(['C', 'H', 'K'])
+      // no other copy of an option near where it stops
+      const around = strip.slice(FINAL_INDEX - 4, FINAL_INDEX + 5)
+      for (const o of ['C', 'H', 'K']) expect(around.filter((x) => x === o)).toHaveLength(1)
+      strip.slice(1).forEach((id, j) => expect(id).not.toBe(strip[j]))
+    }
+    const four = buildStrip(big, ['A', 'B', 'C', 'D'])
+    expect(optionIndexes(4).map((i) => four[i])).toEqual(['A', 'B', 'C', 'D'])
+    expect(optionIndexes(4)).toEqual([FINAL_INDEX, FINAL_INDEX - 1, FINAL_INDEX + 1, FINAL_INDEX - 2])
   })
 })
 

@@ -89,3 +89,9 @@ If all checks pass, the result is applied right away. If one fails, the game is 
 Players earn gold from their stats in challenge games that have Riot data: kills, assists, damage (healing and shielding count for supports), vision and multikills. Gold is per player and per run. Hand-recorded games earn gold once you link their Riot match on the History tab.
 
 Spend it in the **Shop** tab on Reroll, Blacklist, Swap, Shield, Choose a Champ and Contracts. Prices, gold rates and contract goals can be changed per run in Settings. See SPEC.md section 7 for the exact rules.
+
+## Credits
+
+- **League** display font (`frontend/public/fonts/League.otf`) by [FontGet.com](https://www.fontget.com), free for personal and commercial use.
+- Champion data and images from Riot Games' Data Dragon. This project isn't affiliated with or endorsed by Riot Games.
+

@@ -64,7 +64,7 @@ export function LandingPage() {
 
         <div className="mt-8 flex w-full max-w-xl flex-col items-center gap-4">
           {r ? (
-            <div className="glass flex w-full flex-wrap items-center justify-around gap-4 rounded-3xl px-5 py-4">
+            <div className="glass flex w-full flex-wrap items-center justify-around gap-4 rounded-sm px-5 py-4">
               <div className="text-left">
                 <div className="text-[10px] tracking-[0.15em] text-slate-400 uppercase">
                   {r.status === 'ended' ? 'Last run' : 'Current run'}
@@ -78,7 +78,7 @@ export function LandingPage() {
             </div>
           ) : (
             run.isSuccess && (
-              <p className="glass rounded-3xl px-5 py-3 text-sm text-slate-300">
+              <p className="glass rounded-sm px-5 py-3 text-sm text-slate-300">
                 No run going yet. Head to Settings to add players and start one.
               </p>
             )
@@ -98,9 +98,9 @@ export function LandingPage() {
             <Link
               key={to}
               to={to}
-              className="glass group flex flex-col items-center gap-2 rounded-3xl px-3 py-5 transition duration-200 ease-(--ease-snap) hover:-translate-y-0.5 hover:ring-gold-500/50 active:scale-[0.97]"
+              className="glass group flex flex-col items-center gap-2 rounded-sm px-3 py-5 transition duration-200 ease-(--ease-snap) hover:-translate-y-0.5 hover:ring-hex-300/60 active:scale-[0.97]"
             >
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-b from-hex-600/40 to-hex-800/60 text-hex-200 ring-1 ring-hex-300/25 ring-inset transition group-hover:text-hex-100">
+              <span className="grid h-11 w-11 place-items-center rounded-sm bg-gradient-to-b from-hex-600/40 to-hex-800/60 text-hex-200 ring-1 ring-hex-300/25 ring-inset transition group-hover:text-hex-100">
                 <Icon className="h-5 w-5" />
               </span>
               <span className="font-display text-sm font-bold text-gold-100">{title}</span>

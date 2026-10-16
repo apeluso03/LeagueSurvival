@@ -3,10 +3,10 @@ from sqlmodel import Session, col, delete, select
 
 from app.config import get_settings
 from app.db import get_session
-from app.models import Player, PlayerMatchStats, ReviveToken, SpinAssignment
+from app.models import Player, PlayerMatchStats, ReviveToken, Run, SpinAssignment
 from app.routers.common import get_app_settings, get_or_404
 from app.schemas import PlayerIn, PlayerOut, PlayerPatch
-from app.services import sync
+from app.services import achievements, recap, sync
 from app.services.riot_client import REGIONS, RiotClient, RiotError
 
 router = APIRouter(prefix="/api/players", tags=["players"])
@@ -62,6 +62,10 @@ async def update_player(player_id: int, body: PlayerPatch, session: Session = De
     player = get_or_404(session, Player, player_id, "Player")
     changes = body.model_dump(exclude_unset=True)
     _check_region(changes.get("region"))
+    if changes.get("title") is not None:
+        earned = achievements.evaluate(session).get(player_id, {})
+        if changes["title"] not in earned:
+            raise HTTPException(400, "That title comes from an achievement this player hasn't unlocked yet")
     riot_changed = any(
         k in changes and changes[k] != getattr(player, k) for k in ("riot_game_name", "riot_tag_line", "region")
     )
@@ -107,3 +111,12 @@ def delete_player(player_id: int, session: Session = Depends(get_session)):
     session.exec(delete(PlayerMatchStats).where(col(PlayerMatchStats.player_id) == player_id))
     session.delete(player)
     session.commit()
+
+
+@router.get("/{player_id}/profile")
+def player_profile(player_id: int, run_id: int | None = None, session: Session = Depends(get_session)):
+    """A player's page: stats, champions, recent games, runs, items and (for one run) gold over time."""
+    player = get_or_404(session, Player, player_id, "Player")
+    if run_id is not None:
+        get_or_404(session, Run, run_id, "Run")
+    return recap.player_profile(session, player, run_id)

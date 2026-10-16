@@ -51,6 +51,8 @@ class Player(SQLModel, table=True):
     region: str = "americas"
     pin_hash: str | None = None  # future login (SPEC 12)
     discord_id: str | None = None  # future login (SPEC 12)
+    color: str | None = None  # broadcast team colour ("#rrggbb"); None = the default for their id
+    title: str | None = None  # achievement id whose title they show
     created_at: datetime = dt_field(default_now=True)
 
 
@@ -62,6 +64,8 @@ class Champion(SQLModel, table=True):
     tags: list[str] = json_field()
     image_url: str = ""
     ddragon_version: str = ""
+    # Roles it's played in, most common first ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "SUPPORT").
+    positions: list[str] = json_field()
 
 
 class Run(SQLModel, table=True):
@@ -235,3 +239,54 @@ class AppSettings(SQLModel, table=True):
     last_used_player_ids: list[int] = json_field()
     last_sync_at: datetime | None = dt_field()
     last_sync_error: str | None = None
+    # High-elo match crawler for comp / rune / item suggestions (services/meta.py).
+    meta_crawl: bool = True
+    meta_platform: str = "na1"
+    meta_region: str = "americas"
+
+
+# --- high-elo meta (crawled from Riot match data; services/meta.py) ---------------------------
+
+
+class MetaMatch(SQLModel, table=True):
+    """A high-elo match already counted, so it's never counted twice."""
+
+    match_id: str = Field(primary_key=True)
+    patch: str = Field(index=True)  # "16.20"
+    counted_at: datetime = dt_field(default_now=True)
+
+
+class MetaChampRole(SQLModel, table=True):
+    champion_key: int = Field(primary_key=True)
+    role: str = Field(primary_key=True)
+    patch: str = Field(primary_key=True)
+    games: int = 0
+    wins: int = 0
+
+
+class MetaRunePage(SQLModel, table=True):
+    champion_key: int = Field(primary_key=True)
+    role: str = Field(primary_key=True)
+    patch: str = Field(primary_key=True)
+    page: str = Field(primary_key=True)  # "8100:8112,8139,8138,8135|8300:8304,8347|5008,5008,5001"
+    games: int = 0
+    wins: int = 0
+
+
+class MetaItem(SQLModel, table=True):
+    champion_key: int = Field(primary_key=True)
+    role: str = Field(primary_key=True)
+    patch: str = Field(primary_key=True)
+    item_id: int = Field(primary_key=True)
+    games: int = 0
+    wins: int = 0
+
+
+class MetaCrawlState(SQLModel, table=True):
+    id: int = Field(default=1, primary_key=True)
+    puuids: list[str] = json_field()  # high-elo players still to visit
+    next_index: int = 0
+    refreshed_at: datetime | None = dt_field()  # when the ladder was last fetched
+    last_run_at: datetime | None = dt_field()
+    last_error: str | None = None
+    matches_counted: int = 0

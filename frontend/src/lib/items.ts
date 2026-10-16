@@ -4,7 +4,7 @@ import type { ItemType } from '../types'
 
 /** Display info for shop items. Prices and rules come from the backend. */
 export const ITEM_META: Record<ItemType, { name: string; Icon: ComponentType<SVGProps<SVGSVGElement>>; color: string }> = {
-  reroll: { name: 'Reroll', Icon: RerollIcon, color: '#0ac8b9' },
+  reroll: { name: 'Reroll', Icon: RerollIcon, color: '#2e9bff' },
   blacklist: { name: 'Blacklist', Icon: BlacklistIcon, color: '#e0434f' },
   swap: { name: 'Swap', Icon: SwapIcon, color: '#8b5cf6' },
   shield: { name: 'Shield', Icon: ShieldIcon, color: '#4fae6b' },

@@ -1,6 +1,15 @@
 import type {
   AppSettings,
   Champion,
+  AchievementReport,
+  ChampionLine,
+  CompSuggestion,
+  HallOfShame,
+  MetaStatus,
+  Wrapped,
+  OptionFact,
+  PlayerProfile,
+  RunRecap,
   ChampionReport,
   Game,
   GoldInfo,
@@ -108,6 +117,17 @@ export const api = {
   deleteRun: (id: number) => request<void>('DELETE', `/runs/${id}`),
   pool: (runId: number, includeEliminated = true) =>
     get<PoolEntry[]>(`/runs/${runId}/pool${qs({ include_eliminated: includeEliminated })}`),
+  recap: (runId: number) => get<RunRecap>(`/runs/${runId}/recap`),
+  profile: (playerId: number, runId?: number | null) =>
+    get<PlayerProfile>(`/players/${playerId}/profile${qs({ run_id: runId ?? undefined })}`),
+  optionFacts: (gameId: number) => get<Record<string, Record<string, OptionFact>>>(`/games/${gameId}/option-facts`),
+  achievements: () => get<AchievementReport>('/achievements'),
+  shame: (runId?: number | null) => get<HallOfShame>(`/shame${qs({ run_id: runId ?? undefined })}`),
+  wrapped: (month?: string) => get<Wrapped>(`/wrapped${qs({ month })}`),
+  metaStatus: () => get<MetaStatus>('/meta/status'),
+  refreshPositions: () => post<{ count: number }>('/meta/positions/refresh'),
+  comp: (championIds: string[]) => post<CompSuggestion>('/comp', { champion_ids: championIds }),
+  championLines: (runId: number) => get<Record<string, ChampionLine>>(`/runs/${runId}/champion-lines`),
   eliminate: (runId: number, championId: string) => post<Run>(`/runs/${runId}/pool/${championId}/eliminate`),
   revive: (runId: number, championId: string, tokenId?: number) =>
     post<Run>(`/runs/${runId}/pool/${championId}/revive`, { token_id: tokenId ?? null }),

@@ -246,6 +246,90 @@ def test_champion_stats_endpoint(client):
     assert client.get("/api/champions/Nope/stats").status_code == 404
 
 
+def test_champion_lines_for_pool_cards(client):
+    rid = create_run(client)["id"]
+    client.post(f"/api/runs/{rid}/players/1/gold/adjust", json={"amount": 500})
+    bl = client.post(f"/api/runs/{rid}/players/1/purchase", json={"type": "blacklist"}).json()["item"]
+    client.post(f"/api/items/{bl['id']}/use", json={"champion_ids": ["Champ001"]})
+    r = client.post(f"/api/runs/{rid}/spins", json={"player_ids": [2, 3]})
+    assert r.status_code == 200, r.text
+    game = r.json()["game"]
+    mine = next(a for a in game["assignments"] if a["player_id"] == 2)
+    offered = mine["options"]
+    lines = client.get(f"/api/runs/{rid}/champion-lines").json()
+    assert all(lines[c]["offered"] == 1 and lines[c]["on_spin"] == [2] for c in offered)
+    assert lines["Champ001"]["blacklisted_by"] == [1]  # player 1 didn't spin, so it stays armed
+
+    client.patch(f"/api/games/{game['id']}/assignments", json={"picks": [{"player_id": p, "option_index": 0} for p in (2, 3)]})
+    client.post(f"/api/games/{game['id']}/result", json={"result": "win"})
+    lines = client.get(f"/api/runs/{rid}/champion-lines").json()
+    assert lines[offered[0]] | {"blacklisted_by": []} == {
+        "offered": 1, "played": 1, "wins": 1, "losses": 0, "on_spin": [], "blacklisted_by": []
+    }
+    assert client.get("/api/runs/999/champion-lines").status_code == 404
+
+
+def _play(client, rid, result, players=(1, 2)):
+    game = client.post(f"/api/runs/{rid}/spins", json={"player_ids": list(players)}).json()["game"]
+    picks = [{"player_id": a["player_id"], "option_index": 0} for a in game["assignments"]]
+    client.patch(f"/api/games/{game['id']}/assignments", json={"picks": picks})
+    return client.post(f"/api/games/{game['id']}/result", json={"result": result}).json()
+
+
+def test_run_recap(client):
+    rid = create_run(client)["id"]
+    lost = _play(client, rid, "loss")
+    _play(client, rid, "win")
+    third = _play(client, rid, "win", players=(1, 3))
+    r = client.get(f"/api/runs/{rid}/recap").json()
+    t = r["totals"]
+    assert (t["games"], t["wins"], t["losses"], t["alive"], t["total"]) == (3, 2, 1, 18, 20)
+    assert [g["status"] for g in r["timeline"]] == ["lost", "won", "won"]
+    by = {p["player_id"]: p for p in r["players"]}
+    assert set(by) == {1, 2, 3} and (by[1]["games"], by[1]["wins"], by[1]["eliminations"]) == (3, 2, 1)
+    awards = {a["id"]: a for a in r["awards"]}
+    assert awards["mvp"]["player_id"] == 1  # 2-1; player 3 is 1-0 but played too few games to count
+    assert awards["first"]["champion_id"] in lost["eliminated"]
+    assert "reaper" not in awards  # players 1 and 2 each lost one champ: a tie gets no award
+    played_by_3 = [a["played_champion_id"] for a in third["assignments"] if a["player_id"] == 3]
+    assert by[3]["top_champion"] == played_by_3[0]  # their only game
+    assert client.get("/api/runs/999/recap").status_code == 404
+
+
+def test_player_profile(client):
+    rid = create_run(client)["id"]
+    lost = _play(client, rid, "loss")
+    _play(client, rid, "win")
+    prof = client.get("/api/players/1/profile", params={"run_id": rid}).json()
+    assert prof["player"]["display_name"] and prof["stats"]["games"] == 2
+    assert [g["status"] for g in prof["games"]] == ["won", "lost"]
+    assert prof["games"][1]["eliminated"] and not prof["games"][0]["eliminated"]
+    mine = next(a for a in lost["assignments"] if a["player_id"] == 1)
+    assert prof["games"][1]["champion_id"] == mine["played_champion_id"]
+    assert prof["runs"] == [{"run_id": rid, "name": "Run 1", "status": "active", "games": 2, "wins": 1}]
+    assert sum(c["games"] for c in prof["champions"]) == 2
+    assert client.get("/api/players/1/profile").status_code == 200  # all runs
+    assert client.get("/api/players/999/profile").status_code == 404
+    assert client.get("/api/players/1/profile", params={"run_id": 999}).status_code == 404
+
+
+def test_option_facts(client):
+    # 6 champions for 2 players x 3 options: every champion is in someone's options every spin.
+    rid = create_run(client, champion_ids=[f"Champ00{i}" for i in range(1, 7)])["id"]
+    first = _play(client, rid, "win")
+    champ = next(a for a in first["assignments"] if a["player_id"] == 1)["played_champion_id"]
+    game = client.post(f"/api/runs/{rid}/spins", json={"player_ids": [1, 2]}).json()["game"]
+    facts = client.get(f"/api/games/{game['id']}/option-facts").json()
+    assert set(facts) == {"1", "2"}
+    for a in game["assignments"]:
+        assert set(facts[str(a["player_id"])]) == set(a["options"])
+    holder = next(str(a["player_id"]) for a in game["assignments"] if champ in a["options"])
+    f = facts[holder][champ]
+    assert (f["group_games"], f["group_wins"]) == (1, 1)
+    assert f["you_games"] == (1 if holder == "1" else 0)
+    assert client.get("/api/games/999/option-facts").status_code == 404
+
+
 # --- gold and shop endpoints (SPEC 11) ---------------------------------------------------------
 
 

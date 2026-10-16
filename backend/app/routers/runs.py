@@ -1,3 +1,5 @@
+from dataclasses import asdict
+
 from fastapi import APIRouter, Body, Depends
 from sqlmodel import Session, col, select
 
@@ -5,7 +7,7 @@ from app.db import get_session
 from app.models import Champion, InventoryItem, Player, PoolEntry, PoolEvent, ReviveToken, Run
 from app.routers.common import game_out, get_app_settings, get_or_404, run_out
 from app.schemas import AssignmentOut, PoolEntryOut, RunIn, RunOut, SpinIn, SpinOut
-from app.services import rules
+from app.services import recap, rules, stats
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -73,6 +75,19 @@ def get_pool(run_id: int, include_eliminated: bool = True, session: Session = De
         )
         for entry, champ in session.exec(query).all()
     ]
+
+
+@router.get("/{run_id}/recap")
+def run_recap(run_id: int, session: Session = Depends(get_session)):
+    """Everything the run recap page shows: totals, the win/loss timeline, per-player lines and awards."""
+    return recap.run_recap(session, get_or_404(session, Run, run_id, "Run"))
+
+
+@router.get("/{run_id}/champion-lines")
+def champion_lines(run_id: int, session: Session = Depends(get_session)):
+    """Short numbers for every champion card on the Pool tab, in one request."""
+    get_or_404(session, Run, run_id, "Run")
+    return {cid: asdict(line) for cid, line in stats.run_champion_lines(session, run_id).items()}
 
 
 @router.post("/{run_id}/pool/{champion_id}/eliminate", response_model=RunOut)

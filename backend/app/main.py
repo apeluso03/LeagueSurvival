@@ -10,9 +10,9 @@ from sqlmodel import Session, select
 from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
-from app.routers import champions, games, players, riot, runs, settings, shop, stats, tokens
-from app.jobs import poller
-from app.services import ddragon
+from app.routers import champions, fun, games, players, riot, runs, settings, shop, stats, tokens
+from app.jobs import crawler, poller
+from app.services import ddragon, meta
 from app.services.rules import RuleError
 
 log = logging.getLogger("uvicorn.error")
@@ -39,16 +39,33 @@ async def import_champions_if_empty() -> None:
             log.warning("Could not import champions from Data Dragon: %s", e)
 
 
+async def import_positions_if_missing() -> None:
+    """Champion roles for comp suggestions (Meraki Analytics). Runs in the background: it's a big file."""
+    with Session(engine) as session:
+        if any(c.positions for c in session.exec(select(Champion)).all()):
+            return
+        try:
+            count = await meta.refresh_positions(session)
+            session.commit()
+            log.info("Imported roles for %d champions", count)
+        except Exception as e:  # noqa: BLE001 - optional data; works without it
+            log.warning("Could not import champion roles: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    poll_task = None
+    tasks: list[asyncio.Task] = []
     if get_settings().startup_tasks:
         run_migrations()
         await import_champions_if_empty()
-        poll_task = asyncio.create_task(poller.run_forever(engine))
+        tasks = [
+            asyncio.create_task(poller.run_forever(engine)),
+            asyncio.create_task(crawler.run_forever(engine)),
+            asyncio.create_task(import_positions_if_missing()),
+        ]
     yield
-    if poll_task:
-        poll_task.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(title="LoL Survival Tracker", version="0.1.0", lifespan=lifespan)
@@ -71,5 +88,5 @@ def health():
     return {"ok": True}
 
 
-for module in (settings, players, champions, runs, games, tokens, riot, stats, shop):
+for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun):
     app.include_router(module.router)

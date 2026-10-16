@@ -16,6 +16,9 @@ class SettingsOut(BaseModel):
     remake_threshold_seconds: int
     last_used_player_ids: list[int]
     riot_api_key_set: bool
+    meta_crawl: bool = True
+    meta_platform: str = "na1"
+    meta_region: str = "americas"
 
 
 class SettingsPatch(BaseModel):
@@ -25,6 +28,9 @@ class SettingsPatch(BaseModel):
     poll_interval_seconds: int | None = Field(default=None, ge=30)
     remake_threshold_seconds: int | None = Field(default=None, ge=0)
     last_used_player_ids: list[int] | None = None
+    meta_crawl: bool | None = None
+    meta_platform: str | None = None
+    meta_region: str | None = None
     # When turning challenge mode off with a pending game: void it (true) or keep it pending (false).
     void_pending: bool = False
 
@@ -46,6 +52,8 @@ class PlayerPatch(BaseModel):
     riot_tag_line: str | None = None
     platform: str | None = None
     region: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    title: str | None = None
 
 
 # --- runs and pool ---
@@ -208,6 +216,8 @@ class PlayerOut(BaseModel):
     platform: str
     region: str
     created_at: datetime
+    color: str | None = None
+    title: str | None = None
     # Set when a Riot ID lookup was attempted on this request and failed for a reason other than "not found".
     link_error: str | None = None
 

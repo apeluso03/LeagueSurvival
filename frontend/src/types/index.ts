@@ -8,6 +8,9 @@ export interface AppSettings {
   remake_threshold_seconds: number
   last_used_player_ids: number[]
   riot_api_key_set: boolean
+  meta_crawl: boolean
+  meta_platform: string
+  meta_region: string
 }
 
 export interface Player {
@@ -19,6 +22,8 @@ export interface Player {
   platform: string
   region: string
   created_at: string
+  color: string | null // broadcast team colour; null = the default for their id
+  title: string | null // achievement id whose title they show
   link_error?: string | null
 }
 
@@ -65,6 +70,26 @@ export interface PoolEntry {
   eliminated_by_player_id: number | null
   shield_item_id: number | null
   shield_player_id: number | null
+}
+
+/** A champion's short numbers for one run (Pool cards). */
+export interface ChampionLine {
+  offered: number
+  played: number
+  wins: number
+  losses: number
+  on_spin: number[] // players with it in the pending spin
+  blacklisted_by: number[] // players with it on an armed blacklist
+}
+
+/** Short numbers under a rolled champion on the Wheels tab. */
+export interface OptionFact {
+  you_games: number
+  you_wins: number
+  riot_games: number
+  riot_wins: number
+  group_games: number
+  group_wins: number
 }
 
 export interface Assignment {
@@ -312,4 +337,216 @@ export interface ItemUse {
   game_id?: number
   other_player_id?: number
   champion_ids?: string[]
+}
+
+// --- run recap and player profile ---------------------------------------------------------
+
+export interface RecapPlayer extends Omit<PlayerStats, 'best_champions' | 'eliminated_champions'> {
+  eliminations: number
+  tokens_earned: number
+  multikills: { penta: number; quadra: number; triple: number; double: number }
+  best_champion: ChampionStats | null
+  top_champion: string | null // most played this run
+}
+
+export interface RecapAward {
+  id: string
+  title: string
+  text: string
+  player_id: number | null
+  champion_id: string | null
+}
+
+export interface RunRecap {
+  run: { id: number; name: string; status: 'active' | 'ended'; started_at: string; ended_at: string | null }
+  totals: {
+    games: number
+    wins: number
+    losses: number
+    best_streak: number
+    alive: number
+    total: number
+    tokens_earned: number
+    tokens_used: number
+    shields_saved: number
+    items_bought: number
+    gold_earned: number
+    gold_spent: number
+  }
+  timeline: { game_id: number; status: 'won' | 'lost'; created_at: string }[]
+  players: RecapPlayer[]
+  awards: RecapAward[]
+}
+
+export interface ProfileGame {
+  game_id: number
+  run_id: number
+  created_at: string
+  status: 'won' | 'lost'
+  champion_id: string | null
+  options: string[]
+  grade: string | null
+  kda: [number, number, number] | null
+  gold: number | null
+  eliminated: boolean
+  token_earned: boolean
+}
+
+export interface PlayerProfile {
+  player: { id: number; display_name: string; riot_id: string | null; linked: boolean }
+  stats: PlayerStats
+  champions: { champion_id: string; games: number; wins: number }[]
+  games: ProfileGame[]
+  runs: { run_id: number; name: string; status: 'active' | 'ended'; games: number; wins: number }[]
+  items: Partial<Record<ItemType, { bought: number; used: number }>>
+  gold_timeline: { at: string; balance: number; amount: number; reason: string }[]
+  tokens_earned: number
+}
+
+// --- trophies, hall of shame, wrapped -------------------------------------------------------
+
+export interface AchievementInfo {
+  id: string
+  name: string
+  description: string
+  title: string
+  icon: string
+  tier: 'bronze' | 'silver' | 'gold' | 'prismatic'
+}
+
+export interface AchievementUnlock {
+  id: string
+  game_id: number | null
+  at: string
+}
+
+export interface AchievementReport {
+  catalog: AchievementInfo[]
+  rarity: Record<string, number> // share of players who have it, 0..1
+  players: Record<string, AchievementUnlock[]>
+}
+
+export interface ShameGame {
+  game_id: number
+  run_id: number
+  player_id: number
+  champion_id: string | null
+  won: boolean
+  kills: number | null
+  deaths: number | null
+  assists: number | null
+  kda: number | null
+  duration: number | null
+  at: string
+}
+
+export interface HallOfShame {
+  worst_games: ShameGame[]
+  most_deaths: ShameGame[]
+  fastest_losses: ShameGame[]
+  cursed_champions: { champion_id: string; games: number; wins: number }[]
+  feeders: { player_id: number; games: number; deaths: number; avg_deaths: number }[]
+  reapers: { player_id: number; champions_lost: number }[]
+  wasted_items: { player_id: number; items: number; gold: number }[]
+}
+
+export interface WrappedPlayer {
+  player_id: number
+  games: number
+  wins: number
+  kda: number | null
+  kills: number | null
+  deaths: number | null
+  avg_deaths: number | null
+  pentas: number
+  top_champion: string | null
+  top_champion_games: number
+  champions_lost: number
+  gold_spent: number
+  reroll_gold: number
+}
+
+export interface Wrapped {
+  month: string
+  months: string[]
+  games: number
+  wins: number
+  best_streak: number
+  champions_lost: number
+  gold_spent: number
+  reroll_gold: number
+  items_bought: number
+  pentas: number
+  most_played: { champion_id: string; games: number; wins: number } | null
+  mvp: WrappedPlayer | null
+  feeder: WrappedPlayer | null
+  top_killer: WrappedPlayer | null
+  best_duo: { players: number[]; games: number; wins: number } | null
+  worst_duo: { players: number[]; games: number; wins: number } | null
+  worst_game: ShameGame | null
+  best_game: ShameGame | null
+  players: WrappedPlayer[]
+}
+
+// --- high-elo meta: comp suggestions ---------------------------------------------------------
+
+export type Role = 'TOP' | 'JUNGLE' | 'MIDDLE' | 'BOTTOM' | 'UTILITY'
+
+export interface RuneRef {
+  id: number
+  name: string
+  icon?: string | null
+}
+
+export interface RunePage {
+  primary: RuneRef
+  keystone: RuneRef | null
+  primary_perks: RuneRef[]
+  secondary: RuneRef
+  secondary_perks: RuneRef[]
+  shards: { id: number; name: string }[]
+  games: number
+  win_rate: number | null
+}
+
+export interface MetaItemInfo {
+  id: number
+  name: string
+  image: string | null
+  games: number
+  pick_rate: number | null
+  win_rate: number | null
+}
+
+export interface CompPick {
+  champion_id: string
+  role: Role
+  role_name: string
+  role_source: 'high-elo' | 'positions'
+  role_games: number
+  role_win_rate: number | null
+  off_role: boolean // rarely played in this role; the build comes from build_role
+  build_role: Role | null
+  runes: RunePage | null
+  items: MetaItemInfo[]
+  boots: MetaItemInfo | null
+}
+
+export interface CompSuggestion {
+  patches: string[]
+  matches: number
+  picks: CompPick[]
+}
+
+export interface MetaStatus {
+  enabled: boolean
+  key_set: boolean
+  platform: string
+  patches: string[]
+  matches: number
+  champions_covered: number
+  ladder_size: number
+  ladder_position: number
+  last_run_at: string | null
+  last_error: string | null
 }

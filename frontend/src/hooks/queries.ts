@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { api } from '../api/client'
+import { registerTeamColors } from '../lib/teams'
 import type { Champion, Player } from '../types'
 
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: api.settings })
@@ -33,6 +34,25 @@ export const useRun = (id: number | null | undefined) =>
 
 export const usePool = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['pool', runId], queryFn: () => api.pool(runId!), enabled: runId != null })
+
+/** Short per-champion numbers for the Pool cards (one request for the whole run). */
+export const useChampionLines = (runId: number | null | undefined) =>
+  useQuery({ queryKey: ['champion-lines', runId], queryFn: () => api.championLines(runId!), enabled: runId != null })
+
+/** Per player, per rolled champion: their record, Riot games and the group's record. */
+export const useOptionFacts = (gameId: number | null | undefined) =>
+  useQuery({ queryKey: ['option-facts', gameId], queryFn: () => api.optionFacts(gameId!), enabled: gameId != null })
+
+export const useAchievements = () => useQuery({ queryKey: ['achievements'], queryFn: api.achievements })
+
+/** Suggested roles, runes and items for the rolled champions (high-elo data). */
+export const useComp = (championIds: string[]) =>
+  useQuery({
+    queryKey: ['comp', ...championIds],
+    queryFn: () => api.comp(championIds),
+    enabled: championIds.length > 0,
+    staleTime: 5 * 60_000,
+  })
 
 export const usePoolEvents = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['events', runId], queryFn: () => api.events(runId!), enabled: runId != null })
@@ -86,6 +106,12 @@ export function useActiveRun() {
 export function useChampionMap() {
   const { data } = useChampions()
   return useMemo(() => new Map<string, Champion>((data ?? []).map((c) => [c.id, c])), [data])
+}
+
+/** Keeps team colours in sync with the players' chosen colours (call near the top of the page). */
+export function useTeamColors() {
+  const { data } = usePlayers()
+  registerTeamColors(data)
 }
 
 export function usePlayerMap() {

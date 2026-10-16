@@ -42,6 +42,9 @@ async def fetch_champions(client: httpx.AsyncClient | None = None) -> list[Champ
 
 def upsert_champions(session: Session, champions: list[Champion]) -> int:
     for champ in champions:
+        existing = session.get(Champion, champ.id)
+        if existing is not None:
+            champ.positions = existing.positions  # comes from Meraki, not Data Dragon
         session.merge(champ)
     session.flush()
     return len(champions)

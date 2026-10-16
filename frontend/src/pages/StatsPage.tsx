@@ -12,6 +12,10 @@ import {
 } from '../hooks/queries'
 import { num, pct, sortRows } from '../lib/stats'
 import { GoldBadge } from '../components/Gold'
+import { LowerThird } from '../components/LowerThird'
+import { PlayerLink } from '../components/PlayerLink'
+import { teamColor } from '../lib/teams'
+import { Link } from 'react-router-dom'
 
 const GRADES = ['S+', 'S', 'S-', 'A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D']
 import type { PlayerStats, Run } from '../types'
@@ -39,7 +43,7 @@ export function StatsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-bold">Stats</h1>
-        <div className="inline-flex gap-0.5 rounded-full bg-black/30 p-1 ring-1 ring-gold-700/25 ring-inset" role="group" aria-label="Games to include">
+        <div className="inline-flex gap-0.5 rounded-sm bg-black/30 p-1 ring-1 ring-white/10 ring-inset" role="group" aria-label="Games to include">
           {[
             [true, 'Challenge only'],
             [false, 'All tracked games'],
@@ -48,7 +52,7 @@ export function StatsPage() {
               key={String(value)}
               onClick={() => setChallengeOnly(value as boolean)}
               aria-pressed={challengeOnly === value}
-              className={`rounded-full px-3 py-1 text-sm transition duration-150 ${challengeOnly === value ? 'bg-gold-700/50 text-gold-100' : 'text-slate-400 hover:text-slate-100'}`}
+              className={`rounded-sm px-3 py-1 text-sm transition duration-150 ${challengeOnly === value ? 'bg-hex-500/60 text-white' : 'text-slate-400 hover:text-slate-100'}`}
             >
               {label as string}
             </button>
@@ -106,6 +110,9 @@ function RunSummary({ run }: { run: Run }) {
       <Stat label="Games played" value={run.games_played} />
       <Stat label="Eliminated" value={run.total_count - run.alive_count} />
       <Stat label="Champions left" value={run.alive_count} />
+      <Link to={`/runs/${run.id}/recap`} className="btn-secondary self-center">
+        Run recap
+      </Link>
     </div>
   )
 }
@@ -173,10 +180,10 @@ function Leaderboard({ rows }: { rows: PlayerStats[] }) {
         </thead>
         <tbody>
           {sorted.map((s) => (
-            <tr key={s.player_id} className="border-b border-slate-800/60 last:border-0">
+            <tr key={s.player_id} className="border-b border-slate-800/60 last:border-0" style={{ ['--team' as string]: teamColor(s.player_id) }}>
               {columns.map((c, i) => (
-                <td key={c.label} className={`px-3 py-2 ${i === 0 ? 'font-semibold' : 'tabular-nums'}`}>
-                  {c.show(s)}
+                <td key={c.label} className={`px-3 py-2 ${i === 0 ? 'team-cell font-display tracking-wide uppercase' : 'tabular-nums'}`}>
+                  {i === 0 ? <PlayerLink id={s.player_id} /> : c.show(s)}
                 </td>
               ))}
             </tr>
@@ -195,7 +202,11 @@ function PlayerCard({ stats: s, challengeOnly }: { stats: PlayerStats; challenge
   return (
     <div className="card flex flex-col gap-4">
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold">{player?.display_name}</h2>
+        <h2>
+          <Link to={`/players/${s.player_id}`} className="transition hover:brightness-125">
+            <LowerThird playerId={s.player_id} />
+          </Link>
+        </h2>
         <span className="text-sm text-slate-400">
           {s.wins}W {s.losses}L · {pct(s.win_rate)}
           {s.gold_balance != null && (

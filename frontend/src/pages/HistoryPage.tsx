@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PlayerLink } from '../components/PlayerLink'
 import { api } from '../api/client'
 import { GoldBadge } from '../components/Gold'
 import { ItemTag } from '../components/ItemTag'
@@ -66,13 +67,13 @@ export function HistoryPage() {
             </option>
           ))}
         </select>
-        <div className="inline-flex gap-0.5 rounded-full bg-black/30 p-1 ring-1 ring-gold-700/25 ring-inset" role="group" aria-label="View">
+        <div className="inline-flex gap-0.5 rounded-sm bg-black/30 p-1 ring-1 ring-white/10 ring-inset" role="group" aria-label="View">
           {(['games', 'activity'] as const).map((v) => (
             <button
               key={v}
               aria-pressed={view === v}
               onClick={() => setView(v)}
-              className={`rounded-full px-3 py-1 text-sm transition duration-150 ${view === v ? 'bg-gold-700/50 text-gold-100' : 'text-slate-400 hover:text-slate-100'}`}
+              className={`rounded-sm px-3 py-1 text-sm transition duration-150 ${view === v ? 'bg-hex-500/60 text-white' : 'text-slate-400 hover:text-slate-100'}`}
             >
               {v === 'games' ? 'Games' : 'Pool activity'}
             </button>
@@ -108,7 +109,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
             key={f.id}
             aria-pressed={filter === f.id}
             onClick={() => setFilter(f.id)}
-            className={`rounded-full px-3 py-1 text-sm ring-1 ${
+            className={`rounded-sm px-3 py-1 text-sm ring-1 ${
               filter === f.id ? 'bg-slate-200 text-slate-950 ring-slate-200' : 'bg-slate-900 ring-slate-700 hover:bg-slate-800'
             }`}
           >
@@ -148,7 +149,9 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                       <div key={a.player_id} className="flex items-center gap-2">
                         <ChampionPortrait champion={cid ? champs.get(cid) : undefined} size="sm" dim={eliminated} />
                         <div className="text-xs leading-tight">
-                          <div className="font-semibold">{players.get(a.player_id)?.display_name}</div>
+                          <div className="font-semibold">
+                            <PlayerLink id={a.player_id} />
+                          </div>
                           <div className="text-slate-400">
                             {cid ? champs.get(cid)?.name : 'not marked'}
                             {a.played_option_index != null && ` (#${a.played_option_index + 1})`}
