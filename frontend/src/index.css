@@ -1,57 +1,69 @@
 @import "tailwindcss";
 
 /*
- * League-client palette (SPEC 17.1). The slate scale is remapped to the client's navy and warm
- * greys so every page picks it up; gold and hextech blue are the accents; emerald becomes hextech
- * teal for wins.
+ * Esports broadcast theme: near-black panels, electric blue as the main accent, League gold for
+ * highlights (gold, MVPs, streaks), and a team colour per player (lib/teams.ts). The slate scale
+ * is remapped to cool broadcast greys so every page picks it up; "hex" is the electric blue and
+ * "emerald" (wins) follows it.
  */
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Cinzel", "Times New Roman", serif;
+  --font-sans: "Spiegel", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "League", "Beaufort for LOL", "BeaufortforLOL", "Beaufort", "Cinzel", "Times New Roman", serif;
 
-  --color-slate-50: #faf6ec;
-  --color-slate-100: #f0e6d2;
-  --color-slate-200: #ddd5c2;
-  --color-slate-300: #c3bba8;
-  --color-slate-400: #a09b8c;
-  --color-slate-500: #7b776b;
-  --color-slate-600: #5b5a56;
-  --color-slate-700: #3c3c41;
-  --color-slate-800: #1e2328;
-  --color-slate-900: #0a1428;
-  --color-slate-950: #010a13;
+  --color-slate-50: #f5f7fb;
+  --color-slate-100: #e8edf5;
+  --color-slate-200: #cdd5e1;
+  --color-slate-300: #a9b4c4;
+  --color-slate-400: #8590a3;
+  --color-slate-500: #636d80;
+  --color-slate-600: #454e5e;
+  --color-slate-700: #2c3340;
+  --color-slate-800: #181d26;
+  --color-slate-900: #0d1118;
+  --color-slate-950: #06080c;
 
-  --color-gold-100: #f8f0dc;
-  --color-gold-200: #f0e6d2;
-  --color-gold-300: #e3cf9e;
-  --color-gold-400: #c8aa6e;
+  --color-gold-100: #fbf3df;
+  --color-gold-200: #f3e3b8;
+  --color-gold-300: #e8c97a;
+  --color-gold-400: #d6ac4f;
   --color-gold-500: #c89b3c;
   --color-gold-600: #a07a26;
   --color-gold-700: #785a28;
   --color-gold-800: #463714;
-  --color-gold-900: #32281e;
+  --color-gold-900: #2a2112;
 
-  --color-hex-100: #cdfafa;
-  --color-hex-200: #8ff0ea;
-  --color-hex-300: #0ac8b9;
-  --color-hex-400: #0397ab;
-  --color-hex-500: #0a7a8f;
-  --color-hex-600: #005a82;
-  --color-hex-800: #0a323c;
-  --color-hex-900: #091428;
+  --color-hex-100: #dcefff;
+  --color-hex-200: #9ad3ff;
+  --color-hex-300: #2e9bff;
+  --color-hex-400: #1683f0;
+  --color-hex-500: #0d66c8;
+  --color-hex-600: #0b4c99;
+  --color-hex-800: #0a2140;
+  --color-hex-900: #07111f;
 
-  --color-emerald-300: #6fe3d8;
-  --color-emerald-400: #0ac8b9;
-  --color-emerald-500: #09a99c;
-  --color-emerald-600: #078a83;
+  --color-emerald-300: #7cc4ff;
+  --color-emerald-400: #2e9bff;
+  --color-emerald-500: #1683f0;
+  --color-emerald-600: #0d66c8;
 
   --ease-snap: cubic-bezier(0.2, 0.9, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
 }
 
+/* "League": a Beaufort-style display font (public/fonts/League.otf). One regular weight. */
+@font-face {
+  font-family: "League";
+  src: url("/fonts/League.otf") format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 html {
   color-scheme: dark;
-  background: #010a13;
+  /* League.otf has one weight; a browser-faked bold smears it. Other fonts ship real weights. */
+  font-synthesis-weight: none;
+  background: #05070b;
 }
 
 body {
@@ -59,8 +71,8 @@ body {
   min-height: 100dvh;
 }
 
-/* The page glow lives on its own fixed layer: unlike background-attachment: fixed, it never
-   repaints while scrolling. */
+/* Broadcast backdrop on its own fixed layer (never repaints while scrolling): a blue stage light,
+   a faint gold one, and thin diagonal light streaks. */
 body::before {
   content: '';
   position: fixed;
@@ -68,16 +80,21 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60rem 40rem at 85% -10%, rgb(10 200 185 / 0.08), transparent 60%),
-    radial-gradient(50rem 35rem at -10% 10%, rgb(200 155 60 / 0.07), transparent 60%),
-    linear-gradient(180deg, #010a13 0%, #061020 100%);
+    repeating-linear-gradient(115deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 22px),
+    radial-gradient(60rem 36rem at 90% -12%, rgb(46 155 255 / 0.16), transparent 60%),
+    radial-gradient(40rem 30rem at -8% 8%, rgb(200 155 60 / 0.07), transparent 60%),
+    linear-gradient(180deg, #05070b 0%, #080b11 100%);
 }
 
 h1,
 h2,
 .font-display {
   font-family: var(--font-display);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+}
+h1,
+h2 {
+  text-transform: uppercase;
 }
 
 :focus-visible {
@@ -86,45 +103,244 @@ h2,
 }
 
 ::selection {
-  background: rgb(200 155 60 / 0.35);
+  background: rgb(46 155 255 / 0.35);
 }
 
 /* --- controls ------------------------------------------------------------------- */
+/* Buttons are parallelograms, like broadcast graphics. clip-path would also clip an outline,
+   so keyboard focus shows as an inset ring instead. */
 
 @utility btn {
-  @apply inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold select-none
+  @apply inline-flex items-center justify-center gap-1.5 px-5 py-2 text-sm font-bold tracking-wide uppercase select-none
     transition duration-150 ease-(--ease-snap) active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40
     disabled:active:scale-100;
+  clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px #fff;
+  }
 }
 @utility btn-primary {
-  @apply btn bg-gradient-to-b from-gold-400 to-gold-600 text-slate-950 shadow-[0_0_0_1px_rgb(240_230_210/0.35)_inset,0_6px_20px_-6px_rgb(200_155_60/0.6)]
-    hover:brightness-110;
+  @apply btn bg-gradient-to-b from-hex-300 to-hex-500 text-white hover:brightness-115;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.25);
+}
+@utility btn-gold {
+  @apply btn bg-gradient-to-b from-gold-300 to-gold-500 text-slate-950 hover:brightness-110;
 }
 @utility btn-secondary {
-  @apply btn bg-white/[0.06] text-slate-100 ring-1 ring-gold-700/50 ring-inset hover:bg-white/[0.1] hover:ring-gold-500/60;
+  @apply btn bg-white/[0.07] text-slate-100 hover:bg-white/[0.13];
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.12);
 }
 @utility btn-danger {
-  @apply btn bg-gradient-to-b from-red-600 to-red-800 text-white shadow-[0_6px_20px_-8px_rgb(220_38_38/0.7)] hover:brightness-110;
+  @apply btn bg-gradient-to-b from-red-500 to-red-700 text-white hover:brightness-110;
 }
 @utility btn-success {
-  @apply btn bg-gradient-to-b from-hex-300 to-hex-500 text-slate-950 shadow-[0_6px_20px_-8px_rgb(10_200_185/0.7)] hover:brightness-110;
+  @apply btn bg-gradient-to-b from-hex-200 to-hex-400 text-slate-950 hover:brightness-110;
 }
 @utility input {
-  @apply rounded-xl bg-slate-950/70 px-3 py-2 text-sm ring-1 ring-slate-700 outline-none ring-inset
-    transition duration-150 placeholder:text-slate-500 focus:ring-2 focus:ring-hex-400;
+  @apply rounded-sm bg-black/60 px-3 py-2 text-sm ring-1 ring-white/12 outline-none ring-inset
+    transition duration-150 placeholder:text-slate-500 focus:ring-2 focus:ring-hex-300;
 }
+/* Panel: squared, a blue notch in the top-left corner and a thin gold rule along the top. */
 @utility card {
-  @apply rounded-3xl bg-[#08111f]/90 p-5 ring-1 ring-gold-700/25 ring-inset
-    shadow-[0_1px_0_0_rgb(240_230_210/0.05)_inset,0_20px_40px_-20px_rgb(0_0_0/0.6)];
+  @apply rounded-[3px] p-5 ring-1 ring-white/[0.07] ring-inset;
+  background:
+    linear-gradient(135deg, var(--color-hex-300) 0 9px, transparent 9px),
+    linear-gradient(90deg, rgb(214 172 79 / 0.55), rgb(214 172 79 / 0) 45%) top / 100% 1px no-repeat,
+    linear-gradient(180deg, rgb(19 24 33 / 0.94), rgb(11 14 20 / 0.94));
+  box-shadow: 0 18px 40px -22px rgb(0 0 0 / 0.8);
 }
 @utility glass {
-  @apply bg-[#08111f]/85 ring-1 ring-gold-700/25 ring-inset;
+  @apply bg-[#0c1017]/90 ring-1 ring-white/[0.07] ring-inset;
 }
 @utility gold-text {
-  background: linear-gradient(180deg, #f0e6d2 0%, #c8aa6e 55%, #a07a26 100%);
+  background: linear-gradient(180deg, #fbf3df 0%, #e8c97a 50%, #c89b3c 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+@utility blue-text {
+  background: linear-gradient(180deg, #ffffff 0%, #9ad3ff 45%, #2e9bff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Lower third: a player's name bar, slanted on the right, with their team colour down the left.
+   Set --team on it (lib/teams.ts). */
+.lower-third {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  min-width: 0;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.1), rgb(255 255 255 / 0.03));
+  box-shadow: inset 5px 0 0 var(--team, var(--color-hex-300));
+}
+.lower-third .lt-name {
+  padding: 0.3rem 1.4rem 0.3rem 0.85rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lower-third .lt-sub {
+  display: flex;
+  align-items: center;
+  margin-left: -0.6rem;
+  padding: 0 1.3rem 0 0.9rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #fff;
+  background: var(--team, var(--color-hex-300));
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+}
+
+/* Small broadcast label: "LIVE", "REPLAY", "PICK PHASE"... */
+.broadcast-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.9rem 0.15rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--tag, var(--color-hex-400));
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.live-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: currentColor;
+  /* Solid, not blinking: a blink inside a clip-path tag repainted the page about 90 times a second,
+     which made the spin reels stutter. */
+  box-shadow: 0 0 6px currentColor;
+}
+
+/* --- broadcast header ---------------------------------------------------------------- */
+.broadcast-header {
+  background: linear-gradient(180deg, rgb(5 7 11 / 0.97), rgb(9 12 18 / 0.95));
+  box-shadow:
+    inset 0 -1px 0 rgb(46 155 255 / 0.55),
+    0 1px 0 rgb(0 0 0 / 0.6),
+    0 10px 30px -18px rgb(46 155 255 / 0.6);
+}
+/* Score bug: the run's numbers in slanted segments, run name on a gold plate. */
+.score-bug {
+  display: flex;
+  align-items: stretch;
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.sb-run {
+  align-items: center;
+  max-width: 13rem;
+  padding: 0 1.2rem 0 1.1rem;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-slate-950);
+  background: linear-gradient(180deg, var(--color-gold-300), var(--color-gold-500));
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.85rem;
+  line-height: 1.05;
+  position: relative;
+}
+.sb-cell + .sb-cell,
+[data-token-counter] .sb-cell {
+  box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.08);
+}
+.sb-cell b {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+.sb-cell small {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-slate-400);
+}
+@media (min-width: 640px) {
+  .sb-cell { padding: 0.35rem 1.1rem; }
+  .sb-cell b { font-size: 1.2rem; }
+}
+/* Tab strip: flat labels; the active tab is a blue parallelogram with a gold underline. */
+.tab-strip {
+  display: inline-flex;
+  gap: 0.15rem;
+}
+.tab {
+  position: relative;
+  padding: 0.55rem 1.05rem 0.6rem;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--color-slate-400);
+  transition: color 150ms ease-out;
+}
+.tab:hover {
+  color: #fff;
+}
+.tab::before {
+  content: '';
+  position: absolute;
+  inset: 0.25rem 0 0;
+  z-index: -1;
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  background: linear-gradient(180deg, var(--color-hex-300), var(--color-hex-600));
+  opacity: 0;
+  transform: scaleY(0.6);
+  transform-origin: bottom;
+  transition:
+    opacity 150ms ease-out,
+    transform 180ms var(--ease-snap);
+}
+.tab::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  background: var(--color-gold-400);
+  transform: scaleX(0);
+  transition: transform 180ms var(--ease-snap);
+}
+.tab.is-active {
+  color: #fff;
+}
+.tab.is-active::before {
+  opacity: 1;
+  transform: none;
+}
+.tab.is-active::after {
+  transform: none;
+}
+.tab-strip {
+  isolation: isolate;
 }
 
 /* --- motion ----------------------------------------------------------------------- */
@@ -184,7 +400,7 @@ h2,
   to { transform: rotate(360deg); }
 }
 .landing-ring {
-  background: conic-gradient(from 0deg, transparent 0 70%, rgb(10 200 185 / 0.18) 85%, transparent 100%);
+  background: conic-gradient(from 0deg, transparent 0 70%, rgb(46 155 255 / 0.18) 85%, transparent 100%);
   animation: spin-slow 24s linear infinite;
 }
 .landing-ring-slow {
@@ -198,89 +414,825 @@ h2,
   }
 }
 
-/* --- champion pools (SPEC 17.4) ---------------------------------------------------------
-   Still water: nothing animates at rest. Motion only happens when you interact (hover lift,
-   drag, drop splash, revive flight), so an idle Pool tab costs nothing. */
-.pool-water {
-  background:
-    radial-gradient(42% 30% at 22% 18%, rgb(205 250 250 / 0.10), transparent 70%),
-    radial-gradient(36% 26% at 78% 62%, rgb(143 240 234 / 0.07), transparent 70%),
-    radial-gradient(120% 80% at 50% 0%, rgb(205 250 250 / 0.14), transparent 60%),
-    linear-gradient(180deg, #0b4a5a 0%, #073646 45%, #052231 100%);
+/* --- Pool tab champion cards (SPEC 17.4) ------------------------------------------------
+   Nothing animates at rest. Hover only moves the card under the mouse. */
+.pool-card {
+  position: relative;
+  aspect-ratio: 3 / 4.2;
+  overflow: hidden;
+  border-radius: 3px;
+  background-color: var(--color-slate-800);
+  background-size: cover;
+  background-position: center;
   box-shadow:
-    inset 0 0 0 1px rgb(10 200 185 / 0.35),
-    inset 0 18px 40px -10px rgb(205 250 250 / 0.18),
-    inset 0 -30px 60px -20px rgb(1 10 19 / 0.8);
-}
-.pool-grave {
-  background:
-    radial-gradient(50% 30% at 30% 70%, rgb(160 155 140 / 0.06), transparent 70%),
-    radial-gradient(100% 70% at 50% 100%, rgb(90 120 80 / 0.16), transparent 70%),
-    linear-gradient(180deg, #16161f 0%, #0e0f17 60%, #08090f 100%);
-  box-shadow:
-    inset 0 0 0 1px rgb(120 90 40 / 0.4),
-    inset 0 -24px 50px -16px rgb(120 160 100 / 0.12);
-}
-
-/* Hover lift: only the champion under the mouse moves. */
-.bubble img {
+    0 0 0 1px rgb(255 255 255 / 0.08),
+    0 6px 16px -8px rgb(0 0 0 / 0.8);
   transition:
     transform 170ms var(--ease-snap),
     box-shadow 170ms ease-out;
 }
-.bubble.is-match img {
-  transform: scale(1.1);
+.pool-card-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 15%;
+  transition: transform 260ms var(--ease-snap);
+}
+.pool-card-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 38%, rgb(5 7 11 / 0.65) 62%, rgb(5 7 11 / 0.96) 100%);
+}
+.pool-card.is-dead {
+  background-blend-mode: luminosity; /* grey placeholder too */
+  box-shadow:
+    0 0 0 1px rgb(91 90 86 / 0.5),
+    0 6px 16px -8px rgb(0 0 0 / 0.8);
+}
+.pool-card.is-dead .pool-card-art {
+  filter: grayscale(1) brightness(0.55);
+}
+.pool-badge {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+}
+.pool-card-action {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--color-slate-950);
+  background: linear-gradient(180deg, var(--color-gold-300), var(--color-gold-500));
+  box-shadow: 0 0 0 1px var(--color-gold-200), 0 6px 18px -4px rgb(0 0 0 / 0.8);
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms var(--ease-snap);
+}
+.pool-card-action:active {
+  transform: translate(-50%, -50%) scale(0.94);
 }
 @media (hover: hover) {
-  .bubble:hover {
-    z-index: 5 !important;
+  .pool-card-action {
+    opacity: 0;
   }
-  .bubble:hover img {
-    transform: translateY(-6px) scale(1.15) rotate(-4deg);
+  .pool-card:hover .pool-card-action,
+  .pool-card:focus-within .pool-card-action {
+    opacity: 1;
+  }
+  .pool-card:hover {
+    z-index: 2;
+    transform: translateY(-4px);
     box-shadow:
-      0 0 0 2px var(--color-gold-300),
-      0 12px 20px -6px rgb(0 0 0 / 0.75),
-      0 0 18px 2px rgb(240 230 210 / 0.35);
+      0 0 0 1px var(--color-hex-300),
+      0 14px 26px -10px rgb(0 0 0 / 0.85),
+      0 0 22px rgb(46 155 255 / 0.35);
   }
+  .pool-card:hover .pool-card-art {
+    transform: scale(1.05);
+  }
+  .pool-card.is-dead:hover .pool-card-art {
+    filter: grayscale(0.7) brightness(0.7);
+  }
+}
+/* Touch screens have no hover: keep Revive on the card, Shield stays in the details view. */
+@media (hover: none) {
+  .pool-card-action[data-kind='shield'] {
+    display: none;
+  }
+}
+.pool-card:has(> button:focus-visible) {
+  box-shadow: 0 0 0 2px var(--color-gold-300);
 }
 
-/* Splash when a champion lands in the water (drop or revive). */
-@keyframes ripple {
-  from { transform: translate(-50%, -50%) scale(0.2); opacity: 0.9; }
-  to { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+/* Revived: a short teal glow once the card lands in the Alive grid. */
+@keyframes revive-glow {
+  0% { box-shadow: 0 0 0 2px #dcefff, 0 0 34px 6px rgb(46 155 255 / 0.8); }
+  100% { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 0 0 0 rgb(46 155 255 / 0); }
 }
-.ripple {
-  position: absolute;
-  width: 56px;
-  height: 56px;
-  border-radius: 9999px;
-  border: 2px solid rgb(205 250 250 / 0.7);
-  pointer-events: none;
-  animation: ripple 700ms ease-out forwards;
-}
-.ripple-big {
-  border-width: 3px;
-  animation-duration: 950ms;
+.revive-glow {
+  animation: revive-glow 1300ms ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ripple {
-    animation: none;
-    display: none;
-  }
-  .bubble img {
+  .pool-card,
+  .pool-card-art {
     transition: none;
   }
 }
 
-/* --- case-opening reels ---------------------------------------------------------------- */
+/* --- Wheels: pick bar, lock-in, loading screen, item reminders -------------------------- */
+.pick-bar {
+  top: var(--header-h, 0px);
+}
+/* Tall loading-screen art: squared frame with the player's team colour along the top. */
+.loading-frame {
+  aspect-ratio: 308 / 560;
+  border-radius: 2px;
+  background-color: var(--color-slate-800);
+  background-size: cover;
+  background-position: center top;
+  box-shadow:
+    inset 0 3px 0 var(--team, var(--color-gold-400)),
+    0 0 0 1px rgb(255 255 255 / 0.1),
+    0 16px 30px -12px rgb(0 0 0 / 0.9);
+  overflow: hidden;
+}
+.pick-chip {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0.9rem 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  background: rgb(255 255 255 / 0.05);
+  box-shadow: inset 3px 0 0 var(--team);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+.pick-chip b {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.pick-chip.is-picked {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team) 35%, transparent), rgb(255 255 255 / 0.04));
+}
+.lockin-overlay {
+  animation:
+    elim-fade-in 200ms ease-out both,
+    elim-fade-out 300ms ease-in 2300ms forwards;
+}
+.lockin-card {
+  transform: rotate(var(--rot)) translateY(var(--lift));
+  animation: lockin-card 520ms var(--ease-snap) calc(var(--i) * 90ms) both;
+}
+@keyframes lockin-card {
+  from { opacity: 0; transform: rotate(0deg) translateY(120px) scale(0.8); }
+}
+.lockin-title {
+  animation: lockin-stamp 420ms var(--ease-snap) 550ms both;
+}
+@keyframes lockin-stamp {
+  from { opacity: 0; transform: scale(1.8); letter-spacing: 0.6em; }
+}
+/* An owned item that can be used right now pulses gently (only while visible on the card). */
+.item-ready {
+  animation: item-ready 1.8s ease-in-out 3;
+}
+@keyframes item-ready {
+  50% { box-shadow: 0 0 0 2px var(--c, var(--color-gold-400)), 0 0 14px var(--c, var(--color-gold-400)); }
+}
+
+/* --- win moment ------------------------------------------------------------------------ */
+.win-overlay {
+  animation:
+    elim-fade-in 200ms ease-out both,
+    elim-fade-out 300ms ease-in calc(var(--win-total) - 300ms) forwards;
+}
+.win-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 140vmax;
+  height: 140vmax;
+  margin: -70vmax 0 0 -70vmax;
+  background:
+    radial-gradient(circle, rgb(240 230 210 / 0.35), transparent 22%),
+    repeating-conic-gradient(rgb(200 155 60 / 0.22) 0deg 6deg, transparent 6deg 18deg);
+  mask-image: radial-gradient(circle, #000 0%, transparent 45%);
+  animation: win-burst 2400ms ease-out both;
+}
+@keyframes win-burst {
+  from { opacity: 0; transform: scale(0.3) rotate(-20deg); }
+  25% { opacity: 1; }
+  to { opacity: 0.5; transform: scale(1) rotate(15deg); }
+}
+.win-title {
+  animation: elim-title 520ms var(--ease-snap) 200ms both;
+}
+.win-flame {
+  display: inline-block;
+  animation: win-flame 900ms ease-out 400ms both;
+}
+@keyframes win-flame {
+  from { transform: scale(0.4); opacity: 0; }
+  50% { transform: scale(1.5); opacity: 1; }
+}
+.streak-flip {
+  display: inline-block;
+  animation: streak-flip 380ms var(--ease-snap) both;
+}
+@keyframes streak-flip {
+  from { transform: translateY(-60%) scale(1.4); opacity: 0; color: #fff; }
+}
+.milestone-ribbon {
+  color: var(--color-slate-950);
+  background: linear-gradient(90deg, #f0e6d2, #c89b3c, #f0e6d2);
+  box-shadow: 0 0 0 2px #f8f0dc, 0 0 40px rgb(200 155 60 / 0.8);
+  animation: milestone 700ms var(--ease-snap) 900ms both;
+}
+@keyframes milestone {
+  from { opacity: 0; transform: scale(0.3) rotate(-6deg); }
+  70% { transform: scale(1.12) rotate(1deg); }
+}
+.token-banner {
+  animation: elim-fade-in 300ms ease-out 700ms both;
+}
+.counter-pop {
+  animation: counter-pop 600ms var(--ease-snap);
+}
+@keyframes counter-pop {
+  40% { transform: scale(1.45); filter: drop-shadow(0 0 10px var(--color-gold-400)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lockin-card,
+  .lockin-title,
+  .item-ready,
+  .win-burst,
+  .win-title,
+  .win-flame,
+  .streak-flip,
+  .milestone-ribbon,
+  .counter-pop {
+    animation: none;
+  }
+}
+
+/* --- replay highlight chrome (win / elimination / lock-in moments) ----------------------- */
+.replay-bar {
+  position: absolute;
+  inset-inline: 0;
+  height: 9vh;
+  background: #000;
+  pointer-events: none;
+  animation: replay-bar 380ms var(--ease-snap) both;
+}
+.replay-bar-top { top: 0; transform-origin: top; }
+.replay-bar-bottom { bottom: 0; transform-origin: bottom; }
+@keyframes replay-bar {
+  from { transform: scaleY(0); }
+}
+.replay-tag {
+  position: absolute;
+  top: calc(9vh + 0.75rem);
+  left: 1rem;
+  animation: elim-fade-in 250ms ease-out 250ms both;
+}
+.broadcast-banner {
+  position: relative;
+  padding: 0.35rem clamp(2rem, 8vw, 6rem);
+  background: linear-gradient(90deg, transparent, var(--banner) 14%, var(--banner) 86%, transparent);
+  clip-path: polygon(28px 0, 100% 0, calc(100% - 28px) 100%, 0 100%);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.25), inset 0 -2px 0 var(--color-gold-400);
+  animation: banner-wipe 480ms var(--ease-snap) 120ms both;
+}
+.broadcast-banner h2 {
+  text-shadow: 0 3px 0 rgb(0 0 0 / 0.35);
+}
+@keyframes banner-wipe {
+  from { transform: scaleX(0); opacity: 0.4; }
+}
+.streak-bar {
+  padding: 0.2rem 1.6rem 0.2rem 1rem;
+  background: rgb(0 0 0 / 0.55);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  box-shadow: inset 4px 0 0 var(--color-gold-400);
+}
+@media (prefers-reduced-motion: reduce) {
+  .replay-bar,
+  .replay-tag,
+  .broadcast-banner {
+    animation: none;
+  }
+}
+
+/* --- recap: post-game stats graphic ------------------------------------------------------ */
+.postgame-hero {
+  border-radius: 2px;
+  box-shadow:
+    inset 0 3px 0 var(--color-hex-300),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+.scoreline {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.9rem;
+  padding: 0.6rem 1.4rem 0.6rem 1.1rem;
+  background: rgb(0 0 0 / 0.6);
+  clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  box-shadow: inset 0 -2px 0 var(--color-gold-400);
+}
+.scoreline > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.scoreline b {
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 7vw, 4rem);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.scoreline small {
+  margin-top: 0.25rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-slate-400);
+}
+.scoreline-dash {
+  align-self: center;
+  font-size: 2rem;
+  color: var(--color-slate-500);
+}
+.scoreline-streak {
+  margin-left: 0.6rem;
+  padding-left: 1rem;
+  box-shadow: inset 1px 0 0 rgb(255 255 255 / 0.15);
+}
+.postgame-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.14em;
+  color: #fff;
+}
+.postgame-title::before {
+  content: '';
+  width: 0.9rem;
+  height: 0.9rem;
+  background: var(--color-hex-300);
+  clip-path: polygon(30% 0, 100% 0, 70% 100%, 0 100%);
+}
+.history-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.4rem;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  color: #fff;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+}
+.history-tile small {
+  position: absolute;
+  top: 1px;
+  font-family: var(--font-sans);
+  font-size: 0.5rem;
+  opacity: 0.7;
+}
+.history-tile.is-win { background: linear-gradient(180deg, var(--color-hex-300), var(--color-hex-600)); }
+.history-tile.is-loss { background: linear-gradient(180deg, #e5283c, #7a0d1a); }
+.mvp-panel {
+  border-radius: 2px;
+  background: #0b0e14;
+  box-shadow:
+    inset 0 3px 0 var(--color-gold-400),
+    inset 0 0 0 1px rgb(214 172 79 / 0.35),
+    0 0 40px -18px var(--color-gold-500);
+}
+.stat-bar {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team) 55%, #000), var(--team));
+  box-shadow: 0 0 10px -2px var(--team);
+}
+.award-card {
+  border-radius: 2px;
+  box-shadow:
+    inset 0 3px 0 var(--team),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08);
+}
+.scoreboard th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-slate-400);
+  background: rgb(255 255 255 / 0.04);
+}
+.scoreboard td {
+  padding: 0.55rem 0.75rem;
+  font-variant-numeric: tabular-nums;
+  background: rgb(255 255 255 / 0.02);
+  border-top: 1px solid rgb(255 255 255 / 0.05);
+}
+.team-cell,
+.scoreboard td:first-child {
+  box-shadow: inset 4px 0 0 var(--team);
+}
+
+/* --- Wheels: role chips (comp suggestions) and survival odds ---------------------------- */
+.role-chip {
+  display: grid;
+  place-items: center;
+  min-width: 2.6rem;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--color-slate-950);
+  background: linear-gradient(180deg, var(--color-gold-300), var(--color-gold-500));
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+}
+.role-chip.is-off {
+  background: linear-gradient(180deg, #f0b232, #b8730c);
+}
+.odds-panel {
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.03);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+
+/* --- Trophies: achievements and the Hall of Shame ----------------------------------------- */
+.trophy-card {
+  border-radius: 2px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tier) 12%, transparent), rgb(255 255 255 / 0.02) 60%);
+  box-shadow:
+    inset 0 3px 0 var(--tier),
+    inset 0 0 0 1px rgb(255 255 255 / 0.07);
+}
+.trophy-card.is-locked {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+.trophy-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 3.2rem;
+  height: 3.2rem;
+  font-size: 1.7rem;
+  background: rgb(0 0 0 / 0.45);
+  box-shadow:
+    inset 0 0 0 2px var(--tier),
+    0 0 18px -6px var(--tier);
+  clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+.trophy-icon.small {
+  width: 2.4rem;
+  height: 2.4rem;
+  font-size: 1.2rem;
+}
+.shame-panel {
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(200 16 46 / 0.08), rgb(255 255 255 / 0.015));
+  box-shadow:
+    inset 0 3px 0 #c8102e,
+    inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.shame-title::before {
+  background: #e5283c;
+}
+.achievement-popup {
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgb(28 24 14 / 0.97), rgb(9 12 18 / 0.97));
+  box-shadow:
+    inset 0 3px 0 var(--color-gold-400),
+    inset 0 0 0 1px rgb(214 172 79 / 0.4),
+    0 24px 50px -16px rgb(0 0 0 / 0.9),
+    0 0 40px -12px var(--color-gold-500);
+  animation: achievement-in 450ms var(--ease-spring) both;
+}
+@keyframes achievement-in {
+  from { opacity: 0; transform: translate(-50%, -24px) scale(0.92); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* --- Wrapped: story slides ---------------------------------------------------------------- */
+.wrapped-story {
+  aspect-ratio: 9 / 16;
+  max-height: calc(100dvh - var(--header-h, 0px) - 8rem);
+  margin-inline: auto;
+  border-radius: 6px;
+  background: radial-gradient(120% 80% at 50% 0%, color-mix(in srgb, var(--slide) 70%, #05070b), #05070b 75%);
+  box-shadow: 0 30px 60px -24px rgb(0 0 0 / 0.9), inset 0 0 0 1px rgb(255 255 255 / 0.08);
+  user-select: none;
+}
+.wrapped-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 20%;
+  animation: wrapped-zoom 7s linear both;
+}
+@keyframes wrapped-zoom {
+  from { transform: scale(1.12); }
+  to { transform: scale(1); }
+}
+.wrapped-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(5 7 11 / 0.35), rgb(5 7 11 / 0.55) 45%, rgb(5 7 11 / 0.92));
+}
+.wrapped-progress {
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.25);
+}
+.wrapped-progress > span {
+  display: block;
+  height: 100%;
+  background: #fff;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.wrapped-progress > span.is-done { transform: none; }
+.wrapped-progress > span.is-playing { animation: wrapped-progress linear forwards; }
+@keyframes wrapped-progress { to { transform: none; } }
+.wrapped-body {
+  animation: wrapped-in 500ms var(--ease-snap) both;
+}
+@keyframes wrapped-in {
+  from { opacity: 0; transform: translateY(18px); }
+}
+.wrapped-kicker {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-gold-300);
+}
+.wrapped-big {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 11vw, 3.6rem);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 4px 24px rgb(0 0 0 / 0.6);
+  overflow-wrap: anywhere;
+}
+.wrapped-line {
+  max-width: 22rem;
+  font-size: 1rem;
+  color: var(--color-slate-200);
+}
+.wrapped-small {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-slate-400);
+}
+
+/* --- stream overlay (transparent page for OBS) ------------------------------------------------- */
+html.overlay-mode,
+html.overlay-mode body {
+  background: transparent !important;
+}
+html.overlay-mode body::before {
+  display: none;
+}
+.overlay-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.overlay-bug {
+  position: absolute;
+  top: 1.5rem;
+  left: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  transform-origin: top left;
+  transform: scale(1.25);
+}
+.overlay-bug .score-bug {
+  background: rgb(5 7 11 / 0.88);
+}
+.overlay-picks {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  display: flex;
+  gap: 0.9rem;
+  transform: translateX(-50%);
+}
+.overlay-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  background: rgb(5 7 11 / 0.8);
+  box-shadow: inset 0 3px 0 var(--team);
+}
+@media (prefers-reduced-motion: reduce) {
+  .achievement-popup,
+  .wrapped-art,
+  .wrapped-body {
+    animation: none;
+  }
+}
+
+/* --- result toast ---------------------------------------------------------------------- */
+.toast-panel {
+  background: linear-gradient(180deg, rgb(19 24 33 / 0.97), rgb(9 12 18 / 0.97));
+  box-shadow:
+    inset 4px 0 0 var(--tone),
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 24px 50px -20px rgb(0 0 0 / 0.9);
+  border-radius: 2px;
+}
+.toast-in {
+  animation: toast-in 260ms var(--ease-snap) both;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+}
+.toast-timer > span {
+  display: block;
+  height: 100%;
+  background: var(--color-gold-400);
+  transform-origin: left;
+  animation: toast-timer linear forwards;
+}
+@keyframes toast-timer { to { transform: scaleX(0); } }
+
+/* --- elimination moment ----------------------------------------------------------------
+   Per card (delayed by --d): drop in, flash red and grey out, crack with a shake, fall apart.
+   Only transform / opacity / filter animate, so it stays on the compositor. */
+.elim-overlay {
+  animation:
+    elim-fade-in 200ms ease-out both,
+    elim-fade-out 300ms ease-in calc(var(--elim-total) - 300ms) forwards;
+}
+@keyframes elim-fade-in { from { opacity: 0; } }
+@keyframes elim-fade-out { to { opacity: 0; } }
+.elim-title {
+  animation: elim-title 500ms var(--ease-snap) 200ms both;
+}
+@keyframes elim-title {
+  from { opacity: 0; transform: scale(1.4); letter-spacing: 0.5em; }
+}
+.elim-card {
+  position: relative;
+  width: 9rem;
+  aspect-ratio: 3 / 4.2;
+  animation:
+    elim-in 380ms var(--ease-snap) var(--d) both,
+    elim-shake 220ms ease-out calc(var(--d) + 760ms);
+}
+@media (min-width: 640px) {
+  .elim-card { width: 10.5rem; }
+}
+@keyframes elim-in {
+  from { opacity: 0; transform: translateY(-28px) scale(1.12); }
+}
+@keyframes elim-shake {
+  20% { transform: translate(-5px, 2px) rotate(-1.5deg); }
+  45% { transform: translate(5px, -2px) rotate(1.5deg); }
+  70% { transform: translate(-3px, 1px); }
+}
+.elim-half {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background-color: var(--color-slate-800);
+  background-size: cover;
+  background-position: 50% 15%;
+  box-shadow: 0 0 0 1px rgb(200 170 110 / 0.5);
+  animation: elim-grey 420ms ease-out calc(var(--d) + 450ms) both;
+}
+@keyframes elim-grey {
+  to { filter: grayscale(1) brightness(0.6); }
+}
+.elim-left {
+  animation:
+    elim-grey 420ms ease-out calc(var(--d) + 450ms) both,
+    elim-fall-left 850ms cubic-bezier(0.5, 0, 0.9, 0.6) calc(var(--d) + 1300ms) forwards;
+}
+.elim-right {
+  animation:
+    elim-grey 420ms ease-out calc(var(--d) + 450ms) both,
+    elim-fall-right 850ms cubic-bezier(0.5, 0, 0.9, 0.6) calc(var(--d) + 1360ms) forwards;
+}
+@keyframes elim-fall-left {
+  0% { filter: grayscale(1) brightness(0.6); }
+  100% { filter: grayscale(1) brightness(0.6); transform: translate(-28px, 150px) rotate(-16deg); opacity: 0; }
+}
+@keyframes elim-fall-right {
+  0% { filter: grayscale(1) brightness(0.6); }
+  100% { filter: grayscale(1) brightness(0.6); transform: translate(30px, 170px) rotate(13deg); opacity: 0; }
+}
+.elim-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: radial-gradient(circle at 50% 45%, rgb(255 70 70 / 0.85), rgb(160 0 0 / 0.5));
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: elim-flash 900ms ease-out calc(var(--d) + 380ms) both;
+}
+@keyframes elim-flash {
+  15% { opacity: 1; }
+  45% { opacity: 0.25; }
+  55% { opacity: 0.7; }
+  100% { opacity: 0; }
+}
+.elim-crack {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  animation: elim-fade-out 200ms ease-in calc(var(--d) + 1300ms) forwards;
+}
+.elim-crack polyline {
+  fill: none;
+  stroke: #fff4e0;
+  stroke-width: 2.5;
+  stroke-linejoin: bevel;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  filter: drop-shadow(0 0 4px rgb(255 90 60 / 0.9));
+  animation: elim-draw 160ms ease-out calc(var(--d) + 760ms) both;
+}
+@keyframes elim-draw { to { stroke-dashoffset: 0; } }
+.elim-caption {
+  animation:
+    elim-fade-in 300ms ease-out calc(var(--d, 0ms) + 400ms) both,
+    elim-fade-out 300ms ease-in calc(var(--d, 0ms) + 1500ms) forwards;
+}
+/* Saved by a shield: stays in colour, a teal flash and a shield pops over it. */
+.elim-card.is-saved .elim-half {
+  animation: elim-saved 900ms ease-out calc(var(--d) + 760ms) both;
+}
+@keyframes elim-saved {
+  0% { box-shadow: 0 0 0 1px rgb(200 170 110 / 0.5); }
+  20% { box-shadow: 0 0 0 3px #dcefff, 0 0 40px 10px rgb(46 155 255 / 0.8); }
+  100% { box-shadow: 0 0 0 2px rgb(46 155 255 / 0.7), 0 0 18px rgb(46 155 255 / 0.4); }
+}
+.elim-shield {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #dcefff;
+  filter: drop-shadow(0 0 10px rgb(46 155 255 / 0.9));
+  animation: elim-shield 1000ms var(--ease-snap) calc(var(--d) + 700ms) both;
+}
+@keyframes elim-shield {
+  0% { opacity: 0; transform: scale(2.2); }
+  35% { opacity: 1; transform: scale(1); }
+  75% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .elim-card,
+  .elim-half,
+  .elim-left,
+  .elim-right,
+  .elim-title,
+  .elim-shield,
+  .elim-crack polyline {
+    animation: none;
+  }
+  .elim-card:not(.is-saved) .elim-half {
+    filter: grayscale(1) brightness(0.6);
+  }
+  .elim-crack polyline {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* --- case-opening reels, styled as a draft-phase broadcast ------------------------------ */
 .reel-window {
   position: relative;
   height: 146px;
   overflow: hidden;
-  border-radius: 1rem;
-  background: linear-gradient(180deg, rgb(0 0 0 / 0.5), rgb(10 20 40 / 0.7));
-  box-shadow: inset 0 0 0 1px rgb(120 90 40 / 0.35);
+  border-radius: 2px;
+  background:
+    linear-gradient(180deg, rgb(46 155 255 / 0.07), transparent 40%),
+    linear-gradient(180deg, #030407, #0a0e15);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.07),
+    inset 0 1px 0 rgb(46 155 255 / 0.4);
   contain: strict;
 }
 .reel-strip {
@@ -297,8 +1249,8 @@ h2,
   flex-shrink: 0;
   height: 124px;
   overflow: hidden;
-  border-radius: 0.75rem;
-  background: #1e2328;
+  border-radius: 2px;
+  background: #141922;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
 }
 .reel-card img {
@@ -313,8 +1265,10 @@ h2,
   justify-content: center;
   overflow: hidden;
   padding: 0 4px 4px;
+  font-family: var(--font-display);
   font-size: 11px;
-  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
   white-space: nowrap;
   text-overflow: ellipsis;
   background: rgb(255 255 255 / 0.04);
@@ -323,7 +1277,7 @@ h2,
   content: '';
   position: absolute;
   inset: auto 0 0 0;
-  height: 4px;
+  height: 3px;
   background: var(--c);
 }
 .reel-fade {
@@ -332,16 +1286,16 @@ h2,
   width: 4rem;
   pointer-events: none;
 }
-.reel-fade-left { left: 0; background: linear-gradient(90deg, #010a13, transparent); }
-.reel-fade-right { right: 0; background: linear-gradient(270deg, #010a13, transparent); }
+.reel-fade-left { left: 0; background: linear-gradient(90deg, #05070b, transparent); }
+.reel-fade-right { right: 0; background: linear-gradient(270deg, #05070b, transparent); }
 .reel-marker {
   position: absolute;
   inset-block: 0;
   left: 50%;
   width: 2px;
   transform: translateX(-50%);
-  background: var(--color-gold-300);
-  box-shadow: 0 0 12px 2px rgb(240 230 210 / 0.6);
+  background: #fff;
+  box-shadow: 0 0 10px 2px rgb(46 155 255 / 0.9);
   pointer-events: none;
 }
 .reel-marker::before,
@@ -358,10 +1312,10 @@ h2,
 /* Landing: flipped by a data attribute, so no card re-renders. */
 .reel-winner-name { opacity: 0; transition: opacity 200ms ease-out; }
 .case-reel[data-landed] .reel-winner-name { opacity: 1; }
-.case-reel[data-landed] .reel-card:not(.reel-card-winner) { opacity: 0.4; }
+.case-reel[data-landed] .reel-card:not(.reel-card-winner) { opacity: 0.35; }
 .case-reel[data-landed] .reel-card-winner {
   z-index: 1;
-  box-shadow: 0 0 0 2px #f0e6d2, 0 0 26px var(--c);
+  box-shadow: 0 0 0 2px var(--team, #fff), 0 0 26px var(--team, var(--c));
   animation: winner-pop 380ms var(--ease-spring);
 }
 @keyframes winner-pop {
@@ -370,6 +1324,293 @@ h2,
   100% { transform: scale(1.04); }
 }
 .case-reel[data-landed] .reel-card-winner { transform: scale(1.04); }
+/* The backup options sit right next to the winner: they stay lit and get their number. */
+.case-reel[data-landed] .reel-card.reel-card-option {
+  opacity: 0.95;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--team, #fff) 70%, transparent);
+}
+.reel-card[data-option]::before {
+  content: '#' attr(data-option);
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+  padding: 0 0.35rem;
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--team, var(--color-hex-400));
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.case-reel[data-landed] .reel-card[data-option]::before {
+  opacity: 1;
+}
+
+/* Draft row: the player's slot on the left fills with the champion's splash when the reel lands. */
+.draft-row {
+  display: grid;
+  gap: 0.5rem;
+}
+@media (min-width: 768px) {
+  .draft-row {
+    grid-template-columns: 14rem 1fr;
+    gap: 0.75rem;
+  }
+}
+.draft-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 4.5rem;
+  padding: 0.6rem 0.6rem 0.6rem 0;
+  overflow: hidden;
+  border-radius: 2px;
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.05), rgb(255 255 255 / 0.01));
+  box-shadow:
+    inset 3px 0 0 var(--team),
+    inset 0 0 0 1px rgb(255 255 255 / 0.06);
+}
+/* Landing glow: a separate layer that only fades its opacity. (Animating box-shadow itself
+   repainted the whole page every frame while the other reels were still spinning.) */
+.draft-slot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 1px var(--team),
+    inset 0 0 26px -8px var(--team);
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+  will-change: opacity;
+}
+.draft-slot-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgb(5 7 11 / 0.92) 0%, rgb(5 7 11 / 0.55) 45%, rgb(5 7 11 / 0.1) 100%);
+}
+.draft-slot-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 60% 22%;
+  opacity: 0;
+  transform: scale(1.15);
+  transition:
+    opacity 450ms ease-out,
+    transform 700ms var(--ease-snap);
+  will-change: opacity, transform;
+}
+.draft-slot-status {
+  padding-left: 0.85rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.draft-picking {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--team);
+}
+.draft-locked {
+  display: none;
+  flex-direction: column;
+  line-height: 1.1;
+}
+.draft-locked small {
+  font-size: 0.62rem;
+  color: var(--team);
+}
+.draft-locked b {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 0.9);
+}
+.case-reel[data-landed] .draft-slot::after {
+  opacity: 1;
+}
+.case-reel[data-landed] .draft-slot-art {
+  opacity: 0.85;
+  transform: none;
+}
+.case-reel[data-landed] .draft-picking { display: none; }
+.case-reel[data-landed] .draft-locked { display: flex; }
+
+/* Pick timer: drains over the whole draft, like a champ-select clock. */
+.draft-timer {
+  height: 3px;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.08);
+}
+.draft-timer > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-gold-400), var(--color-hex-300));
+  transform-origin: left;
+  animation: toast-timer linear forwards;
+}
+
+/* Player picker chips in team colours. */
+.team-chip {
+  padding: 0.5rem 1.25rem 0.5rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-slate-300);
+  background: rgb(255 255 255 / 0.05);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+  box-shadow: inset 4px 0 0 var(--team);
+  transition:
+    background 150ms ease-out,
+    color 150ms ease-out,
+    transform 150ms var(--ease-snap);
+}
+.team-chip:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 0.1);
+}
+.team-chip:active {
+  transform: scale(0.96);
+}
+.team-chip.is-on {
+  color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--team) 85%, #fff), var(--team));
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
+}
 @media (prefers-reduced-motion: reduce) {
   .case-reel[data-landed] .reel-card-winner { animation: none; }
+  .draft-slot-art { transition: none; }
+}
+
+/* Contract goal reveal: a quick card flip. */
+@keyframes contract-flip {
+  0% { transform: perspective(700px) rotateY(90deg) scale(0.9); opacity: 0; }
+  60% { transform: perspective(700px) rotateY(-8deg) scale(1.02); opacity: 1; }
+  100% { transform: perspective(700px) rotateY(0) scale(1); }
+}
+.contract-reveal {
+  animation: contract-flip 520ms var(--ease-spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .contract-reveal { animation: none; }
+}
+
+/* --- in-game style shop (League item shop look, app palette) ------------------------------- */
+.lol-frame {
+  position: relative;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(80% 60% at 50% 0%, rgb(46 155 255 / 0.06), transparent 70%),
+    linear-gradient(180deg, #0d1118 0%, #050d1a 60%, #05070b 100%);
+  box-shadow:
+    inset 0 0 0 1px #785a28,
+    inset 0 0 0 3px #05070b,
+    inset 0 0 0 4px rgb(200 170 110 / 0.35),
+    0 30px 60px -30px rgb(0 0 0 / 0.9);
+}
+.lol-frame-title {
+  background: linear-gradient(90deg, transparent, rgb(200 170 110 / 0.55), transparent) bottom / 100% 1px no-repeat;
+}
+/* faint hextech grid behind the items */
+.lol-grid-bg {
+  background-image:
+    linear-gradient(rgb(200 170 110 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(200 170 110 / 0.04) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.item-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 0.6rem;
+  color: var(--c);
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--c) 50%, #0d1118) 0%, #0d1118 78%);
+  box-shadow:
+    inset 0 0 0 1px rgb(200 170 110 / 0.6),
+    inset 0 0 0 2px #05070b,
+    inset 0 8px 14px rgb(255 255 255 / 0.07),
+    inset 0 -10px 16px rgb(0 0 0 / 0.45);
+}
+.item-art svg {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c) 70%, transparent));
+}
+.item-tile {
+  transition: transform 140ms var(--ease-snap);
+}
+.item-tile:hover .item-art {
+  box-shadow:
+    inset 0 0 0 1px #f0e6d2,
+    inset 0 0 0 2px #05070b,
+    inset 0 8px 14px rgb(255 255 255 / 0.1),
+    0 0 14px color-mix(in srgb, var(--c) 55%, transparent);
+}
+.item-tile[aria-selected='true'] .item-art {
+  box-shadow:
+    inset 0 0 0 2px #f0e6d2,
+    inset 0 0 0 3px #05070b,
+    0 0 0 2px #c8aa6e,
+    0 0 20px color-mix(in srgb, var(--c) 65%, transparent);
+}
+.item-tile:active {
+  transform: scale(0.95);
+}
+.item-tile.is-broke .item-art {
+  filter: grayscale(0.6) brightness(0.75);
+}
+.inv-slot {
+  border-radius: 0.6rem;
+  background: linear-gradient(180deg, #05070b, #0d1118);
+  box-shadow: inset 0 0 0 1px rgb(120 90 40 / 0.7), inset 0 4px 10px rgb(0 0 0 / 0.6);
+}
+.btn-hextech {
+  border-radius: 0.75rem;
+  padding: 0.7rem 1rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #dcefff;
+  background: linear-gradient(180deg, #0a323c 0%, #071a33 100%);
+  box-shadow:
+    inset 0 0 0 1px #2e9bff,
+    inset 0 0 0 2px #05070b,
+    inset 0 0 0 3px rgb(46 155 255 / 0.35),
+    0 0 18px -4px rgb(46 155 255 / 0.6);
+  transition: filter 150ms, transform 120ms var(--ease-snap);
+}
+.btn-hextech:hover:not(:disabled) {
+  filter: brightness(1.2);
+}
+.btn-hextech:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.btn-hextech:disabled {
+  color: #5b5a56;
+  background: #1e2328;
+  box-shadow: inset 0 0 0 1px #3c3c41;
+  cursor: not-allowed;
+}
+@keyframes slot-pop {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+.slot-pop {
+  animation: slot-pop 380ms var(--ease-spring);
+}
+@media (prefers-reduced-motion: reduce) {
+  .slot-pop { animation: none; }
+  .item-tile { transition: none; }
 }

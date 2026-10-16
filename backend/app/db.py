@@ -8,7 +8,9 @@ from app.config import get_settings
 
 
 def make_engine(url: str) -> Engine:
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+    # SQLite: wait up to 15s for another writer (the background crawler, the match poller) to
+    # finish instead of failing right away with "database is locked".
+    connect_args = {"check_same_thread": False, "timeout": 15} if url.startswith("sqlite") else {}
     eng = create_engine(url, connect_args=connect_args)
     if url.startswith("sqlite"):
 

@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { api } from '../api/client'
-import { useAction, usePlayerMap, useTokens } from '../hooks/queries'
+import { useAction, useChampionLines, useEconomy, usePlayerMap, useTokens } from '../hooks/queries'
 import { splashUrl } from '../lib/champions'
 import { classColor } from '../lib/reel'
 import { num, pct } from '../lib/stats'
 import type { PoolEntry, Run } from '../types'
+import { useOwnedItem } from '../hooks/useItems'
+import { BlacklistIcon, ShieldIcon, WheelIcon } from './icons'
 import { ErrorText, Modal, Spinner } from './ui'
 
 function Fact({ label, value }: { label: string; value: ReactNode }) {
@@ -19,25 +21,26 @@ function Fact({ label, value }: { label: string; value: ReactNode }) {
 
 /**
  * A champion's card from the Pool tab (SPEC 17.4): art, classes, numbers for this run and the
- * group, plus revive / manual-fix actions. `reviveOnly` opens it straight at the revive choice
- * (used when a champion is dragged out of the Graveyard).
+ * group, plus revive / shield / manual-fix actions. `focus` opens it at just one action (the
+ * Revive and Shield buttons on the Pool cards).
  */
 export function ChampionCard({
   run,
   entry,
   onClose,
   onRevived,
-  reviveOnly = false,
+  focus,
 }: {
   run: Run
   entry: PoolEntry
   onClose: () => void
-  /** Called right after a successful revive (before the card closes), e.g. to play the flight. */
+  /** Called right after a successful revive (before the card closes), e.g. to play the animation. */
   onRevived?: (entry: PoolEntry) => void
-  reviveOnly?: boolean
+  focus?: 'revive' | 'shield'
 }) {
   const players = usePlayerMap()
   const tokens = useTokens(run.id)
+  const line = useChampionLines(run.id).data?.[entry.champion_id]
   const report = useQuery({
     queryKey: ['champion-stats', entry.champion_id, run.id],
     queryFn: () => api.championStats(entry.champion_id, run.id),
@@ -78,7 +81,7 @@ export function ChampionCard({
     )
 
   return (
-    <Modal title={reviveOnly ? `Revive ${entry.name}?` : entry.name} onClose={onClose}>
+    <Modal title={focus === 'revive' ? `Revive ${entry.name}?` : focus === 'shield' ? `Shield ${entry.name}?` : entry.name} onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div className="relative -mx-5 -mt-1 h-40 overflow-hidden sm:h-48">
           {splash && (
@@ -108,13 +111,33 @@ export function ChampionCard({
               dead ? 'bg-red-950/80 text-red-200' : 'bg-hex-800/80 text-hex-100'
             }`}
           >
-            {dead ? 'In the Graveyard' : 'In the Pool'}
+            {dead ? 'Eliminated' : 'Alive'}
           </span>
         </div>
 
-        {active && dead && reviveButtons}
+        {active && dead && focus !== 'shield' && reviveButtons}
+        {!dead && entry.shield_item_id && focus !== 'revive' && (
+          <p className="flex items-center gap-2 text-sm text-emerald-200">
+            <ShieldIcon className="h-4 w-4" />
+            Shielded{entry.shield_player_id ? ` by ${name(entry.shield_player_id)}` : ''}. The next loss with it breaks the
+            shield instead.
+          </p>
+        )}
+        {!focus && !dead && !!line?.on_spin.length && (
+          <p className="flex items-center gap-2 text-sm text-gold-200">
+            <WheelIcon className="h-4 w-4 shrink-0" />
+            On {[...new Set(line.on_spin)].map((p) => `${name(p)}'s`).join(' and ')} list in the current spin.
+          </p>
+        )}
+        {!focus && !dead && !!line?.blacklisted_by.length && (
+          <p className="flex items-center gap-2 text-sm text-red-200">
+            <BlacklistIcon className="h-4 w-4 shrink-0" />
+            Blacklisted by {line.blacklisted_by.map(name).join(' and ')}: it won't show up in their next spin.
+          </p>
+        )}
+        {active && !dead && !entry.shield_item_id && focus !== 'revive' && <ShieldPlacer run={run} entry={entry} onDone={onClose} />}
 
-        {!reviveOnly && (
+        {!focus && (
           <>
             {dead && (
               <p className="text-sm text-red-200">
@@ -193,5 +216,38 @@ export function ChampionCard({
         <ErrorText error={eliminate.error ?? revive.error} />
       </div>
     </Modal>
+  )
+}
+
+/** Place an owned Shield on this champion (SPEC 10.3 shield flow). */
+function ShieldPlacer({ run, entry, onDone }: { run: Run; entry: PoolEntry; onDone: () => void }) {
+  const economy = useEconomy(run.id)
+  const players = usePlayerMap()
+  const owned = useOwnedItem(run.id)
+  const holders = (economy.data ?? []).filter((e) => (e.unused.shield ?? 0) > 0)
+  if (!holders.length) return null
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold text-gold-100">Protect {entry.name} with a shield:</p>
+      <div className="flex flex-wrap gap-2">
+        {holders.map((h) => (
+          <button
+            key={h.player_id}
+            className="btn-secondary"
+            disabled={owned.isPending}
+            onClick={() =>
+              owned.mutate(
+                { playerId: h.player_id, type: 'shield', body: { champion_id: entry.champion_id } },
+                { onSuccess: onDone },
+              )
+            }
+          >
+            <ShieldIcon className="h-4 w-4 text-emerald-300" />
+            Use {players.get(h.player_id)?.display_name}'s shield
+          </button>
+        ))}
+      </div>
+      <ErrorText error={owned.error} />
+    </div>
   )
 }

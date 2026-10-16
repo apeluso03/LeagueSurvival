@@ -132,3 +132,79 @@ export function playReveal() {
   blip(1175, 0.7, 0.1, 'sine', 0.09)
   blip(1568, 0.9, 0.06, 'triangle', 0.18)
 }
+
+/** Buying an item: a quick double coin clink. */
+export function playPurchase() {
+  blip(1568, 0.12, 0.09, 'square')
+  blip(2093, 0.18, 0.08, 'square', 0.07)
+  blip(2637, 0.35, 0.06, 'sine', 0.12)
+}
+
+/** A champion getting eliminated: a short crack, then a low thud. `at` is seconds from now. */
+export function playShatter(at = 0) {
+  const ac = audio()
+  if (!ac) return
+  const t = ac.currentTime + at
+  // Crack: a burst of filtered noise.
+  const len = Math.floor(ac.sampleRate * 0.14)
+  const buf = ac.createBuffer(1, len, ac.sampleRate)
+  const data = buf.getChannelData(0)
+  for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len) ** 3
+  const noise = ac.createBufferSource()
+  noise.buffer = buf
+  const hp = ac.createBiquadFilter()
+  hp.type = 'highpass'
+  hp.frequency.value = 1800
+  const ng = ac.createGain()
+  ng.gain.value = 0.22
+  noise.connect(hp).connect(ng).connect(out())
+  noise.start(t)
+  // Thud: a falling sine.
+  const osc = ac.createOscillator()
+  const gain = ac.createGain()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(140, t)
+  osc.frequency.exponentialRampToValueAtTime(38, t + 0.45)
+  gain.gain.setValueAtTime(0.0001, t)
+  gain.gain.exponentialRampToValueAtTime(0.4, t + 0.01)
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.55)
+  osc.connect(gain).connect(out())
+  osc.start(t)
+  osc.stop(t + 0.6)
+}
+
+/** A shield breaking instead of the champion: a bright metallic ting. */
+export function playShieldSave(at = 0) {
+  blip(1319, 0.5, 0.09, 'sine', at)
+  blip(1976, 0.6, 0.06, 'triangle', at + 0.05)
+  blip(2637, 0.8, 0.04, 'sine', at + 0.1)
+}
+
+/** One reel landing during a staggered spin; later reels ring a step higher. */
+export function playLand(index = 0) {
+  const step = 2 ** ((index * 2) / 12)
+  blip(659 * step, 0.35, 0.1, 'sine')
+  blip(988 * step, 0.45, 0.06, 'triangle', 0.05)
+}
+
+/** Everyone has picked: two low hits and a bright chord, like champ select's lock-in. */
+export function playLockIn() {
+  blip(196, 0.25, 0.22, 'triangle')
+  blip(147, 0.3, 0.2, 'triangle', 0.12)
+  for (const [f, at] of [[587, 0.28], [740, 0.3], [880, 0.32], [1175, 0.34]] as const) blip(f, 0.9, 0.06, 'sine', at)
+}
+
+/** A win: a quick rising fanfare. */
+export function playVictory() {
+  const notes = [523, 659, 784, 1047]
+  notes.forEach((f, i) => blip(f, 0.35, 0.1, 'triangle', i * 0.09))
+  blip(1568, 1.1, 0.07, 'sine', 0.38)
+  blip(2093, 1.2, 0.05, 'sine', 0.42)
+}
+
+/** A streak milestone: a bigger fanfare on top of the victory one. */
+export function playMilestone() {
+  const notes = [784, 988, 1175, 1568, 1976]
+  notes.forEach((f, i) => blip(f, 0.5, 0.08, 'square', 0.75 + i * 0.07))
+  blip(2637, 1.5, 0.06, 'sine', 1.15)
+}

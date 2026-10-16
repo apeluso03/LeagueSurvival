@@ -4,6 +4,7 @@ Every function works on a Session and leaves committing to the caller.
 """
 
 import random
+import secrets
 from collections.abc import Iterable
 from dataclasses import dataclass
 
@@ -12,6 +13,7 @@ from sqlmodel import Session, col, select
 from app.models import (
     ChallengeGame,
     Champion,
+    InventoryItem,
     Player,
     PlayerMatchStats,
     PoolEntry,
@@ -117,13 +119,50 @@ def create_run(
         if not chosen:
             raise RuleError("A run needs at least one champion")
 
-    run = Run(name=name, options_per_player=options_per_player)
+    run = Run(name=name, options_per_player=options_per_player, lobby_code=secrets.token_hex(3).upper())
     session.add(run)
     session.flush()
     for cid in sorted(chosen):
         session.add(PoolEntry(run_id=run.id, champion_id=cid))
     session.flush()
     return run
+
+
+def delete_run(session: Session, run: Run) -> None:
+    """Permanently remove a run and everything that belongs to it: pool, games, eliminations,
+    revive tokens, gold, items and contracts. Imported Riot matches stay (they're shared stats);
+    they're just unlinked from the run's games. If it was the selected run, the most recent
+    remaining run becomes selected."""
+    from sqlmodel import delete
+
+    from app.models import AppSettings, Contract, GoldLedger
+
+    game_ids = list(session.exec(select(ChallengeGame.id).where(ChallengeGame.run_id == run.id)).all())
+    item_ids = list(session.exec(select(InventoryItem.id).where(InventoryItem.run_id == run.id)).all())
+
+    for pms in session.exec(select(PlayerMatchStats).where(col(PlayerMatchStats.challenge_game_id).in_(game_ids))).all():
+        pms.is_challenge = False
+        pms.challenge_game_id = None
+        session.add(pms)
+    # Children before parents (SQLite enforces the foreign keys).
+    session.exec(delete(PoolEntry).where(col(PoolEntry.run_id) == run.id))
+    session.exec(delete(PoolEvent).where(col(PoolEvent.run_id) == run.id))
+    session.exec(delete(GoldLedger).where(col(GoldLedger.run_id) == run.id))
+    session.exec(delete(Contract).where(col(Contract.item_id).in_(item_ids)))
+    session.exec(delete(InventoryItem).where(col(InventoryItem.run_id) == run.id))
+    session.exec(delete(ReviveToken).where(col(ReviveToken.run_id) == run.id))
+    session.exec(delete(SpinAssignment).where(col(SpinAssignment.game_id).in_(game_ids)))
+    session.exec(delete(ChallengeGame).where(col(ChallengeGame.run_id) == run.id))
+
+    settings = session.get(AppSettings, 1)
+    if settings and settings.active_run_id == run.id:
+        settings.active_run_id = session.exec(
+            select(Run.id).where(Run.id != run.id).order_by(col(Run.id).desc())
+        ).first()
+        session.add(settings)
+    session.flush()
+    session.delete(run)
+    session.flush()
 
 
 def end_run(session: Session, run: Run) -> Run:
@@ -159,13 +198,21 @@ def spin_status(session: Session, run: Run, n_players: int) -> SpinStatus:
 
 
 def draw_options(
-    session: Session, run: Run, player_ids: list[int], rng: random.Random | None = None
+    session: Session,
+    run: Run,
+    player_ids: list[int],
+    rng: random.Random | None = None,
+    exclude: dict[int, set[str]] | None = None,
 ) -> list[list[str]]:
     _require_active(run)
     _validate_players(session, player_ids)
     try:
         return spin_logic.draw(
-            alive_champion_ids(session, run.id), len(player_ids), run.options_per_player, rng
+            alive_champion_ids(session, run.id),
+            len(player_ids),
+            run.options_per_player,
+            rng,
+            [(exclude or {}).get(pid, set()) for pid in player_ids],
         )
     except spin_logic.SpinBlocked as e:
         tokens = len(available_tokens(session, run.id))
@@ -183,12 +230,21 @@ def create_spin(
         raise RuleError(
             f"Game {existing.id} is still pending. Record its result or void it first.", 409
         )
-    options = draw_options(session, run, player_ids, rng)
+    from app.services import shop  # local: shop imports this module
+
+    blacklists = shop.armed_blacklists(session, run.id, player_ids)
+    options = draw_options(session, run, player_ids, rng, {pid: bl for pid, (_, bl) in blacklists.items()})
     game = ChallengeGame(run_id=run.id)
     session.add(game)
     session.flush()
     for pid, opts in zip(player_ids, options, strict=True):
-        session.add(SpinAssignment(game_id=game.id, player_id=pid, options=opts))
+        session.add(SpinAssignment(game_id=game.id, player_id=pid, options=opts, original_options=list(opts)))
+    # An armed Blacklist applies to its owner's next spin only, then it's spent.
+    for item, _ in blacklists.values():
+        item.status = "used"
+        item.used_at = utcnow()
+        item.used_in_game_id = game.id
+        session.add(item)
     session.flush()
     return game
 
@@ -278,6 +334,27 @@ def apply_result(
             entry = session.get(PoolEntry, (run.id, a.played_champion_id))
             if entry is None or entry.status != "alive":
                 continue  # "other" pick outside the pool, or already gone
+            if entry.shield_item_id:
+                # The shield takes the hit instead: it's used up and the champion stays alive.
+                shield = session.get(InventoryItem, entry.shield_item_id)
+                if shield:
+                    shield.status = "used"
+                    shield.used_at = now
+                    shield.used_in_game_id = game.id
+                    session.add(shield)
+                session.add(
+                    PoolEvent(
+                        run_id=run.id,
+                        game_id=game.id,
+                        type="shield_consumed",
+                        champion_id=entry.champion_id,
+                        player_id=a.player_id,
+                        item_id=entry.shield_item_id,
+                    )
+                )
+                entry.shield_item_id = None
+                session.add(entry)
+                continue
             entry.status = "eliminated"
             entry.eliminated_at = now
             entry.eliminated_in_game_id = game.id
@@ -342,8 +419,22 @@ def undo_result(session: Session, game: ChallengeGame) -> ChallengeGame:
             if entry and entry.status == "eliminated" and entry.eliminated_in_game_id == game.id:
                 _make_alive(entry)
                 session.add(entry)
+        elif ev.type == "shield_consumed":
+            # Put the shield back on its champion, unused.
+            entry = session.get(PoolEntry, (run.id, ev.champion_id))
+            shield = session.get(InventoryItem, ev.item_id) if ev.item_id else None
+            if entry and shield and entry.shield_item_id is None:
+                entry.shield_item_id = shield.id
+                shield.status = "active"
+                shield.used_at = None
+                shield.used_in_game_id = None
+                session.add_all([entry, shield])
         ev.undone = True
         session.add(ev)
+
+    from app.services import economy  # local: economy imports this module
+
+    economy.reverse_game(session, game)  # gold and contract payouts from this result
 
     if game.prev_win_count is not None:
         run.win_count = game.prev_win_count

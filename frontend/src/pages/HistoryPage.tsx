@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { PlayerLink } from '../components/PlayerLink'
 import { api } from '../api/client'
+import { GoldBadge } from '../components/Gold'
+import { ItemTag } from '../components/ItemTag'
 import { MatchSummaryView } from '../components/MatchSummary'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
 import {
@@ -64,13 +67,13 @@ export function HistoryPage() {
             </option>
           ))}
         </select>
-        <div className="inline-flex gap-0.5 rounded-full bg-black/30 p-1 ring-1 ring-gold-700/25 ring-inset" role="group" aria-label="View">
+        <div className="inline-flex gap-0.5 rounded-sm bg-black/30 p-1 ring-1 ring-white/10 ring-inset" role="group" aria-label="View">
           {(['games', 'activity'] as const).map((v) => (
             <button
               key={v}
               aria-pressed={view === v}
               onClick={() => setView(v)}
-              className={`rounded-full px-3 py-1 text-sm transition duration-150 ${view === v ? 'bg-gold-700/50 text-gold-100' : 'text-slate-400 hover:text-slate-100'}`}
+              className={`rounded-sm px-3 py-1 text-sm transition duration-150 ${view === v ? 'bg-hex-500/60 text-white' : 'text-slate-400 hover:text-slate-100'}`}
             >
               {v === 'games' ? 'Games' : 'Pool activity'}
             </button>
@@ -106,7 +109,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
             key={f.id}
             aria-pressed={filter === f.id}
             onClick={() => setFilter(f.id)}
-            className={`rounded-full px-3 py-1 text-sm ring-1 ${
+            className={`rounded-sm px-3 py-1 text-sm ring-1 ${
               filter === f.id ? 'bg-slate-200 text-slate-950 ring-slate-200' : 'bg-slate-900 ring-slate-700 hover:bg-slate-800'
             }`}
           >
@@ -146,13 +149,23 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                       <div key={a.player_id} className="flex items-center gap-2">
                         <ChampionPortrait champion={cid ? champs.get(cid) : undefined} size="sm" dim={eliminated} />
                         <div className="text-xs leading-tight">
-                          <div className="font-semibold">{players.get(a.player_id)?.display_name}</div>
+                          <div className="font-semibold">
+                            <PlayerLink id={a.player_id} />
+                          </div>
                           <div className="text-slate-400">
                             {cid ? champs.get(cid)?.name : 'not marked'}
                             {a.played_option_index != null && ` (#${a.played_option_index + 1})`}
                             {cid && a.played_option_index == null && ' (other)'}
                           </div>
                           {eliminated && <div className="text-red-300">eliminated</div>}
+                          {(g.gold[a.player_id] != null || g.grades[a.player_id]) && (
+                            <div className="mt-0.5 flex items-center gap-1.5">
+                              {g.gold[a.player_id] != null && <GoldBadge amount={g.gold[a.player_id]} />}
+                              {g.grades[a.player_id] && (
+                                <span className="rounded-full bg-hex-800/70 px-1.5 text-[10px] text-hex-100">{g.grades[a.player_id]}</span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )
@@ -168,7 +181,27 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                   </button>
                 )}
               </div>
+              {(g.items_used.length > 0 || g.shields_saved.length > 0 || g.contracts.length > 0) && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                  {g.items_used.map((u, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      {players.get(u.player_id)?.display_name} used <ItemTag type={u.type} />
+                    </span>
+                  ))}
+                  {g.shields_saved.map((c) => (
+                    <span key={c} className="text-emerald-300">Shield saved {champs.get(c)?.name ?? c}</span>
+                  ))}
+                  {g.contracts.map((c) => (
+                    <span key={c.player_id} className={c.status === 'won' ? 'text-gold-200' : 'text-slate-400'}>
+                      {players.get(c.player_id)?.display_name}'s contract {c.status === 'won' ? `done (+${c.payout})` : 'missed'}
+                    </span>
+                  ))}
+                </div>
+              )}
               {g.match && <MatchSummaryView match={g.match} flagOptions={g.needs_review} />}
+              {(g.status === 'won' || g.status === 'lost') && !g.riot_match_id && run?.status === 'active' && (
+                <LinkMatchForm gameId={g.id} />
+              )}
             </li>
           )
         })}
@@ -219,5 +252,43 @@ function ActivityLog({ runId }: { runId: number }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/** "Link match" (SPEC 7.7): attach the Riot match to a hand-recorded game so it earns gold. */
+function LinkMatchForm({ gameId }: { gameId: number }) {
+  const [open, setOpen] = useState(false)
+  const [matchId, setMatchId] = useState('')
+  const link = useAction((id: string) => api.linkMatch(gameId, id))
+  if (!open) {
+    return (
+      <button className="self-start text-xs text-slate-400 underline hover:text-slate-200" onClick={() => setOpen(true)}>
+        No Riot data yet. Link the match to earn gold
+      </button>
+    )
+  }
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        link.mutate(matchId.trim(), { onSuccess: () => setOpen(false) })
+      }}
+    >
+      <input
+        className="input w-56"
+        placeholder="Match ID, e.g. NA1_5123456789"
+        value={matchId}
+        onChange={(e) => setMatchId(e.target.value)}
+        aria-label="Riot match ID"
+      />
+      <button className="btn-secondary" disabled={!matchId.trim() || link.isPending}>
+        {link.isPending ? 'Linking...' : 'Link match'}
+      </button>
+      <span className="text-xs text-slate-500">The result stays the same; this just adds stats and gold.</span>
+      <div className="w-full">
+        <ErrorText error={link.error} />
+      </div>
+    </form>
   )
 }

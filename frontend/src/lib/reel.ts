@@ -3,9 +3,11 @@
 export const CARD_PX = 108
 export const GAP_PX = 6
 export const STRIDE_PX = CARD_PX + GAP_PX
-export const STRIP_LENGTH = 50
-export const FINAL_INDEX = 43 // cards after the winner keep the strip full when it stops
-export const SPIN_MS = 6500
+export const STRIP_LENGTH = 45
+export const FINAL_INDEX = 38 // cards after the winner keep the strip full when it stops
+// Top speed is 4 x distance / duration (easeOutQuart), so fewer cards over a longer spin keeps the
+// fast part readable: about 30px a frame at 60fps instead of nearly 60.
+export const SPIN_MS = 10500
 
 /** Long, suspenseful slow-down: fast start, very gradual stop. */
 export function easeOutQuart(t: number): number {
@@ -33,24 +35,39 @@ export function randomLandingOffset(rng: () => number = Math.random): number {
   return (rng() - 0.5) * CARD_PX * 0.76
 }
 
-/** Strip of champion ids with `finalId` at FINAL_INDEX; neighbors never repeat back to back. */
+/** Where each option sits relative to the landing card: #1 on it, #2 left, #3 right, #4 two left. */
+export const OPTION_OFFSETS = [0, -1, 1, -2]
+
+/** Strip indexes holding the options, in option order (option #1 first). */
+export const optionIndexes = (count: number, finalIndex = FINAL_INDEX) =>
+  OPTION_OFFSETS.slice(0, Math.max(1, Math.min(count, OPTION_OFFSETS.length))).map((d) => finalIndex + d)
+
+/**
+ * Strip of champion ids for one reel. The first option lands under the marker and the backups sit
+ * right next to it, so the cards you see when it stops are your actual options. Random fillers
+ * never repeat back to back, and never repeat an option near the landing spot.
+ */
 export function buildStrip(
   pool: string[],
-  finalId: string,
+  options: string | string[],
   length = STRIP_LENGTH,
   finalIndex = FINAL_INDEX,
   rng: () => number = Math.random,
 ): string[] {
-  const fillers = pool.length > 1 ? pool : [finalId]
+  const opts = (Array.isArray(options) ? options : [options]).filter(Boolean)
+  const placed = new Map(optionIndexes(opts.length, finalIndex).map((idx, i) => [idx, opts[i]]))
+  const near = (i: number) => Math.abs(i - finalIndex) <= 4
+  const fillers = pool.length > 1 ? pool : [opts[0]]
   const strip: string[] = []
   for (let i = 0; i < length; i++) {
-    if (i === finalIndex) {
-      strip.push(finalId)
+    const fixed = placed.get(i)
+    if (fixed) {
+      strip.push(fixed)
       continue
     }
     let pick = fillers[Math.floor(rng() * fillers.length)]
-    for (let tries = 0; fillers.length > 2 && tries < 10; tries++) {
-      const clashes = pick === strip[i - 1] || (i === finalIndex - 1 && pick === finalId) || (i === finalIndex + 1 && pick === finalId)
+    for (let tries = 0; fillers.length > 2 && tries < 20; tries++) {
+      const clashes = pick === strip[i - 1] || pick === placed.get(i + 1) || (near(i) && opts.includes(pick))
       if (!clashes) break
       pick = fillers[Math.floor(rng() * fillers.length)]
     }
@@ -66,7 +83,7 @@ export const CLASS_COLORS: Record<string, string> = {
   Fighter: '#e8823a',
   Tank: '#4fae6b',
   Marksman: '#e3c04d',
-  Support: '#0ac8b9',
+  Support: '#2e9bff',
 }
 
 export const classColor = (tags: string[] | undefined) => CLASS_COLORS[tags?.[0] ?? ''] ?? '#5b5a56'

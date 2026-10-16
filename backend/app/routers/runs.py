@@ -1,11 +1,13 @@
+from dataclasses import asdict
+
 from fastapi import APIRouter, Body, Depends
 from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import Champion, PoolEntry, PoolEvent, ReviveToken, Run
+from app.models import Champion, InventoryItem, Player, PoolEntry, PoolEvent, ReviveToken, Run
 from app.routers.common import game_out, get_app_settings, get_or_404, run_out
 from app.schemas import AssignmentOut, PoolEntryOut, RunIn, RunOut, SpinIn, SpinOut
-from app.services import rules
+from app.services import recap, rules, stats
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -19,6 +21,9 @@ def list_runs(session: Session = Depends(get_session)):
 @router.post("", response_model=RunOut, status_code=201)
 def create_run(body: RunIn, session: Session = Depends(get_session)):
     run = rules.create_run(session, body.name, body.options_per_player, body.champion_ids)
+    if body.owner_player_id is not None:
+        get_or_404(session, Player, body.owner_player_id, "Player")
+        run.owner_player_id = body.owner_player_id
     settings = get_app_settings(session)
     settings.active_run_id = run.id
     session.add(settings)
@@ -29,6 +34,13 @@ def create_run(body: RunIn, session: Session = Depends(get_session)):
 @router.get("/{run_id}", response_model=RunOut)
 def get_run(run_id: int, session: Session = Depends(get_session)):
     return run_out(session, get_or_404(session, Run, run_id, "Run"))
+
+
+@router.delete("/{run_id}", status_code=204)
+def delete_run(run_id: int, session: Session = Depends(get_session)):
+    """Permanently delete a run and everything in it (games, pool, gold, items)."""
+    rules.delete_run(session, get_or_404(session, Run, run_id, "Run"))
+    session.commit()
 
 
 @router.post("/{run_id}/end", response_model=RunOut)
@@ -49,10 +61,33 @@ def get_pool(run_id: int, include_eliminated: bool = True, session: Session = De
     )
     if not include_eliminated:
         query = query.where(PoolEntry.status == "alive")
+    shield_owner = {
+        i.id: i.player_id
+        for i in session.exec(
+            select(InventoryItem).where(InventoryItem.run_id == run_id, InventoryItem.type == "shield")
+        ).all()
+    }
     return [
-        PoolEntryOut(**entry.model_dump(), **champ.model_dump(exclude={"id"}))
+        PoolEntryOut(
+            **entry.model_dump(),
+            **champ.model_dump(exclude={"id"}),
+            shield_player_id=shield_owner.get(entry.shield_item_id) if entry.shield_item_id else None,
+        )
         for entry, champ in session.exec(query).all()
     ]
+
+
+@router.get("/{run_id}/recap")
+def run_recap(run_id: int, session: Session = Depends(get_session)):
+    """Everything the run recap page shows: totals, the win/loss timeline, per-player lines and awards."""
+    return recap.run_recap(session, get_or_404(session, Run, run_id, "Run"))
+
+
+@router.get("/{run_id}/champion-lines")
+def champion_lines(run_id: int, session: Session = Depends(get_session)):
+    """Short numbers for every champion card on the Pool tab, in one request."""
+    get_or_404(session, Run, run_id, "Run")
+    return {cid: asdict(line) for cid, line in stats.run_champion_lines(session, run_id).items()}
 
 
 @router.post("/{run_id}/pool/{champion_id}/eliminate", response_model=RunOut)

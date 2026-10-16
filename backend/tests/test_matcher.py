@@ -297,3 +297,48 @@ def test_poll_once_idle_without_key(engine, session, ctx):
     spin(session, ctx)
     fake = FakeRiotClient()
     assert asyncio.run(poller.poll_once(engine, client_factory=lambda: fake)) is None
+
+
+# --- gold through the matcher (SPEC 9.3 step 4, 7.7) -------------------------------------------
+
+
+def test_auto_result_awards_gold(session, ctx):
+    from app.services import economy
+
+    game = spin(session, ctx)
+    store_game_match(session, game, option=0, win=True)  # 3/2/5 each, 15k damage, 20 vision
+    assert run_once(session, game).status == "applied"
+    assert economy.balance(session, ctx.id, 1) == 30 + 10 + 30 + 10
+
+
+def test_auto_void_awards_no_gold(session, ctx):
+    from app.services import economy
+
+    game = spin(session, ctx)
+    store_game_match(session, game, duration=180)
+    assert run_once(session, game).status == "voided"
+    assert economy.balance(session, ctx.id, 1) == 0
+
+
+def test_link_match_by_id_pays_gold_without_changing_the_result(session, ctx):
+    from app.services import economy
+
+    game = spin(session, ctx)
+    rules.apply_result(session, game, "win")  # entered by hand, assumed option 1
+    session.commit()
+    store_game_match(session, game, option=2, win=False)  # Riot even disagrees
+    matcher.link_match_by_id(session, game, "NA1_100")
+    session.commit()
+    assert game.status == "won" and game.result_source == "manual" and game.riot_match_id == "NA1_100"
+    assert economy.balance(session, ctx.id, 1) == 80
+    with pytest.raises(rules.RuleError):
+        matcher.link_match_by_id(session, game, "NA1_100")  # already linked
+
+
+def test_link_match_requires_everyone_in_the_match(session, ctx):
+    game = spin(session, ctx)
+    rules.apply_result(session, game, "win")
+    a = rules.assignments_for(session, game.id)
+    sync.store_match(session, make_match("NA1_X", [P(PUUIDS[a[0].player_id], key(session, a[0].options[0]))], start_ms=start_ms(game)))
+    with pytest.raises(rules.RuleError):
+        matcher.link_match_by_id(session, game, "NA1_X")

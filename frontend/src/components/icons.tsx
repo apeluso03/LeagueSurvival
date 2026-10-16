@@ -82,8 +82,8 @@ export function LogoMark({ className = '' }: { className?: string }) {
           <stop offset="1" stopColor="#785a28" />
         </linearGradient>
         <linearGradient id="logo-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#0a1428" />
-          <stop offset="1" stopColor="#010a13" />
+          <stop offset="0" stopColor="#0d1118" />
+          <stop offset="1" stopColor="#05070b" />
         </linearGradient>
       </defs>
       <path
@@ -93,14 +93,87 @@ export function LogoMark({ className = '' }: { className?: string }) {
         strokeWidth="3"
         strokeLinejoin="round"
       />
-      <path d="M32 9.5 14 16.3v13.5c0 11.4 7.6 20.2 18 23.8" fill="none" stroke="#0ac8b9" strokeOpacity="0.45" strokeWidth="1.2" />
+      <path d="M32 9.5 14 16.3v13.5c0 11.4 7.6 20.2 18 23.8" fill="none" stroke="#2e9bff" strokeOpacity="0.45" strokeWidth="1.2" />
       <path
         d="M32 17c-6 0-10 4.3-10 10 0 4 2 6.6 4.5 8.2V41h11v-5.8C40 33.6 42 31 42 27c0-5.7-4-10-10-10Z"
         fill="url(#logo-gold)"
       />
-      <circle cx="27.8" cy="27.5" r="2.6" fill="#010a13" />
-      <circle cx="36.2" cy="27.5" r="2.6" fill="#010a13" />
+      <circle cx="27.8" cy="27.5" r="2.6" fill="#05070b" />
+      <circle cx="36.2" cy="27.5" r="2.6" fill="#05070b" />
       <path d="M28 44.5h8" stroke="url(#logo-gold)" strokeWidth="3" strokeLinecap="round" />
     </svg>
   )
 }
+
+// --- shop items -----------------------------------------------------------------------------
+
+export const ShieldIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M12 3 5 6v6c0 4.4 3 7.9 7 9 4-1.1 7-4.6 7-9V6l-7-3Z" />
+  </svg>
+)
+
+export const RerollIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M20 11a8 8 0 0 0-14.9-3.5M4 4v4h4M4 13a8 8 0 0 0 14.9 3.5M20 20v-4h-4" />
+  </svg>
+)
+
+export const SwapIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M7 4 3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7" />
+  </svg>
+)
+
+export const ChooseIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="8" />
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+  </svg>
+)
+
+export const BlacklistIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="m5.6 5.6 12.8 12.8" />
+  </svg>
+)
+
+export const ContractIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M7 3h8l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />
+    <path d="M15 3v4h4M9 12h6M9 16h4" />
+  </svg>
+)
+
+/** Gold: a small stack of flat gold coins, like the in-game gold icon. */
+export const CoinIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg viewBox="0 0 24 24" aria-hidden {...p}>
+    {/* bottom coin */}
+    <path d="M3.5 16.6v2.2c0 1.9 3.8 3.4 8.5 3.4s8.5-1.5 8.5-3.4v-2.2Z" fill="#8a6418" />
+    <ellipse cx="12" cy="16.6" rx="8.5" ry="3.3" fill="#d9a838" />
+    {/* middle coin */}
+    <path d="M3.5 11.4v2.2c0 1.9 3.8 3.4 8.5 3.4s8.5-1.5 8.5-3.4v-2.2Z" fill="#9a721c" />
+    <ellipse cx="12" cy="11.4" rx="8.5" ry="3.3" fill="#e6b946" />
+    {/* top coin */}
+    <path d="M3.5 6.2v2.2c0 1.9 3.8 3.4 8.5 3.4s8.5-1.5 8.5-3.4V6.2Z" fill="#a77d22" />
+    <ellipse cx="12" cy="6.2" rx="8.5" ry="3.3" fill="#f3cf62" />
+    <ellipse cx="12" cy="6.2" rx="5.2" ry="1.9" fill="none" stroke="#c1922c" strokeWidth="0.9" />
+  </svg>
+)
+
+export const ShopIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M4 9h16l-1.5 11h-13L4 9ZM8 9V7a4 4 0 0 1 8 0v2" />
+  </svg>
+)
+
+export const SkullIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M12 3c-4.4 0-8 3.2-8 7.5 0 2.6 1.3 4.6 3 5.8V20h10v-3.7c1.7-1.2 3-3.2 3-5.8C20 6.2 16.4 3 12 3Z" />
+    <circle cx="9" cy="11" r="1.6" fill="currentColor" />
+    <circle cx="15" cy="11" r="1.6" fill="currentColor" />
+    <path d="M10.5 20v-2M13.5 20v-2" />
+  </svg>
+)

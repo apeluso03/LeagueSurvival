@@ -1,12 +1,14 @@
 """Shared lookups and response builders for routers."""
 
 from fastapi import HTTPException
-from sqlmodel import Session, func, select
+from sqlmodel import Session, col, func, select
 
 from app.models import (
     AppSettings,
     ChallengeGame,
     Champion,
+    Contract,
+    InventoryItem,
     PlayerMatchStats,
     PoolEntry,
     PoolEvent,
@@ -14,8 +16,18 @@ from app.models import (
     RiotMatch,
     Run,
 )
-from app.schemas import AssignmentOut, GameOut, MatchPlayerOut, MatchSummaryOut, RunOut
-from app.services import rules
+from app.schemas import (
+    AssignmentOut,
+    ContractOut,
+    ContractResultOut,
+    GameOut,
+    InventoryItemOut,
+    ItemUseOut,
+    MatchPlayerOut,
+    MatchSummaryOut,
+    RunOut,
+)
+from app.services import contracts, economy, rules, shop
 
 
 def get_app_settings(session: Session) -> AppSettings:
@@ -52,6 +64,7 @@ def run_out(session: Session, run: Run) -> RunOut:
         tokens_available=len(rules.available_tokens(session, run.id)),
         pending_game_id=pending.id if pending else None,
         games_played=games_played,
+        shielded_count=count(col(PoolEntry.shield_item_id).is_not(None), PoolEntry.status == "alive"),
     )
 
 
@@ -95,10 +108,43 @@ def game_out(session: Session, game: ChallengeGame, champ_by_key: dict[int, str]
     ).all()
     earned = session.exec(select(ReviveToken.player_id).where(ReviveToken.earned_in_game_id == game.id)).all()
     assignments = rules.assignments_for(session, game.id)
+    grades = {}
+    if game.riot_match_id:
+        for r in session.exec(select(PlayerMatchStats).where(PlayerMatchStats.match_id == game.riot_match_id)).all():
+            if r.rating_grade:
+                grades[r.player_id] = r.rating_grade
+    saved = session.exec(
+        select(PoolEvent.champion_id).where(
+            PoolEvent.game_id == game.id, PoolEvent.type == "shield_consumed", PoolEvent.undone == False  # noqa: E712
+        )
+    ).all()
+    settled = session.exec(
+        select(Contract, InventoryItem)
+        .join(InventoryItem, col(InventoryItem.id) == col(Contract.item_id))
+        .where(Contract.game_id == game.id)
+    ).all()
     return GameOut(
         **game.model_dump(),
         assignments=[AssignmentOut(**a.model_dump()) for a in assignments],
         eliminated=list(eliminated),
         tokens_earned=list(earned),
         match=match_summary(session, game, assignments, champ_by_key),
+        gold=economy.game_gold(session, game.id),
+        grades=grades,
+        items_used=[ItemUseOut(player_id=i.player_id, type=i.type, target=i.target) for i in shop.items_used_in_game(session, game.id)],
+        shields_saved=list(saved),
+        contracts=[
+            ContractResultOut(player_id=i.player_id, description=contracts.describe(c), status=c.status, payout=c.payout)
+            for c, i in settled
+        ],
     )
+
+
+def contract_out(c: Contract | None) -> ContractOut | None:
+    if c is None:
+        return None
+    return ContractOut(**c.model_dump(exclude={"item_id"}), description=contracts.describe(c))
+
+
+def item_out(item: InventoryItem, c: Contract | None = None) -> InventoryItemOut:
+    return InventoryItemOut(**item.model_dump(), contract=contract_out(c))

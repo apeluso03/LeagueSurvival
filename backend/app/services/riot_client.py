@@ -1,4 +1,4 @@
-"""Riot API client: Account-V1, Match-V5 and a status check, with rate limiting (SPEC 9).
+"""Riot API client: Account-V1, Match-V5, League-V4 ladders and a status check, with rate limiting (SPEC 9).
 
 The key stays on the backend. All calls go through `RiotClient._get`, which waits on a local
 sliding-window limiter and retries on 429 (honouring Retry-After) and on 5xx errors.
@@ -111,11 +111,22 @@ class RiotClient:
         path = f"/riot/account/v1/accounts/by-riot-id/{quote(game_name, safe='')}/{quote(tag_line, safe='')}"
         return await self._get(region, path)
 
-    async def match_ids(self, region: str, puuid: str, start_time: int | None = None, count: int = 20) -> list[str]:
+    async def match_ids(
+        self, region: str, puuid: str, start_time: int | None = None, count: int = 20, queue: int | None = None
+    ) -> list[str]:
         params: dict = {"count": count}
         if start_time is not None:
             params["startTime"] = start_time
+        if queue is not None:
+            params["queue"] = queue
         return await self._get(region, f"/lol/match/v5/matches/by-puuid/{puuid}/ids", params)
+
+    async def league(self, platform: str, tier: str, queue: str = "RANKED_SOLO_5x5") -> dict:
+        """Top ladder for "challenger", "grandmaster" or "master"."""
+        return await self._get(platform, f"/lol/league/v4/{tier}leagues/by-queue/{queue}")
+
+    async def summoner_by_id(self, platform: str, summoner_id: str) -> dict:
+        return await self._get(platform, f"/lol/summoner/v4/summoners/{quote(summoner_id, safe='')}")
 
     async def match(self, region: str, match_id: str) -> dict:
         return await self._get(region, f"/lol/match/v5/matches/{match_id}")

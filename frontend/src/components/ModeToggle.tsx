@@ -26,14 +26,11 @@ export function ModeToggle() {
         disabled={!settings.data || update.isPending}
         aria-pressed={on}
         title={on ? 'Spins count for the challenge' : 'Spins are practice only'}
-        className={`flex items-center gap-2 rounded-full px-3 py-1 whitespace-nowrap text-xs font-bold uppercase tracking-wide ring-1 transition ${
-          on
-            ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/60 hover:bg-emerald-500/25'
-            : 'bg-slate-700/40 text-slate-300 ring-slate-500 hover:bg-slate-700/60'
-        }`}
+        className="broadcast-tag py-1 transition hover:brightness-125"
+        style={{ ['--tag' as string]: on ? '#e5283c' : '#454e5e' }}
       >
-        <span className={`h-2.5 w-2.5 rounded-full ${on ? 'bg-emerald-400' : 'bg-slate-400'}`} />
-        {on ? 'Challenge on' : 'Practice'}
+        {on && <span className="live-dot" />}
+        {on ? 'Live · Challenge' : 'Practice'}
       </button>
       {confirming && (
         <Modal title="There's a game going" onClose={() => setConfirming(false)}>

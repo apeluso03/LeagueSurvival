@@ -2,7 +2,7 @@
 
 A web app for running the "League of Legends Survival" challenge with friends: a shared champion pool, spin wheels, eliminations on losses, and revive tokens for win streaks. See [SPEC.md](SPEC.md) for the full design.
 
-**Status:** milestones M0 to M5 are done. The challenge is fully playable by hand, results apply automatically from Riot once a key is set and players are linked, and the app works on a phone. The online lobby (M6) is next.
+**Status:** milestones M0 to M5 of the 2.0 spec are built: the manual challenge loop, Riot linking and stats, automatic results, and gold and the shop (items, contracts, rating grades). The online lobby (M7) is next.
 
 ## Running locally
 
@@ -83,3 +83,15 @@ With `RIOT_API_KEY` set and every player in a game linked to their Riot ID, the 
 4. each player's champion was one of their options.
 
 If all checks pass, the result is applied right away. If one fails, the game is marked **needs review** on the Wheels tab, where you can use the match anyway, skip it, or record the result by hand. Undoing an auto result tells the matcher to ignore that match from then on.
+
+## Gold and the shop
+
+Players earn gold from their stats in challenge games that have Riot data: kills, assists, damage (healing and shielding count for supports), vision and multikills. Gold is per player and per run. Hand-recorded games earn gold once you link their Riot match on the History tab.
+
+Spend it in the **Shop** tab on Reroll, Blacklist, Swap, Shield, Choose a Champ and Contracts. Prices, gold rates and contract goals can be changed per run in Settings. See SPEC.md section 7 for the exact rules.
+
+## Credits
+
+- **League** display font (`frontend/public/fonts/League.otf`) by [FontGet.com](https://www.fontget.com), free for personal and commercial use.
+- Champion data and images from Riot Games' Data Dragon. This project isn't affiliated with or endorsed by Riot Games.
+

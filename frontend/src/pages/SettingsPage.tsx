@@ -1,18 +1,25 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
-import { useAction, useChampions, usePlayers, useRiotStatus, useRuns, useSettings } from '../hooks/queries'
+import { useAction, useActiveRun, useChampions, usePlayers, useRiotStatus, useRuns, useSettings, useShop } from '../hooks/queries'
+import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { allTags, filterChampions } from '../lib/champions'
 import { QUEUES } from '../lib/queues'
-import type { AppSettings, Player } from '../types'
+import { TEAM_COLORS, teamColor } from '../lib/teams'
+import type { AppSettings, Player, Run, ShopConfig } from '../types'
 
 export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PlayersSection />
       <RunsSection />
+      <ShopSettingsSection />
+      <GoldAdjustSection />
       <ChallengeSection />
+      <MetaSection />
+      <OverlaySection />
       <ChampionsSection />
     </div>
   )
@@ -160,6 +167,7 @@ function PlayerRow({ player }: { player: Player }) {
   }
   return (
     <li className="flex flex-wrap items-center gap-3 py-2">
+      <TeamColorPicker player={player} />
       <span className="font-medium">{player.display_name}</span>
       <span className="text-sm text-slate-400">
         {player.riot_game_name ? `${player.riot_game_name}#${player.riot_tag_line}` : 'No Riot ID'}
@@ -181,6 +189,58 @@ function PlayerRow({ player }: { player: Player }) {
   )
 }
 
+/** The player's broadcast team colour: a swatch that opens a small palette. */
+function TeamColorPicker({ player }: { player: Player }) {
+  const [open, setOpen] = useState(false)
+  const update = useAction((color: string | null) => api.updatePlayer(player.id, { color }))
+  const current = teamColor(player.id)
+  const pick = (color: string | null) => update.mutate(color, { onSuccess: () => setOpen(false) })
+  return (
+    <span className="relative">
+      <button
+        className="block h-6 w-6 rounded-sm ring-2 ring-white/20 transition hover:ring-white/60"
+        style={{ background: current }}
+        title="Team colour"
+        aria-label={`${player.display_name}'s team colour`}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      />
+      {open && (
+        <span className="absolute top-8 left-0 z-30 flex w-56 flex-col gap-2 rounded-sm bg-[#0c1017] p-3 shadow-2xl ring-1 ring-white/15">
+          <span className="text-[10px] font-bold tracking-[0.14em] text-slate-400 uppercase">Team colour</span>
+          <span className="flex flex-wrap gap-1.5">
+            {TEAM_COLORS.map((c) => (
+              <button
+                key={c}
+                className={`h-7 w-7 rounded-sm ring-2 transition ${current.toLowerCase() === c ? 'ring-white' : 'ring-transparent hover:ring-white/50'}`}
+                style={{ background: c }}
+                aria-label={c}
+                disabled={update.isPending}
+                onClick={() => pick(c)}
+              />
+            ))}
+          </span>
+          <label className="flex items-center gap-2 text-xs text-slate-300">
+            Custom
+            <input
+              type="color"
+              value={current}
+              onChange={(e) => pick(e.target.value)}
+              className="h-7 w-12 cursor-pointer rounded-sm bg-transparent"
+            />
+          </label>
+          {player.color && (
+            <button className="self-start text-xs text-slate-400 underline" onClick={() => pick(null)}>
+              Back to default
+            </button>
+          )}
+          <ErrorText error={update.error} />
+        </span>
+      )}
+    </span>
+  )
+}
+
 // --- runs --------------------------------------------------------------------
 
 function RunsSection() {
@@ -188,7 +248,9 @@ function RunsSection() {
   const settings = useSettings()
   const setActive = useAction((id: number) => api.updateSettings({ active_run_id: id }))
   const end = useAction((id: number) => api.endRun(id))
+  const navigate = useNavigate()
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState<Run | null>(null)
 
   return (
     <Section title="Runs">
@@ -202,8 +264,12 @@ function RunsSection() {
               <span className="text-sm text-slate-400">
                 {r.status === 'ended' ? 'Ended' : 'Active'} · {r.win_count} wins · best streak {r.best_streak} ·{' '}
                 {r.alive_count}/{r.total_count} alive · {r.options_per_player} options
+                {r.lobby_code && <> · lobby code {r.lobby_code}</>}
               </span>
               <div className="ml-auto flex gap-2">
+                <Link to={`/runs/${r.id}/recap`} className="btn-secondary">
+                  Recap
+                </Link>
                 {!active && (
                   <button className="btn-secondary" onClick={() => setActive.mutate(r.id)}>
                     Select
@@ -212,11 +278,18 @@ function RunsSection() {
                 {r.status === 'active' && (
                   <button
                     className="btn-danger"
-                    onClick={() => confirm(`End "${r.name}" with ${r.win_count} wins?`) && end.mutate(r.id)}
+                    onClick={() => confirm(`End "${r.name}" with ${r.win_count} wins?`) && end.mutate(r.id, { onSuccess: () => navigate(`/runs/${r.id}/recap`) })}
                   >
                     End run
                   </button>
                 )}
+                <button
+                  className="btn-secondary text-red-300 hover:text-red-200"
+                  title="Delete this run for good"
+                  onClick={() => setDeleting(r)}
+                >
+                  Delete
+                </button>
               </div>
             </li>
           )
@@ -226,6 +299,7 @@ function RunsSection() {
         )}
       </ul>
       <ErrorText error={setActive.error ?? end.error} />
+      {deleting && <DeleteRunModal run={deleting} onClose={() => setDeleting(null)} />}
       <div>
         <button className="btn-primary" onClick={() => setCreating(true)}>
           Start a new run
@@ -240,6 +314,8 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
   const champions = useChampions()
   const [name, setName] = useState(() => `Run ${new Date().toLocaleDateString()}`)
   const [options, setOptions] = useState<3 | 4>(3)
+  const players = usePlayers()
+  const [owner, setOwner] = useState<number | ''>('')
   const [custom, setCustom] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -266,7 +342,12 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
 
   const submit = () =>
     create.mutate(
-      { name: name.trim(), options_per_player: options, champion_ids: custom ? [...picked] : null },
+      {
+        name: name.trim(),
+        options_per_player: options,
+        champion_ids: custom ? [...picked] : null,
+        owner_player_id: owner === '' ? null : owner,
+      },
       { onSuccess: onClose },
     )
 
@@ -276,6 +357,17 @@ function NewRunModal({ onClose }: { onClose: () => void }) {
         <label className="flex flex-col gap-1 text-sm">
           Name
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          Run owner (the one who runs the wheels)
+          <select className="input" value={owner} onChange={(e) => setOwner(e.target.value ? Number(e.target.value) : '')}>
+            <option value="">Not set</option>
+            {players.data?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.display_name}
+              </option>
+            ))}
+          </select>
         </label>
         <div className="flex flex-col gap-1 text-sm">
           Options per player
@@ -501,6 +593,306 @@ function ChampionsSection() {
         </button>
       </div>
       <ErrorText error={refresh.error} />
+    </Section>
+  )
+}
+
+// --- shop settings (SPEC 10.6) ------------------------------------------------------------------
+
+const GOLD_FIELDS: { key: string; label: string }[] = [
+  { key: 'kill', label: 'Per kill' },
+  { key: 'assist', label: 'Per assist' },
+  { key: 'damage_gold', label: 'Per damage step' },
+  { key: 'damage_step', label: 'Damage step' },
+  { key: 'vision_gold', label: 'Per vision step' },
+  { key: 'vision_step', label: 'Vision step' },
+  { key: 'double', label: 'Double kill' },
+  { key: 'triple', label: 'Triple kill' },
+  { key: 'quadra', label: 'Quadra kill' },
+  { key: 'penta', label: 'Penta kill' },
+]
+const GRADE_OPTIONS = ['S+', 'S', 'S-', 'A+', 'A', 'A-', 'B+', 'B', 'B-']
+
+function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+  return (
+    <label className="flex flex-col gap-1 text-xs text-slate-400">
+      {label}
+      <input
+        className="input w-28 text-slate-100"
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+      />
+    </label>
+  )
+}
+
+function ShopSettingsSection() {
+  const { run } = useActiveRun()
+  const shop = useShop(run.data?.id)
+  if (!run.data || run.data.status !== 'active' || !shop.data) return null
+  return <ShopSettingsForm key={`${run.data.id}-${JSON.stringify(shop.data.config)}`} runId={run.data.id} config={shop.data.config} />
+}
+
+function ShopSettingsForm({ runId, config }: { runId: number; config: ShopConfig }) {
+  const [draft, setDraft] = useState<ShopConfig>(config)
+  const save = useAction((body: ShopConfig) => api.updateShopConfig(runId, body as unknown as Record<string, unknown>))
+  const changed = JSON.stringify(draft) !== JSON.stringify(config)
+  const set = <K extends keyof ShopConfig>(section: K, key: string, value: unknown) =>
+    setDraft((d) => ({ ...d, [section]: { ...(d[section] as object), [key]: value } }))
+
+  return (
+    <Section title="Shop settings (this run)">
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-slate-300">Prices</span>
+        <div className="flex flex-wrap gap-3">
+          {ITEM_ORDER.map((t) => (
+            <NumberField key={t} label={ITEM_META[t].name} value={draft.prices[t]} onChange={(n) => set('prices', t, n)} />
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-slate-300">Gold from games</span>
+        <div className="flex flex-wrap gap-3">
+          {GOLD_FIELDS.map((f) => (
+            <NumberField key={f.key} label={f.label} value={Number(draft.gold[f.key])} onChange={(n) => set('gold', f.key, n)} />
+          ))}
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Multikills
+            <select className="input text-slate-100" value={String(draft.gold.multikill_mode)} onChange={(e) => set('gold', 'multikill_mode', e.target.value)}>
+              <option value="stack">Every multikill pays</option>
+              <option value="highest">Only the biggest one</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-slate-300">Contracts and Blacklist</span>
+        <div className="flex flex-wrap gap-3">
+          <NumberField label="Contract payout" value={draft.contract.payout} onChange={(n) => set('contract', 'payout', n)} />
+          <NumberField label="Kills goal" value={draft.contract.kills} onChange={(n) => set('contract', 'kills', n)} />
+          <NumberField label="Assists goal" value={draft.contract.assists} onChange={(n) => set('contract', 'assists', n)} />
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Rating goal
+            <select className="input text-slate-100" value={draft.contract.rating} onChange={(e) => set('contract', 'rating', e.target.value)}>
+              {GRADE_OPTIONS.map((g) => (
+                <option key={g}>{g}</option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">
+            Blacklist size (% of alive)
+            <input
+              className="input w-28 text-slate-100"
+              type="number"
+              min={1}
+              max={50}
+              value={Math.round(draft.blacklist_pct * 100)}
+              onChange={(e) => setDraft((d) => ({ ...d, blacklist_pct: Math.min(50, Math.max(1, Number(e.target.value) || 1)) / 100 }))}
+            />
+          </label>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn-primary" disabled={!changed || save.isPending} onClick={() => save.mutate(draft)}>
+          Save shop settings
+        </button>
+        {changed && (
+          <button className="btn-secondary" onClick={() => setDraft(config)}>
+            Reset
+          </button>
+        )}
+      </div>
+      <ErrorText error={save.error} />
+    </Section>
+  )
+}
+
+function GoldAdjustSection() {
+  const { run } = useActiveRun()
+  const players = usePlayers()
+  const [playerId, setPlayerId] = useState<number | ''>('')
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const adjust = useAction(({ pid, n, text }: { pid: number; n: number; text: string }) =>
+    api.adjustGold(run.data!.id, pid, n, text || undefined),
+  )
+  if (!run.data || run.data.status !== 'active') return null
+  const n = Math.round(Number(amount))
+  return (
+    <Section title="Adjust gold">
+      <p className="text-sm text-slate-400">For fixing mistakes. Every change is logged in that player's gold history.</p>
+      <form
+        className="flex flex-wrap items-end gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (playerId === '' || !n) return
+          adjust.mutate({ pid: playerId, n, text: note }, { onSuccess: () => (setAmount(''), setNote('')) })
+        }}
+      >
+        <select className="input" value={playerId} onChange={(e) => setPlayerId(e.target.value ? Number(e.target.value) : '')} aria-label="Player">
+          <option value="">Player...</option>
+          {players.data?.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.display_name}
+            </option>
+          ))}
+        </select>
+        <input className="input w-32" type="number" placeholder="+50 or -50" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Amount" />
+        <input className="input w-56" placeholder="Why? (optional)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Note" />
+        <button className="btn-secondary" disabled={playerId === '' || !n || adjust.isPending}>
+          Apply
+        </button>
+      </form>
+      {adjust.isSuccess && <p className="text-sm text-gold-300">Done. New balance: {adjust.data.balance}</p>}
+      <ErrorText error={adjust.error} />
+    </Section>
+  )
+}
+
+function DeleteRunModal({ run, onClose }: { run: Run; onClose: () => void }) {
+  const [typed, setTyped] = useState('')
+  const del = useAction(() => api.deleteRun(run.id))
+  const matches = typed.trim().toLowerCase() === run.name.trim().toLowerCase()
+  return (
+    <Modal title={`Delete "${run.name}"?`} onClose={onClose}>
+      <div className="flex flex-col gap-4 text-sm">
+        <p className="text-slate-300">
+          This removes the run for good: its {run.games_played} game{run.games_played === 1 ? '' : 's'}, champion pool,
+          eliminations, revive tokens, gold, items and contracts. It can't be undone.
+        </p>
+        <p className="text-slate-400">
+          Players and their imported Riot matches stay. If you just want to stop playing it, use End run instead.
+        </p>
+        <label className="flex flex-col gap-1">
+          Type the run name to confirm
+          <input className="input" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={run.name} autoFocus />
+        </label>
+        <ErrorText error={del.error} />
+        <div className="flex justify-end gap-2">
+          <button className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn-danger" disabled={!matches || del.isPending} onClick={() => del.mutate(undefined, { onSuccess: onClose })}>
+            {del.isPending ? 'Deleting...' : 'Delete run'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// --- high-elo crawler (comp suggestions) ----------------------------------------------------
+
+const PLATFORMS: [string, string, string][] = [
+  ['na1', 'americas', 'North America'],
+  ['euw1', 'europe', 'EU West'],
+  ['eun1', 'europe', 'EU Nordic & East'],
+  ['kr', 'asia', 'Korea'],
+  ['br1', 'americas', 'Brazil'],
+  ['la1', 'americas', 'Latin America North'],
+  ['oc1', 'sea', 'Oceania'],
+]
+
+function MetaSection() {
+  const settings = useSettings()
+  const status = useQuery({ queryKey: ['meta-status'], queryFn: api.metaStatus, refetchInterval: 15_000 })
+  const update = useAction(api.updateSettings)
+  const positions = useAction(api.refreshPositions)
+  const s = status.data
+  const on = settings.data?.meta_crawl ?? true
+  return (
+    <Section title="High-elo data (comp suggestions)">
+      <p className="text-sm text-slate-400">
+        Riot doesn't publish global win rates, so the app collects its own: it downloads recent ranked games from the
+        Challenger, Grandmaster and Master ladders and counts each champion's roles, rune pages and items. It runs in the
+        background at about half your Riot key's rate limit, and keeps the two newest patches.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          className={on ? 'btn-secondary' : 'btn-primary'}
+          disabled={update.isPending || !settings.data}
+          onClick={() => update.mutate({ meta_crawl: !on })}
+        >
+          {on ? 'Pause collecting' : 'Start collecting'}
+        </button>
+        <select
+          className="input"
+          aria-label="Ladder region"
+          value={settings.data?.meta_platform ?? 'na1'}
+          onChange={(e) => {
+            const p = PLATFORMS.find(([id]) => id === e.target.value)!
+            update.mutate({ meta_platform: p[0], meta_region: p[1] })
+          }}
+        >
+          {PLATFORMS.map(([id, , label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <button className="btn-secondary" disabled={positions.isPending} onClick={() => positions.mutate(undefined)}>
+          {positions.isPending ? 'Updating roles...' : 'Update champion roles'}
+        </button>
+      </div>
+      {s && (
+        <div className="grid grid-cols-2 gap-px overflow-hidden bg-white/[0.06] sm:grid-cols-4">
+          {(
+            [
+              ['Matches', s.matches.toLocaleString()],
+              ['Champions covered', s.champions_covered],
+              ['Patches', s.patches.join(', ') || '—'],
+              ['Ladder', s.ladder_size ? `${s.ladder_position}/${s.ladder_size} players` : '—'],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label} className="flex flex-col bg-[#0b0e14] px-3 py-2">
+              <span className="font-display text-lg text-white">{value}</span>
+              <span className="text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {s && !s.key_set && <p className="text-sm text-amber-300">Add a Riot key in .env to start collecting.</p>}
+      {s?.key_set && on && (
+        <p className="text-xs text-slate-500">
+          {s.last_run_at ? `Last batch ${new Date(s.last_run_at).toLocaleTimeString()}.` : 'Starting up...'} Roughly 30,000 matches a day; rarely played champs fill in last.
+        </p>
+      )}
+      {s?.last_error && <p className="text-sm text-red-300">Last error: {s.last_error}</p>}
+      {positions.data && <p className="text-sm text-hex-200">Updated roles for {positions.data.count} champions.</p>}
+      <ErrorText error={update.error ?? positions.error ?? status.error} />
+    </Section>
+  )
+}
+
+// --- stream overlay ----------------------------------------------------------------------
+
+function OverlaySection() {
+  const url = `${window.location.origin}/overlay`
+  const [copied, setCopied] = useState(false)
+  const copy = () => {
+    void navigator.clipboard?.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <Section title="Stream overlay">
+      <p className="text-sm text-slate-400">
+        Add this page to OBS (Sources → + → Browser, width 1920, height 1080). It has a see-through background and shows
+        the run's score bug, the current picks, and the VICTORY / ELIMINATED / LOCKED IN moments. Add{' '}
+        <code>?picks=0</code> or <code>?moments=0</code> to hide parts.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="rounded-sm bg-black/50 px-3 py-2 text-sm text-hex-200">{url}</code>
+        <button className="btn-secondary" onClick={copy}>
+          {copied ? 'Copied!' : 'Copy link'}
+        </button>
+        <a className="btn-secondary" href="/overlay" target="_blank" rel="noreferrer">
+          Open
+        </a>
+      </div>
     </Section>
   )
 }

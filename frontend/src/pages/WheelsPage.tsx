@@ -1,10 +1,20 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { ChampionPicker } from '../components/ChampionPicker'
 import { MatchSummaryView } from '../components/MatchSummary'
 import { CaseReel } from '../components/CaseReel'
+import { ContractReveal } from '../components/ContractReveal'
+import { BuildStrip, RoleChip } from '../components/BuildStrip'
+import { DangerMeter } from '../components/DangerMeter'
+import { SurvivalOdds } from '../components/SurvivalOdds'
+import { LoadingScreen, LockInMoment } from '../components/LockIn'
+import { LowerThird } from '../components/LowerThird'
+import { PickBar } from '../components/PickBar'
+import { GoldBadge } from '../components/Gold'
+import { BlacklistDialog, PickChampionDialog, SwapDialog } from '../components/ItemDialogs'
+import { ShieldIcon } from '../components/icons'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Modal } from '../components/ui'
 import {
   useAction,
@@ -14,18 +24,31 @@ import {
   useGame,
   usePlayerMap,
   usePlayers,
+  useEconomy,
+  useComp,
+  useOptionFacts,
   usePool,
   useRiotStatus,
+  useShop,
 } from '../hooks/queries'
+import { useBuy, useOwnedItem } from '../hooks/useItems'
+import { factLine } from '../lib/facts'
+import { teamColor } from '../lib/teams'
+import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { preloadImages } from '../lib/preload'
 import { SPIN_MS, buildStrip, randomLandingOffset } from '../lib/reel'
-import { playReveal, playStart, unlock } from '../lib/sound'
-import type { Assignment, Champion, Game, Run } from '../types'
+import { playLand, playReveal, playStart, unlock } from '../lib/sound'
+import type { Assignment, Champion, CompPick, ContractInfo, Game, ItemType, PlayerEconomy, Run } from '../types'
+
+// Reels stop one after another: the first after 9.5s, then each next one this much later
+// (11.9s for a full five-player spin).
+const STAGGER_MS = 600
+const reelMs = (i: number) => SPIN_MS - 1000 + i * STAGGER_MS
 
 type SpinStage = {
   key: number
-  startAt: number // shared clock (performance.now) so every reel moves together
-  reels: { playerId: number; strip: string[]; offset: number }[]
+  startAt: number // identifies this spin; the reels start together on their first painted frame
+  reels: { playerId: number; strip: string[]; offset: number; options: number }[]
   done: boolean
   skipped: boolean
 }
@@ -57,8 +80,14 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const [practice, setPractice] = useState<Assignment[] | null>(null)
   const [stage, setStage] = useState<SpinStage | null>(null)
   const [lastResolvedId, setLastResolvedId] = useState<number | null>(null)
-  const spin = useAction((ids: number[]) => api.spin(run.id, ids))
+  const [lockIn, setLockIn] = useState<Game | null>(null)
+  const [editPicks, setEditPicks] = useState(false)
   const qc = useQueryClient()
+  // Not useAction: refreshing every query (and re-rendering the page) right as the reels start made
+  // the first frames stutter. The pending game goes straight into the cache instead, and everything
+  // else refreshes once the spin is over.
+  const spin = useMutation({ mutationFn: (ids: number[]) => api.spin(run.id, ids) })
+  const refreshAll = () => void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'champions' })
 
   // When the pending game gets resolved elsewhere (the backend's auto-matcher, or another tab),
   // show its result and refresh everything that the result may have changed.
@@ -71,6 +100,21 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
       void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'champions' })
     }
   }, [run.pending_game_id, qc])
+
+  // Everyone just finished picking: play the lock-in and switch to the loading-screen view.
+  const game = pendingGame.data?.status === 'pending' ? pendingGame.data : undefined
+  const allPicked = !!game && game.assignments.every((a) => a.played_champion_id)
+  const picked = useRef<{ id: number; all: boolean } | null>(null)
+  useEffect(() => {
+    if (!game) return
+    const prev = picked.current
+    picked.current = { id: game.id, all: allPicked }
+    if (prev?.id !== game.id) setEditPicks(false)
+    else if (!prev.all && allPicked) {
+      setLockIn(game)
+      setEditPicks(false)
+    }
+  }, [game, allPicked])
 
   // Default to the last group, once players are loaded.
   useEffect(() => {
@@ -100,18 +144,26 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
       onSuccess: (res) => {
         setPractice(res.practice ? res.assignments : null)
         setLastResolvedId(null)
+        const game = res.game
+        if (game) {
+          qc.setQueryData(['game', game.id], game)
+          qc.setQueryData<Run>(['run', run.id], (r) => (r ? { ...r, pending_game_id: game.id } : r))
+        }
         // Skip the reels for people who asked their device for reduced motion.
         const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-        if (reduced) return setStage(null)
+        if (reduced) {
+          refreshAll()
+          return setStage(null)
+        }
         const fillers = alivePool.length ? alivePool : res.assignments.flatMap((a) => a.options)
         setStage({
           key: Date.now(),
-          // Motion starts a beat after the click, so mounting the reels never stutters on screen.
-          startAt: performance.now() + 250,
+          startAt: performance.now(),
           reels: res.assignments.map((a) => ({
             playerId: a.player_id,
-            strip: buildStrip(fillers, a.options[0]),
+            strip: buildStrip(fillers, a.options),
             offset: randomLandingOffset(),
+            options: a.options.length,
           })),
           done: false,
           skipped: false,
@@ -124,13 +176,18 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const spinning = stage != null && !stage.done
   // Hold on the glowing winners for a moment before the option cards slide in.
   const finishSpin = () => {
-    playReveal()
+    if (stage?.skipped) playReveal() // otherwise the last reel already chimed as it landed
     const hold = stage?.skipped ? 500 : 1300
     const key = stage?.key
+    refreshAll()
     setTimeout(() => setStage((s) => (s && s.key === key ? { ...s, done: true } : s)), hold)
   }
 
   const shownAssignments = pending ? pendingGame.data?.assignments : practice ?? undefined
+  // High-elo builds for each player's pick (or their #1 option until they pick), shown in the cards.
+  const compIds = useMemo(() => (shownAssignments ?? []).map((a) => a.played_champion_id ?? a.options[0]), [shownAssignments])
+  const comp = useComp(compIds)
+  const builds = useMemo(() => new Map((comp.data?.picks ?? []).map((p) => [p.champion_id, p])), [comp.data])
 
   if (players.data && players.data.length < 2) {
     return (
@@ -168,17 +225,15 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
                   key={p.id}
                   onClick={() => toggle(p.id)}
                   aria-pressed={on}
-                  className={`rounded-full px-4 py-2 text-sm font-medium ring-1 transition duration-150 ring-inset active:scale-95 ${
-                    on
-                      ? 'bg-gradient-to-b from-gold-400 to-gold-600 text-slate-950 ring-gold-300/60'
-                      : 'bg-white/5 text-slate-200 ring-slate-700 hover:bg-white/10'
-                  }`}
+                  className={`team-chip ${on ? 'is-on' : ''}`}
+                  style={{ ['--team' as string]: teamColor(p.id) } as CSSProperties}
                 >
                   {p.display_name}
                 </button>
               )
             })}
           </div>
+          {challengeMode && chosen.length > 0 && run.status === 'active' && <PrepRow run={run} playerIds={chosen} />}
           <div className="flex flex-wrap items-center gap-3">
             <button
               className="btn-primary px-10 py-3 text-base tracking-[0.15em] uppercase"
@@ -191,6 +246,18 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
               {run.options_per_player} options each · {run.alive_count} champions alive
             </span>
           </div>
+          {challengeMode && run.status === 'active' && (
+            <DangerMeter
+              alive={run.alive_count}
+              total={run.total_count}
+              players={chosen.length >= 2 ? chosen.length : Math.max(2, lastUsed.length)}
+              options={run.options_per_player}
+              tokens={run.tokens_available}
+            />
+          )}
+          {challengeMode && run.status === 'active' && (
+            <SurvivalOdds run={run} players={chosen.length >= 2 ? chosen.length : Math.max(2, lastUsed.length)} />
+          )}
           <ErrorText error={spin.error} />
           {spin.error && run.tokens_available === 0 && run.alive_count < chosen.length && (
             <EndRunButton run={run} />
@@ -200,38 +267,75 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
 
       {spinning && (
         <section className="card flex flex-col gap-4" aria-live="polite">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-gold-100">Opening...</h2>
-            <button className="btn-secondary px-3 py-1.5 text-xs" onClick={() => setStage((s) => (s ? { ...s, skipped: true } : s))}>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="broadcast-tag" style={{ ['--tag' as string]: '#e5283c' } as CSSProperties}>
+              <span className="live-dot" /> Live
+            </span>
+            <h2 className="text-lg text-white">
+              Draft <span className="text-hex-300">·</span> Pick phase
+            </h2>
+            <button className="btn-secondary ml-auto px-3 py-1.5 text-xs" onClick={() => setStage((s) => (s ? { ...s, skipped: true } : s))}>
               Skip
             </button>
           </div>
-          {stage.reels.map((r, i) => (
-            <CaseReel
-              key={`${stage.key}-${r.playerId}`}
-              label={playerMap.get(r.playerId)?.display_name ?? `Player ${r.playerId}`}
-              strip={r.strip}
-              championMap={champs}
-              startAt={stage.startAt}
-              durationMs={SPIN_MS}
-              offset={r.offset}
-              master={i === 0}
-              skipped={stage.skipped}
-              onDone={i === 0 ? finishSpin : undefined}
-            />
-          ))}
+          {!stage.skipped && (
+            <div className="draft-timer" aria-hidden>
+              <span key={stage.key} style={{ animationDuration: `${reelMs(stage.reels.length - 1)}ms` }} />
+            </div>
+          )}
+          {stage.reels.map((r, i) => {
+            const last = i === stage.reels.length - 1
+            return (
+              <CaseReel
+                key={`${stage.key}-${r.playerId}`}
+                label={playerMap.get(r.playerId)?.display_name ?? `Player ${r.playerId}`}
+                strip={r.strip}
+                championMap={champs}
+                startAt={stage.startAt}
+                durationMs={reelMs(i)}
+                offset={r.offset}
+                master={last}
+                skipped={stage.skipped}
+                onLand={() => (last ? playReveal() : playLand(i))}
+                onDone={last ? finishSpin : undefined}
+                team={teamColor(r.playerId)}
+                optionCount={r.options}
+              />
+            )
+          })}
         </section>
       )}
 
-      {shownAssignments && !spinning && (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {shownAssignments.map((a, i) => (
-            <div key={`${stage?.key}-${a.player_id}`} className="reel-land" style={{ animationDelay: `${i * 70}ms` }}>
-              <PlayerCard assignment={a} game={pending ? pendingGame.data! : null} />
+      {game && !spinning && <PickBar game={game} />}
+
+      {game && allPicked && !editPicks && !spinning ? (
+        <LoadingScreen game={game} onEdit={() => setEditPicks(true)} builds={builds} />
+      ) : (
+        shownAssignments &&
+        !spinning && (
+          <section className="flex flex-col gap-2">
+            {/* One row of cards on desktop, so picks, builds and the result buttons fit on one screen. */}
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
+              {shownAssignments.map((a, i) => (
+                <div key={`${stage?.key}-${a.player_id}`} className="reel-land" style={{ animationDelay: `${i * 70}ms` }}>
+                  <PlayerCard
+                    assignment={a}
+                    game={pending ? pendingGame.data! : null}
+                    build={builds.get(a.played_champion_id ?? a.options[0])}
+                    buildLoading={comp.isLoading}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </section>
+            {game && allPicked && (
+              <button className="btn-secondary self-start" onClick={() => setEditPicks(false)}>
+                Done changing picks
+              </button>
+            )}
+          </section>
+        )
       )}
+      {lockIn && <LockInMoment key={lockIn.id} game={lockIn} onDone={() => setLockIn(null)} />}
 
       {pending && pendingGame.data && !spinning && (
         <PendingGamePanel game={pendingGame.data} onResolved={(g) => setLastResolvedId(g.id)} />
@@ -241,10 +345,40 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   )
 }
 
-function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game | null }) {
+function PlayerCard({
+  assignment,
+  game,
+  build,
+  buildLoading,
+}: {
+  assignment: Assignment
+  game: Game | null
+  build: CompPick | undefined
+  buildLoading: boolean
+}) {
   const champs = useChampionMap()
   const playerMap = usePlayerMap()
   const [pickingOther, setPickingOther] = useState(false)
+  const [replay, setReplay] = useState<{ key: number; startAt: number; strip: string[]; offset: number; options: number } | null>(null)
+  const pool = usePool(game?.run_id)
+  const facts = useOptionFacts(game?.id).data?.[String(assignment.player_id)]
+  const shielded = useMemo(
+    () => new Set((pool.data ?? []).filter((e) => e.shield_item_id).map((e) => e.champion_id)),
+    [pool.data],
+  )
+  const onRerolled = (newOptions: string[]) => {
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduced) return
+    const alive = (pool.data ?? []).filter((e) => e.status === 'alive').map((e) => e.champion_id)
+    setReplay({
+      key: Date.now(),
+      startAt: performance.now() + 150,
+      strip: buildStrip(alive.length ? alive : newOptions, newOptions),
+      offset: randomLandingOffset(),
+      options: newOptions.length,
+    })
+    playStart()
+  }
   const setPick = useAction((pick: { option_index?: number; champion_id?: string }) =>
     api.setPicks(game!.id, [{ player_id: assignment.player_id, ...pick }]),
   )
@@ -253,9 +387,38 @@ function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game |
   const isOther = assignment.played_champion_id != null && assignment.played_option_index == null
 
   return (
-    <div className="card flex h-full flex-col gap-3">
-      <h3 className="font-display font-bold text-gold-100">{player?.display_name ?? `Player ${assignment.player_id}`}</h3>
-      <ol className="flex flex-col gap-1.5">
+    <div className="card flex h-full flex-col gap-2.5 p-3.5">
+      <div className="flex items-center gap-2">
+        <h3 className="min-w-0">
+          {/* Picked / picking shows in the pick bar and on the option itself, so the name gets the room. */}
+          <LowerThird playerId={assignment.player_id} name={player?.display_name} size="sm" />
+        </h3>
+        <RoleChip pick={build} />
+        {game && (
+          <button className="ml-auto shrink-0 text-[11px] text-slate-400 underline hover:text-slate-200" onClick={() => setPickingOther(true)}>
+            Other...
+          </button>
+        )}
+      </div>
+      {replay ? (
+        <CaseReel
+          key={replay.key}
+          label="Rerolling..."
+          strip={replay.strip}
+          championMap={champs}
+          startAt={replay.startAt}
+          durationMs={SPIN_MS - 2500}
+          offset={replay.offset}
+          optionCount={replay.options}
+          master
+          skipped={false}
+          onDone={() => {
+            playReveal()
+            setTimeout(() => setReplay(null), 900)
+          }}
+        />
+      ) : (
+      <ol className="flex flex-col gap-1">
         {[first, ...backups].map((cid, idx) => {
           const played = assignment.played_option_index === idx
           return (
@@ -264,42 +427,250 @@ function PlayerCard({ assignment, game }: { assignment: Assignment; game: Game |
                 disabled={!game || setPick.isPending}
                 onClick={() => setPick.mutate({ option_index: idx })}
                 aria-pressed={played}
-                className={`flex w-full items-center gap-3 rounded-2xl p-1.5 text-left transition duration-150 active:scale-[0.98] ${
+                className={`flex w-full items-center gap-2 rounded-sm p-1 text-left transition duration-150 active:scale-[0.98] ${
                   played ? 'bg-gold-500/15 ring-2 ring-gold-400 ring-inset' : game ? 'hover:bg-white/5' : ''
                 }`}
               >
-                <span className="w-5 text-center text-sm font-bold text-slate-400">{idx + 1}</span>
+                <span className="w-3 text-center text-xs font-bold text-slate-500">{idx + 1}</span>
                 <ChampionPortrait
                   champion={champs.get(cid)}
-                  size={idx === 0 ? 'mdlg' : 'sm'}
-                  className={idx === 0 ? 'land-glow rounded-xl' : 'rounded-lg'}
+                  size={idx === 0 ? 'md' : 'xs'}
+                  className={idx === 0 ? 'land-glow rounded-sm' : 'rounded-sm'}
                 />
-                <span className={idx === 0 ? 'text-lg font-semibold' : 'text-sm'}>{champs.get(cid)?.name ?? cid}</span>
-                {played && <span className="ml-auto text-xs font-bold uppercase text-gold-300">Played</span>}
+                <span className="flex min-w-0 flex-col">
+                  <span className={`truncate ${idx === 0 ? 'text-base font-semibold' : 'text-sm'}`}>{champs.get(cid)?.name ?? cid}</span>
+                  {facts?.[cid] && (
+                    <span className="truncate text-[10px] leading-snug text-slate-400" title={factLine(facts[cid])}>
+                      {factLine(facts[cid])}
+                    </span>
+                  )}
+                </span>
+                {shielded.has(cid) && (
+                  <span title="Shielded: a loss won't eliminate it" className="text-emerald-300">
+                    <ShieldIcon className="h-4 w-4" />
+                  </span>
+                )}
+                {played && <span className="ml-auto text-[10px] font-bold uppercase text-gold-300">Played</span>}
               </button>
             </li>
           )
         })}
       </ol>
-      {game && (
-        <div className="flex items-center gap-2 border-t border-slate-800 pt-2 text-sm">
-          {isOther ? (
-            <>
-              <ChampionPortrait champion={champs.get(assignment.played_champion_id!)} size="xs" />
-              <span>
-                Played <b>{champs.get(assignment.played_champion_id!)?.name}</b> (other)
-              </span>
-            </>
-          ) : (
-            <span className="text-slate-400">{assignment.played_champion_id ? '' : 'Tap the one they played.'}</span>
-          )}
-          <button className="ml-auto text-xs text-slate-400 underline hover:text-slate-200" onClick={() => setPickingOther(true)}>
-            Other...
-          </button>
+      )}
+      {isOther && (
+        <div className="flex items-center gap-2 text-xs">
+          <ChampionPortrait champion={champs.get(assignment.played_champion_id!)} size="xs" />
+          <span>
+            Played <b>{champs.get(assignment.played_champion_id!)?.name}</b> (other)
+          </span>
         </div>
+      )}
+      <div className="border-t border-white/[0.07] pt-2">
+        <BuildStrip pick={build} loading={buildLoading} />
+      </div>
+      {game && game.status === 'pending' && !assignment.played_champion_id && !replay && (
+        <SpinItems game={game} assignment={assignment} onRerolled={onRerolled} />
       )}
       <ErrorText error={setPick.error} />
       {pickingOther && <OtherPicker onClose={() => setPickingOther(false)} onPick={(c) => setPick.mutate({ champion_id: c.id }, { onSuccess: () => setPickingOther(false) })} />}
+    </div>
+  )
+}
+
+/** Gold, armed Blacklist and Contract for each player about to spin (SPEC 10.1). */
+function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
+  const economy = useEconomy(run.id)
+  const playerMap = usePlayerMap()
+  const champs = useChampionMap()
+  const shop = useShop(run.id)
+  const pool = usePool(run.id)
+  const buy = useBuy(run.id)
+  const owned = useOwnedItem(run.id)
+  const [blacklistFor, setBlacklistFor] = useState<number | null>(null)
+  const [revealed, setRevealed] = useState<{ contract: ContractInfo; name?: string } | null>(null)
+  const price = (t: ItemType) => shop.data?.config.prices[t] ?? 0
+  const byId = new Map((economy.data ?? []).map((e) => [e.player_id, e]))
+  const alive = (pool.data ?? []).filter((e) => e.status === 'alive')
+
+  const armBlacklist = async (pid: number, econ: PlayerEconomy | undefined) => {
+    if (!econ?.unused.blacklist) await buy.mutateAsync({ playerId: pid, type: 'blacklist' })
+    setBlacklistFor(pid)
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {playerIds.map((pid) => {
+          const econ = byId.get(pid)
+          const name = playerMap.get(pid)?.display_name
+          const hasBl = (econ?.unused.blacklist ?? 0) > 0
+          return (
+            <div key={pid} className="flex flex-col gap-2 rounded-sm bg-white/[0.03] p-3 ring-1 ring-white/5 ring-inset">
+              <div className="flex items-center justify-between gap-2">
+                <LowerThird playerId={pid} name={name} size="sm" />
+                <GoldBadge amount={econ?.balance ?? 0} />
+              </div>
+              {econ?.armed_blacklist && (
+                <div className="text-xs text-red-200">
+                  Banned next spin: {econ.armed_blacklist.map((c) => champs.get(c)?.name ?? c).join(', ')}
+                </div>
+              )}
+              {econ?.active_contract && <div className="text-xs text-gold-200">Contract: {econ.active_contract.description}</div>}
+              <OwnedItems econ={econ} />
+              <div className="flex flex-wrap gap-1.5">
+                {!econ?.armed_blacklist && (
+                  <button
+                    className="btn-secondary px-2.5 py-1 text-xs"
+                    disabled={buy.isPending || (!hasBl && (econ?.balance ?? 0) < price('blacklist'))}
+                    onClick={() => void armBlacklist(pid, econ).catch(() => {})}
+                  >
+                    <ITEM_META.blacklist.Icon className="h-3.5 w-3.5" />
+                    {hasBl ? 'Blacklist' : `Blacklist · ${price('blacklist')}g`}
+                  </button>
+                )}
+                <button
+                  className="btn-secondary px-2.5 py-1 text-xs"
+                  disabled={buy.isPending || (econ?.balance ?? 0) < price('contract')}
+                  onClick={() =>
+                    buy.mutate(
+                      { playerId: pid, type: 'contract' },
+                      { onSuccess: (r) => r.item.contract && setRevealed({ contract: r.item.contract, name }) },
+                    )
+                  }
+                >
+                  <ITEM_META.contract.Icon className="h-3.5 w-3.5" />
+                  {`Contract · ${price('contract')}g`}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <ErrorText error={buy.error} />
+      {blacklistFor != null && (
+        <BlacklistDialog
+          champions={alive}
+          cap={shop.data?.blacklist_cap ?? 1}
+          busy={owned.isPending}
+          error={owned.error}
+          onClose={() => setBlacklistFor(null)}
+          onConfirm={(ids) =>
+            owned.mutate(
+              { playerId: blacklistFor, type: 'blacklist', body: { champion_ids: ids } },
+              { onSuccess: () => setBlacklistFor(null) },
+            )
+          }
+        />
+      )}
+      {revealed && <ContractReveal contract={revealed.contract} playerName={revealed.name} onClose={() => setRevealed(null)} />}
+    </div>
+  )
+}
+
+/** Unused items a player owns, as a reminder before the spin. */
+function OwnedItems({ econ }: { econ: PlayerEconomy | undefined }) {
+  const owned = ITEM_ORDER.filter((t) => t !== 'contract' && (econ?.unused[t] ?? 0) > 0)
+  if (!owned.length) return null
+  const hint: Partial<Record<ItemType, string>> = {
+    shield: 'Protect a champion from the Pool tab',
+    blacklist: 'Arm it with the Blacklist button to ban champs from your next spin',
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-300">
+      <span className="text-slate-500">Has:</span>
+      {owned.map((t) => {
+        const meta = ITEM_META[t]
+        return (
+          <span key={t} className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5" title={hint[t] ?? 'Use it on your options after the spin'}>
+            <meta.Icon className="h-3 w-3" style={{ color: meta.color }} />
+            {meta.name} ×{econ!.unused[t]}
+          </span>
+        )
+      })}
+      {owned.includes('shield') && (
+        <Link to="/pool" className="text-hex-200 underline">
+          Place shield
+        </Link>
+      )}
+    </div>
+  )
+}
+
+/** Reroll / Swap / Choose a Champ for one player after the spin, before lock-in. */
+function SpinItems({ game, assignment, onRerolled }: { game: Game; assignment: Assignment; onRerolled: (options: string[]) => void }) {
+  const economy = useEconomy(game.run_id)
+  const pool = usePool(game.run_id)
+  const playerMap = usePlayerMap()
+  const owned = useOwnedItem(game.run_id)
+  const [dialog, setDialog] = useState<'swap' | 'choose' | null>(null)
+  const econ = economy.data?.find((e) => e.player_id === assignment.player_id)
+  const others = game.assignments.filter((a) => a.player_id !== assignment.player_id)
+  const taken = new Set(others.flatMap((a) => a.options))
+  const choosable = (pool.data ?? []).filter((e) => e.status === 'alive' && !taken.has(e.champion_id))
+
+  const button = (type: 'reroll' | 'swap' | 'choose', onClick: () => void) => {
+    const n = econ?.unused[type] ?? 0
+    const meta = ITEM_META[type]
+    return (
+      <button
+        key={type}
+        className={`btn-secondary gap-1 px-2.5 py-1 text-[10px] ${n ? 'item-ready' : ''}`}
+        style={n ? ({ ['--c' as string]: meta.color } as CSSProperties) : undefined}
+        disabled={!n || owned.isPending}
+        title={n ? `${meta.name}: ${n} owned` : `${meta.name}: buy one in the Shop`}
+        onClick={onClick}
+      >
+        <meta.Icon className="h-3.5 w-3.5" style={{ color: n ? meta.color : undefined }} />
+        {type === 'choose' ? 'Choose' : meta.name}
+        {n > 0 && <span className="text-slate-400">×{n}</span>}
+      </button>
+    )
+  }
+
+  // Items they own pulse (item-ready); the rest stay greyed out with a "buy one" tooltip.
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap gap-1">
+        {button('reroll', () =>
+          owned.mutate(
+            { playerId: assignment.player_id, type: 'reroll', body: { game_id: game.id } },
+            { onSuccess: (item) => onRerolled(((item.target.new as string[]) ?? []).filter(Boolean)) },
+          ),
+        )}
+        {button('swap', () => setDialog('swap'))}
+        {button('choose', () => setDialog('choose'))}
+      </div>
+      <ErrorText error={owned.error} />
+      {dialog === 'swap' && (
+        <SwapDialog
+          players={others.map((a) => playerMap.get(a.player_id)!).filter(Boolean)}
+          busy={owned.isPending}
+          error={owned.error}
+          onClose={() => setDialog(null)}
+          onPick={(pid) =>
+            owned.mutate(
+              { playerId: assignment.player_id, type: 'swap', body: { game_id: game.id, other_player_id: pid } },
+              { onSuccess: () => setDialog(null) },
+            )
+          }
+        />
+      )}
+      {dialog === 'choose' && (
+        <PickChampionDialog
+          title="Choose a champion"
+          hint="It becomes this player's only option for the game."
+          champions={choosable}
+          busy={owned.isPending}
+          error={owned.error}
+          onClose={() => setDialog(null)}
+          onPick={(cid) =>
+            owned.mutate(
+              { playerId: assignment.player_id, type: 'choose', body: { game_id: game.id, champion_id: cid } },
+              { onSuccess: () => setDialog(null) },
+            )
+          }
+        />
+      )}
     </div>
   )
 }
@@ -339,32 +710,34 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
   )
 
   return (
-    <section className="card flex flex-col gap-3 border-gold-600/40">
-      <h2 className="font-semibold">
-        Game {game.id} · {game.needs_review ? 'check this one' : 'waiting on the result'}
-      </h2>
-      {game.needs_review ? <ReviewPanel game={game} onResolved={onResolved} /> : <AutoStatus game={game} />}
-      {!allMarked && !game.needs_review && (
-        <p className="text-sm text-slate-400">
-          Entering it yourself? Tap what everyone played. On a win, anyone you skip counts as their first pick. For a
-          loss, mark everyone.
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2">
-        <div className="hidden gap-2 sm:flex">{resultButtons}</div>
-        <button
-          className="btn-secondary sm:ml-auto"
-          disabled={result.isPending}
-          onClick={() => confirm('Throw out this spin and re-roll?') && submit('void', 're-roll')}
-        >
-          Void spin (re-roll)
-        </button>
+    <section className="card flex flex-col gap-2 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <span className="broadcast-tag shrink-0" style={{ ['--tag' as string]: game.needs_review ? '#b8730c' : 'var(--color-hex-500)' }}>
+          Game {game.id} · {game.needs_review ? 'check this one' : 'in progress'}
+        </span>
+        {!game.needs_review && <AutoStatus game={game} />}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div
+            className="hidden gap-2 sm:flex"
+            title={allMarked ? undefined : 'Entering it yourself? Tap what everyone played. On a win, anyone you skip counts as their first pick. For a loss, mark everyone.'}
+          >
+            {resultButtons}
+          </div>
+          <button
+            className="btn-secondary"
+            disabled={result.isPending}
+            onClick={() => confirm('Throw out this spin and re-roll?') && submit('void', 're-roll')}
+          >
+            Re-roll
+          </button>
+        </div>
       </div>
+      {game.needs_review && <ReviewPanel game={game} onResolved={onResolved} />}
       <ErrorText error={result.error} />
       {/* Phones: keep the result buttons in reach without scrolling past every player's card */}
       <div className="h-16 sm:hidden" aria-hidden />
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-[#020b16]/97 px-4 py-3 sm:hidden">
-        <div className="mx-auto flex max-w-6xl items-center gap-2">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-[#06080c]/97 px-4 py-3 sm:hidden">
+        <div className="mx-auto flex max-w-7xl items-center gap-2">
           <span className="mr-auto text-xs text-slate-400">Game #{game.id}</span>
           {resultButtons}
         </div>
@@ -386,19 +759,19 @@ function AutoStatus({ game }: { game: Game }) {
 
   let text: string
   let watching = false
-  if (!riot.data?.key_set) text = 'No Riot key set up, so enter the result yourself below.'
-  else if (!settings.data?.challenge_mode) text = "Challenge mode is off, so this game won't be picked up from Riot."
-  else if (unlinked.length) text = `To get results from Riot, everyone needs a linked Riot ID. Missing: ${unlinked.join(', ')}.`
+  if (!riot.data?.key_set) text = 'No Riot key: enter the result yourself.'
+  else if (!settings.data?.challenge_mode) text = "Challenge mode is off: this game won't be picked up from Riot."
+  else if (unlinked.length) text = `Riot can't record it: ${unlinked.join(', ')} ${unlinked.length > 1 ? 'have' : 'has'} no linked Riot ID.`
   else {
     watching = true
     const secs = settings.data?.poll_interval_seconds ?? 90
-    text = `Waiting for the game to end. We check Riot every ${secs} seconds and fill in the result for you.`
+    text = `Waiting for the game to end · checking Riot every ${secs}s`
   }
   const outcome = sync.data?.games.find((g) => g.game_id === game.id)
 
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex min-w-0 flex-col gap-1 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
         {watching && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
         <span className="text-slate-300">{text}</span>
         {watching && (
@@ -473,6 +846,29 @@ function LastResult({ gameId }: { gameId: number }) {
           ))}
         </div>
       )}
+      {game.shields_saved.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm text-emerald-200">
+          <ShieldIcon className="h-4 w-4" />
+          Shield saved {game.shields_saved.map((c) => champs.get(c)?.name ?? c).join(', ')}
+        </div>
+      )}
+      {Object.keys(game.gold).length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(game.gold).map(([pid, amount]) => (
+            <span key={pid} className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm">
+              {playerMap.get(Number(pid))?.display_name}
+              <GoldBadge amount={amount} />
+              {game.grades[pid] && <span className="rounded-full bg-hex-800/70 px-1.5 text-xs text-hex-100">{game.grades[pid]}</span>}
+            </span>
+          ))}
+        </div>
+      )}
+      {game.contracts.map((c) => (
+        <p key={c.player_id} className={`text-sm ${c.status === 'won' ? 'text-gold-200' : 'text-slate-400'}`}>
+          {playerMap.get(c.player_id)?.display_name}'s contract ({c.description}):{' '}
+          {c.status === 'won' ? `done, +${c.payout} gold` : 'missed'}
+        </p>
+      ))}
       {game.match && <MatchSummaryView match={game.match} />}
       {game.tokens_earned.length > 0 && (
         <p className="text-sm text-gold-300">
@@ -486,10 +882,11 @@ function LastResult({ gameId }: { gameId: number }) {
 
 function EndRunButton({ run }: { run: Run }) {
   const end = useAction(() => api.endRun(run.id))
+  const navigate = useNavigate()
   return (
     <div className="flex items-center gap-3 text-sm">
       <span className="text-slate-400">Not enough champs left, and no tokens to bring any back.</span>
-      <button className="btn-danger" onClick={() => confirm(`End "${run.name}" with ${run.win_count} wins?`) && end.mutate(undefined)}>
+      <button className="btn-danger" onClick={() => confirm(`End "${run.name}" with ${run.win_count} wins?`) && end.mutate(undefined, { onSuccess: () => navigate(`/runs/${run.id}/recap`) })}>
         End run
       </button>
     </div>
