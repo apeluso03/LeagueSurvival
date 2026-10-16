@@ -1,5 +1,8 @@
+import type { CSSProperties } from 'react'
+import { useChampionMap } from '../hooks/queries'
 import { pct } from '../lib/stats'
-import type { CompPick, MetaItemInfo, Role, RuneRef } from '../types'
+import type { BanSuggestion, CompPick, MetaItemInfo, Role, RuneRef, SpellPair } from '../types'
+import { ChampionPortrait } from './ui'
 
 const ROLE_SHORT: Record<Role, string> = { TOP: 'TOP', JUNGLE: 'JG', MIDDLE: 'MID', BOTTOM: 'BOT', UTILITY: 'SUP' }
 const ROLE_NAME: Record<Role, string> = { TOP: 'Top', JUNGLE: 'Jungle', MIDDLE: 'Mid', BOTTOM: 'Bot', UTILITY: 'Support' }
@@ -40,7 +43,26 @@ function ItemIcon({ item, boots = false }: { item: MetaItemInfo; boots?: boolean
   ) : null
 }
 
-/** One champion's high-elo build in two compact rows: rune page, then core items and boots. */
+function Spells({ pair }: { pair: SpellPair }) {
+  const tip = `${pair.spells.map((s) => s.name).join(' + ')}${
+    pair.pick_rate != null ? ` · taken in ${pct(pair.pick_rate)} of games` : ''
+  }${pair.win_rate != null ? ` · ${pct(pair.win_rate)} win rate` : ''}`
+  return (
+    <span className="ml-auto flex shrink-0 gap-0.5" title={tip}>
+      {pair.spells.map((s) =>
+        s.icon ? (
+          <img key={s.id} src={s.icon} alt={s.name} width={22} height={22} className="rounded-sm ring-1 ring-white/15" />
+        ) : (
+          <span key={s.id} className="text-[10px] text-slate-400">
+            {s.name}
+          </span>
+        ),
+      )}
+    </span>
+  )
+}
+
+/** One champion's high-elo build in two compact rows: rune page and summoner spells, then core items and boots. */
 export function BuildStrip({ pick, loading = false }: { pick: CompPick | undefined; loading?: boolean }) {
   if (!pick) return <div className="build-strip text-[11px] text-slate-500">{loading ? 'Loading build...' : ''}</div>
   const r = pick.runes
@@ -61,9 +83,13 @@ export function BuildStrip({ pick, loading = false }: { pick: CompPick | undefin
             {r.keystone?.name}
             {r.win_rate != null && <span className="text-slate-500"> · {pct(r.win_rate)}</span>}
           </span>
+          {pick.spells && <Spells pair={pick.spells} />}
         </div>
       ) : (
-        <span className="text-[11px] text-slate-500">No high-elo build yet</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-slate-500">No high-elo build yet</span>
+          {pick.spells && <Spells pair={pick.spells} />}
+        </div>
       )}
       {(pick.items.length > 0 || pick.boots) && (
         <div className="flex items-center gap-1">
@@ -77,6 +103,43 @@ export function BuildStrip({ pick, loading = false }: { pick: CompPick | undefin
             </>
           )}
         </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Suggested bans: the enemy champions the rolled champions do worst against in high elo.
+ * Each portrait shows the rolled champions' combined win rate against it; hover for the details.
+ */
+export function BanStrip({ bans, loading = false }: { bans: BanSuggestion[] | undefined; loading?: boolean }) {
+  const champs = useChampionMap()
+  const name = (id: string) => champs.get(id)?.name ?? id
+  return (
+    <div className="ban-strip flex items-center gap-1.5">
+      <span className="broadcast-tag shrink-0" style={{ ['--tag' as string]: '#a3202f' } as CSSProperties}>
+        Bans
+      </span>
+      {loading && !bans ? (
+        <span className="text-[11px] text-slate-500">Loading...</span>
+      ) : !bans?.length ? (
+        <span className="text-[11px] text-slate-500" title="Bans come from high-elo matchups the app has collected. Check Settings, High-elo data.">
+          Not enough matchup data yet
+        </span>
+      ) : (
+        bans.map((b) => {
+          const c = champs.get(b.champion_id)
+          const detail = b.against
+            .map((a) => `${name(a.champion_id)} ${a.win_rate != null ? pct(a.win_rate) : '—'} of ${a.games}`)
+            .join(', ')
+          const tip = `Ban ${name(b.champion_id)}: your champions win ${b.win_rate != null ? pct(b.win_rate) : '—'} of ${b.games} high-elo games against it (${detail})`
+          return (
+            <span key={b.champion_id} className="ban-chip" title={tip}>
+              <ChampionPortrait champion={c} size="xs" className="rounded-sm" />
+              {b.win_rate != null && <span className="ban-rate">{pct(b.win_rate)}</span>}
+            </span>
+          )
+        })
       )}
     </div>
   )

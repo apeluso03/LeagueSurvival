@@ -204,3 +204,118 @@ def test_comp_endpoint_and_status(client, session):
     assert client.post("/api/comp", json={"champion_ids": []}).status_code == 422
     s = client.get("/api/meta/status").json()
     assert s["enabled"] is True and s["key_set"] is False and s["matches"] == 0
+
+
+# --- summoner spells, matchups and bans ---
+
+
+def player(key, team, win, role="MIDDLE", spells=(4, 14)):
+    p = participant(key, role, win)
+    return {**p, "teamId": team, "summoner1Id": spells[0], "summoner2Id": spells[1]}
+
+
+def game(match_id, blue, red, blue_wins=True):
+    """blue/red: lists of (champion_key, role, spells)."""
+    return ranked_match(
+        match_id,
+        [player(k, 100, blue_wins, r, sp) for k, r, sp in blue] + [player(k, 200, not blue_wins, r, sp) for k, r, sp in red],
+    )
+
+
+def test_spells_and_matchups_are_counted(session):
+    from app.models import MetaMatchup, MetaSpells
+
+    meta.count_match(session, game("NA1_10", [(1000, "TOP", (14, 4))], [(1001, "TOP", (4, 12)), (1002, "MIDDLE", (4, 14))]))
+    assert session.get(MetaSpells, (1000, "TOP", "16.20", "4,14")).wins == 1  # stored lowest id first
+    assert session.get(MetaMatchup, (1000, 1001, "16.20")).wins == 1
+    assert session.get(MetaMatchup, (1001, 1000, "16.20")).wins == 0
+    assert session.get(MetaMatchup, (1001, 1002, "16.20")) is None  # teammates aren't a matchup
+    assert session.get(MetaMatch, "NA1_10").extras
+
+
+def test_suggested_spells_put_flash_second(session):
+    for i in range(3):
+        meta.count_match(session, game(f"NA1_{20 + i}", [(1000, "TOP", (4, 12))], [(1001, "TOP", (4, 14))]))
+    meta.count_match(session, game("NA1_29", [(1000, "TOP", (4, 14))], [(1001, "TOP", (4, 14))], blue_wins=False))
+    champ = session.get(Champion, "Champ000")
+    static = {"spells": {4: {"name": "Flash", "icon": "f.png"}, 12: {"name": "Teleport", "icon": "t.png"}}}
+    out = meta.spells_for(session, champ, "TOP", ["16.20"], static)
+    assert [s["name"] for s in out["spells"]] == ["Teleport", "Flash"]
+    assert out["games"] == 3 and out["win_rate"] == 1.0 and out["pick_rate"] == 0.75
+
+
+def test_bans_target_what_our_champs_lose_to(session):
+    # Champ000 (key 1000) loses to 1005 every time, beats 1006, and has a coin-flip record vs 1007.
+    n = 0
+    for _ in range(12):
+        n += 1
+        meta.count_match(session, game(f"NA1_{100 + n}", [(1000, "MIDDLE", (4, 14))], [(1005, "MIDDLE", (4, 14))], blue_wins=False))
+        n += 1
+        meta.count_match(session, game(f"NA1_{100 + n}", [(1000, "MIDDLE", (4, 14))], [(1006, "MIDDLE", (4, 14))], blue_wins=True))
+    for i in range(4):
+        n += 1
+        meta.count_match(session, game(f"NA1_{100 + n}", [(1000, "MIDDLE", (4, 14))], [(1007, "MIDDLE", (4, 14))], blue_wins=i % 2 == 0))
+    # One loss to 1008: too little to beat a dozen losses to 1005.
+    meta.count_match(session, game("NA1_999", [(1000, "MIDDLE", (4, 14))], [(1008, "MIDDLE", (4, 14))], blue_wins=False))
+
+    bans = meta.suggest_bans(session, [session.get(Champion, "Champ000")], ["16.20"])
+    ids = [b["champion_id"] for b in bans]
+    assert ids[0] == "Champ005"
+    assert "Champ006" not in ids  # we beat it
+    assert bans[0]["games"] == 12 and bans[0]["win_rate"] == 0.0
+    assert bans[0]["against"] == [{"champion_id": "Champ000", "games": 12, "win_rate": 0.0}]
+    assert ids.index("Champ005") < ids.index("Champ008")
+
+
+def test_bans_never_include_our_own_champions(session):
+    for i in range(5):
+        meta.count_match(session, game(f"NA1_{300 + i}", [(1000, "TOP", (4, 12))], [(1001, "TOP", (4, 12))], blue_wins=False))
+    champs = [session.get(Champion, "Champ000"), session.get(Champion, "Champ001")]
+    assert all(b["champion_id"] not in ("Champ000", "Champ001") for b in meta.suggest_bans(session, champs, ["16.20"]))
+
+
+def test_suggest_comp_includes_spells_and_bans(session):
+    for i in range(5):
+        meta.count_match(session, game(f"NA1_{400 + i}", [(1000, "TOP", (4, 12))], [(1003, "TOP", (4, 14))], blue_wins=False))
+        meta.count_match(session, game(f"NA1_{410 + i}", [(1000, "TOP", (4, 12))], [(1004, "TOP", (4, 14))], blue_wins=True))
+    result = meta.suggest_comp(session, ["Champ000"])
+    assert result["picks"][0].spells["spells"][0]["id"] == 12
+    assert result["bans"][0]["champion_id"] == "Champ003"
+
+
+class BackfillClient:
+    def __init__(self, session, matches):
+        self.session, self.matches, self.fetched = session, matches, []
+
+    async def match(self, region, match_id):
+        assert not self.session.in_transaction()
+        self.fetched.append(match_id)
+        if match_id not in self.matches:
+            raise meta.RiotError(404, "gone")
+        return self.matches[match_id]
+
+
+def test_backfill_fills_in_old_matches(session):
+    from app.models import MetaMatchup, MetaSpells
+
+    old = game("NA1_500", [(1000, "TOP", (4, 12))], [(1001, "TOP", (4, 14))])
+    session.add_all([MetaMatch(match_id="NA1_500", patch="16.20"), MetaMatch(match_id="NA1_501", patch="16.20")])
+    session.commit()
+    assert len(meta.needs_backfill(session)) == 2
+    client = BackfillClient(session, {"NA1_500": old})
+    assert asyncio.run(meta.backfill_step(session, client, "americas")) == 2
+    assert session.get(MetaSpells, (1000, "TOP", "16.20", "4,12")).games == 1
+    assert session.get(MetaMatchup, (1000, 1001, "16.20")).games == 1
+    assert session.get(MetaChampRole, (1000, "TOP", "16.20")) is None  # roles/builds aren't counted twice
+    assert meta.needs_backfill(session) == []  # the 404 one is marked done too
+    assert asyncio.run(meta.backfill_step(session, client, "americas")) == 0
+    assert meta.status(session)["backfill_remaining"] == 0
+
+
+def test_bans_skip_excluded_champions(session):
+    for i in range(6):
+        meta.count_match(session, game(f"NA1_{600 + i}", [(1000, "TOP", (4, 12))], [(1003, "TOP", (4, 14))], blue_wins=False))
+        meta.count_match(session, game(f"NA1_{610 + i}", [(1000, "TOP", (4, 12))], [(1004, "TOP", (4, 14))], blue_wins=False))
+        meta.count_match(session, game(f"NA1_{620 + i}", [(1000, "TOP", (4, 12))], [(1005, "TOP", (4, 14))], blue_wins=True))
+    ids = [b["champion_id"] for b in meta.suggest_comp(session, ["Champ000"], exclude=["Champ003"])["bans"]]
+    assert "Champ004" in ids and "Champ003" not in ids  # Champ003 is someone's backup option

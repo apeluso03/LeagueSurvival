@@ -1678,3 +1678,71 @@ html.overlay-mode body::before {
   font-size: 0.75rem;
   color: var(--color-slate-400);
 }
+
+/* --- suggested bans (pick bar) ------------------------------------------------------------- */
+.ban-chip {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.ban-chip::after {
+  /* the red "banned" slash over the portrait */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: linear-gradient(135deg, transparent 46%, rgb(229 40 60 / 0.9) 47%, rgb(229 40 60 / 0.9) 53%, transparent 54%);
+  box-shadow: inset 0 0 0 1px rgb(229 40 60 / 0.6);
+  pointer-events: none;
+}
+.ban-rate {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 1;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  color: #ffd2d7;
+  background: rgb(0 0 0 / 0.78);
+  padding: 1px 0;
+}
+
+/* --- live game tracker ----------------------------------------------------------------------- */
+.tab-live-dot {
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: 0.35rem;
+  vertical-align: 0.15em;
+  border-radius: 9999px;
+  background: #e5283c;
+  /* static on purpose: no animation inside clipped tabs (see SPEC 18.2) */
+}
+.live-bug {
+  background: linear-gradient(90deg, rgb(31 138 230 / 0.16), rgb(11 14 20 / 0.9) 30%, rgb(11 14 20 / 0.9) 70%, rgb(229 40 60 / 0.16));
+}
+.lane-row + .lane-row {
+  border-top: 1px solid rgb(255 255 255 / 0.05);
+}
+.live-player.is-ours {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team) 14%, transparent), transparent 70%);
+  box-shadow: inset 2px 0 0 var(--team);
+}
+.live-player.is-ours.flex-row-reverse {
+  background: linear-gradient(270deg, color-mix(in srgb, var(--team) 14%, transparent), transparent 70%);
+  box-shadow: inset -2px 0 0 var(--team);
+}
+.overlay-live {
+  position: fixed;
+  top: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.6rem 1.5rem;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--blue) 45%, #06080c), #06080c 32%, #06080c 68%, color-mix(in srgb, var(--red) 45%, #06080c));
+  clip-path: polygon(14px 0, calc(100% - 14px) 0, 100% 100%, 0 100%);
+}

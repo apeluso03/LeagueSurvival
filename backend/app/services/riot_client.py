@@ -1,4 +1,4 @@
-"""Riot API client: Account-V1, Match-V5, League-V4 ladders and a status check, with rate limiting (SPEC 9).
+"""Riot API client: Account-V1, Match-V5, League-V4 ladders, Spectator-V5 and a status check, with rate limiting (SPEC 9).
 
 The key stays on the backend. All calls go through `RiotClient._get`, which waits on a local
 sliding-window limiter and retries on 429 (honouring Retry-After) and on 5xx errors.
@@ -130,6 +130,15 @@ class RiotClient:
 
     async def match(self, region: str, match_id: str) -> dict:
         return await self._get(region, f"/lol/match/v5/matches/{match_id}")
+
+    async def active_game(self, platform: str, puuid: str) -> dict | None:
+        """The game this player is in right now (Spectator-V5), or None when they aren't in one."""
+        try:
+            return await self._get(platform, f"/lol/spectator/v5/active-games/by-summoner/{puuid}")
+        except RiotError as e:
+            if e.status == 404:
+                return None
+            raise
 
     async def platform_status(self, platform: str = "na1") -> dict:
         return await self._get(platform, "/lol/status/v4/platform-data")

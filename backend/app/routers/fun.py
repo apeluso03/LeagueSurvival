@@ -47,6 +47,8 @@ def get_wrapped(month: str | None = None, session: Session = Depends(get_session
 
 class CompIn(BaseModel):
     champion_ids: list[str] = Field(min_length=1, max_length=5)
+    # Never suggest banning these (everyone's options, so a backup isn't banned away).
+    exclude: list[str] = Field(default_factory=list, max_length=30)
 
 
 @router.get("/meta/status")
@@ -74,5 +76,5 @@ async def suggest_comp(body: CompIn, session: Session = Depends(get_session)):
             static = await meta.load_static(version)
         except httpx.HTTPError:
             static = None  # names and icons are optional; ids still work
-    result = meta.suggest_comp(session, body.champion_ids, static)
+    result = meta.suggest_comp(session, body.champion_ids, static, exclude=body.exclude)
     return {**result, "picks": [asdict(p) for p in result["picks"]]}

@@ -3,6 +3,7 @@ import type {
   AppSettings,
   Invite,
   InviteInfo,
+  LiveGame,
   Me,
   Champion,
   AchievementReport,
@@ -149,7 +150,8 @@ export const api = {
   wrapped: (month?: string) => get<Wrapped>(`/wrapped${qs({ month })}`),
   metaStatus: () => get<MetaStatus>('/meta/status'),
   refreshPositions: () => post<{ count: number }>('/meta/positions/refresh'),
-  comp: (championIds: string[]) => post<CompSuggestion>('/comp', { champion_ids: championIds }),
+  comp: (championIds: string[], exclude: string[] = []) =>
+    post<CompSuggestion>('/comp', { champion_ids: championIds, exclude }),
   championLines: (runId: number) => get<Record<string, ChampionLine>>(`/runs/${runId}/champion-lines`),
   eliminate: (runId: number, championId: string) => post<Run>(`/runs/${runId}/pool/${championId}/eliminate`),
   revive: (runId: number, championId: string, tokenId?: number) =>
@@ -177,6 +179,9 @@ export const api = {
     post<{ item: InventoryItem; balance: number }>(`/runs/${runId}/players/${playerId}/purchase`, { type }),
   useItem: (itemId: number, body: ItemUse) => post<InventoryItem>(`/items/${itemId}/use`, body),
   review: (gameId: number, action: 'accept' | 'reject') => post<Game>(`/games/${gameId}/review`, { action }),
+
+  live: () => get<{ game_id: number | null; live: LiveGame | null }>('/live'),
+  gameLive: (gameId: number) => get<{ game_id: number; live: LiveGame | null }>(`/games/${gameId}/live`),
 
   tokens: (params: { run_id?: number; player_id?: number; unused_only?: boolean }) =>
     get<ReviveToken[]>(`/tokens${qs(params)}`),

@@ -6,7 +6,7 @@ import { ChampionPicker } from '../components/ChampionPicker'
 import { MatchSummaryView } from '../components/MatchSummary'
 import { CaseReel } from '../components/CaseReel'
 import { ContractReveal } from '../components/ContractReveal'
-import { BuildStrip, RoleChip } from '../components/BuildStrip'
+import { BanStrip, BuildStrip, RoleChip } from '../components/BuildStrip'
 import { DangerMeter } from '../components/DangerMeter'
 import { SurvivalOdds } from '../components/SurvivalOdds'
 import { LoadingScreen, LockInMoment } from '../components/LockIn'
@@ -22,6 +22,7 @@ import {
   useChampionMap,
   useChampions,
   useGame,
+  useLive,
   usePlayerMap,
   usePlayers,
   useEconomy,
@@ -191,7 +192,9 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const shownAssignments = pending ? pendingGame.data?.assignments : practice ?? undefined
   // High-elo builds for each player's pick (or their #1 option until they pick), shown in the cards.
   const compIds = useMemo(() => (shownAssignments ?? []).map((a) => a.played_champion_id ?? a.options[0]), [shownAssignments])
-  const comp = useComp(compIds)
+  // Bans skip every option on the board, so nobody's backup gets banned away.
+  const allOptions = useMemo(() => [...new Set((shownAssignments ?? []).flatMap((a) => a.options))].sort(), [shownAssignments])
+  const comp = useComp(compIds, allOptions)
   const builds = useMemo(() => new Map((comp.data?.picks ?? []).map((p) => [p.champion_id, p])), [comp.data])
 
   if (players.data && players.data.length < 2) {
@@ -315,7 +318,12 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
         </section>
       )}
 
-      {game && !spinning && <PickBar game={game} />}
+      {game && !spinning && <PickBar game={game} extra={<BanStrip bans={comp.data?.bans} loading={comp.isLoading} />} />}
+      {!game && practice && !spinning && (
+        <div className="flex justify-end">
+          <BanStrip bans={comp.data?.bans} loading={comp.isLoading} />
+        </div>
+      )}
 
       {game && allPicked && !editPicks && !spinning ? (
         <LoadingScreen game={game} onEdit={canManage ? () => setEditPicks(true) : undefined} builds={builds} />
@@ -790,6 +798,22 @@ function AutoStatus({ game }: { game: Game }) {
     text = `Waiting for the game to end · checking Riot every ${secs}s`
   }
   const outcome = sync.data?.games.find((g) => g.game_id === game.id)
+  const live = useLive().data
+  const found = live?.game_id === game.id ? live.live : null
+  if (found && found.ended_at == null) {
+    const t = found.state?.game_time
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+        <span className="h-2 w-2 rounded-full bg-red-500" />
+        <span className="text-slate-300">
+          In game{t != null ? ` · ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` : ''} · picks filled in from the live game
+        </span>
+        <Link to="/live" className="text-xs text-hex-200 underline">
+          Watch live
+        </Link>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-1 text-sm">

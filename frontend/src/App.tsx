@@ -3,6 +3,7 @@ import { Layout } from './components/Layout'
 import { InvitePage, LoginPage, RequireAuth, SetupPage } from './pages/AuthPages'
 import { HistoryPage } from './pages/HistoryPage'
 import { LandingPage } from './pages/LandingPage'
+import { LivePage } from './pages/LivePage'
 import { OverlayPage } from './pages/OverlayPage'
 import { PlayerPage } from './pages/PlayerPage'
 import { PoolPage } from './pages/PoolPage'
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="overlay" element={<OverlayPage />} />
         <Route element={<Layout />}>
           <Route path="wheels" element={<WheelsPage />} />
+          <Route path="live" element={<LivePage />} />
           <Route path="pool" element={<PoolPage />} />
           <Route path="shop" element={<ShopPage />} />
           <Route path="stats" element={<StatsPage />} />

@@ -820,7 +820,8 @@ function MetaSection() {
     <Section title="High-elo data (comp suggestions)">
       <p className="text-sm text-slate-400">
         Riot doesn't publish global win rates, so the app collects its own: it downloads recent ranked games from the
-        Challenger, Grandmaster and Master ladders and counts each champion's roles, rune pages and items. It runs in the
+        Challenger, Grandmaster and Master ladders and counts each champion's roles, rune pages, items, summoner spells and
+        how it does against every enemy champion (for suggested bans). It runs in the
         background at about half your Riot key's rate limit, and keeps the two newest patches.
       </p>
       <div className="flex flex-wrap items-center gap-3">
@@ -871,6 +872,12 @@ function MetaSection() {
       {s?.key_set && on && (
         <p className="text-xs text-slate-500">
           {s.last_run_at ? `Last batch ${new Date(s.last_run_at).toLocaleTimeString()}.` : 'Starting up...'} Roughly 30,000 matches a day; rarely played champs fill in last.
+        </p>
+      )}
+      {s?.key_set && on && s.backfill_remaining > 0 && (
+        <p className="text-xs text-hex-200">
+          Filling in summoner spells and matchups for {s.backfill_remaining.toLocaleString()} matches counted before they
+          were tracked (about {Math.max(1, Math.round((s.backfill_remaining * 2.5) / 60))} min).
         </p>
       )}
       {s?.last_error && <p className="text-sm text-red-300">Last error: {s.last_error}</p>}

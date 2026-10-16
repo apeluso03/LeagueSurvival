@@ -161,6 +161,29 @@ class SpinAssignment(SQLModel, table=True):
     played_option_index: int | None = None  # 0-based; None with a champion set means "other"
 
 
+class LiveGame(SQLModel, table=True):
+    """The live League game a pending challenge game is being played in (services/live.py).
+
+    Found through Riot's Spectator API (champions, spells, runes, bans) and/or read from the game
+    client on this PC (Live Client Data API: items, KDA, CS, levels, kills and objectives).
+    """
+
+    game_id: int = Field(foreign_key="challengegame.id", primary_key=True)
+    riot_game_id: int | None = None  # the match will be "<PLATFORM>_<riot_game_id>"
+    platform: str | None = None
+    queue_id: int | None = None
+    started_at: datetime | None = dt_field()
+    detected_at: datetime = dt_field(default_now=True)
+    checked_at: datetime | None = dt_field()  # last Spectator check
+    updated_at: datetime | None = dt_field()  # last Live Client update
+    ended_at: datetime | None = dt_field()
+    our_team: int | None = None  # 100 (blue) or 200 (red)
+    # From Spectator: [{champion_id, team, spells: [ids], keystone, player_id}] and [{champion_id, team}]
+    participants: list = json_field()
+    bans: list = json_field()
+    state: dict = json_field(dict)  # summary of the latest Live Client data (see live.summarize)
+
+
 class ReviveToken(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     run_id: int = Field(foreign_key="run.id", index=True)
@@ -291,7 +314,9 @@ class MetaMatch(SQLModel, table=True):
     match_id: str = Field(primary_key=True)
     patch: str = Field(index=True)  # "16.20"
     counted_at: datetime = dt_field(default_now=True)
-
+    # Summoner spells and matchups were counted too. False for matches counted before they were
+    # tracked; the crawler re-fetches those to fill them in.
+    extras: bool = False
 
 class MetaChampRole(SQLModel, table=True):
     champion_key: int = Field(primary_key=True)
@@ -317,6 +342,25 @@ class MetaItem(SQLModel, table=True):
     item_id: int = Field(primary_key=True)
     games: int = 0
     wins: int = 0
+
+
+class MetaSpells(SQLModel, table=True):
+    champion_key: int = Field(primary_key=True)
+    role: str = Field(primary_key=True)
+    patch: str = Field(primary_key=True)
+    spells: str = Field(primary_key=True)  # summoner spell ids, lowest first: "4,14" (Flash + Ignite)
+    games: int = 0
+    wins: int = 0
+
+
+class MetaMatchup(SQLModel, table=True):
+    """How a champion does against each champion on the enemy team (any role)."""
+
+    champion_key: int = Field(primary_key=True)
+    enemy_key: int = Field(primary_key=True)
+    patch: str = Field(primary_key=True)
+    games: int = 0
+    wins: int = 0  # wins for champion_key
 
 
 class MetaCrawlState(SQLModel, table=True):

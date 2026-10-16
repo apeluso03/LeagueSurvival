@@ -570,12 +570,30 @@ export interface CompPick {
   runes: RunePage | null
   items: MetaItemInfo[]
   boots: MetaItemInfo | null
+  spells: SpellPair | null // most played summoner spells, Flash second
+}
+
+export interface SpellPair {
+  spells: { id: number; name: string; icon: string | null }[]
+  games: number
+  pick_rate: number | null
+  win_rate: number | null
+}
+
+/** An enemy champion the rolled champions do badly against in high elo. */
+export interface BanSuggestion {
+  champion_id: string
+  threat: number // how far it drags the rolled champions' win rates down, added up
+  games: number
+  win_rate: number | null // the rolled champions' combined record against it
+  against: { champion_id: string; games: number; win_rate: number | null }[]
 }
 
 export interface CompSuggestion {
   patches: string[]
   matches: number
   picks: CompPick[]
+  bans: BanSuggestion[]
 }
 
 export interface MetaStatus {
@@ -589,4 +607,103 @@ export interface MetaStatus {
   ladder_position: number
   last_run_at: string | null
   last_error: string | null
+  backfill_remaining: number // older matches still being re-read for spells and matchups
+}
+
+// --- live game tracker (services/live.py) -----------------------------------------------------
+
+export type TeamId = 100 | 200
+
+export interface LiveItem {
+  id: number
+  name: string | null
+  image: string | null
+  count: number
+  slot: number
+}
+
+export interface LiveIcon {
+  id?: number | null
+  name: string | null
+  icon: string | null
+}
+
+export interface LivePlayer {
+  name: string
+  champion_id: string | null
+  team: TeamId
+  position: string // "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | ""
+  level: number
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  wards: number
+  items: LiveItem[]
+  item_gold: number
+  spells: (LiveIcon | null)[]
+  keystone: LiveIcon | null
+  dead: boolean
+  respawn: number
+  player_id: number | null // one of ours
+  option_index: number | null
+}
+
+export interface LiveTeam {
+  kills: number
+  gold: number // value of items held (estimate)
+  towers: number
+  inhibitors: number
+  dragons: string[]
+  barons: number
+  heralds: number
+  grubs: number
+  atakhan: number
+}
+
+export interface LiveEvent {
+  t: number
+  type: 'kill' | 'multikill' | 'first_blood' | 'ace' | 'dragon' | 'baron' | 'herald' | 'grubs' | 'atakhan' | 'tower' | 'inhibitor'
+  team: TeamId | null
+  killer?: string | null
+  victim?: string | null
+  streak?: number
+  detail?: string | null
+  stolen?: boolean
+}
+
+export interface LiveState {
+  game_time: number
+  game_mode: string | null
+  our_team: TeamId | null
+  teams: Record<'100' | '200', LiveTeam>
+  players: LivePlayer[]
+  events: LiveEvent[] // newest first
+  gold_history: { t: number; diff: number }[] // blue minus red
+  result: 'Win' | 'Lose' | null
+  notes: string[]
+}
+
+export interface LiveParticipant {
+  champion_id: string | null
+  team: TeamId
+  spells: LiveIcon[]
+  keystone: LiveIcon | null
+  player_id: number | null
+}
+
+export interface LiveGame {
+  game_id: number
+  riot_game_id: number | null
+  platform: string | null
+  queue_id: number | null
+  started_at: string | null
+  detected_at: string
+  updated_at: string | null
+  ended_at: string | null
+  our_team: TeamId | null
+  participants: LiveParticipant[]
+  bans: { champion_id: string; team: TeamId }[]
+  state: LiveState | null
+  streaming: boolean // live stats are coming in right now
 }
