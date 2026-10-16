@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { api, isUnreachable } from '../api/client'
 import { useAction, useActiveRun, useChampionMap, useChampions, usePlayerMap } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
 import { TIER_COLORS } from '../lib/tiers'
 import { playShieldSave } from '../lib/sound'
 import type { AchievementInfo, Game } from '../types'
@@ -35,6 +36,7 @@ export function BackendDownBanner() {
 /** Shown when the champion list is empty, e.g. Data Dragon couldn't be reached on first start. */
 export function NoChampionsBanner() {
   const champions = useChampions()
+  const { isAdmin } = useAccess()
   const qc = useQueryClient()
   const refresh = useMutation({
     mutationFn: api.refreshChampions,
@@ -46,9 +48,9 @@ export function NoChampionsBanner() {
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1">
         <b>The champion list didn't load.</b>
         <span>Check your internet connection and try again.</span>
-        <button className="ml-auto underline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+        {isAdmin && <button className="ml-auto underline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
           {refresh.isPending ? 'Loading...' : 'Try again'}
-        </button>
+        </button>}
         {refresh.error && <span className="w-full text-red-200">{refresh.error.message}</span>}
       </div>
     </div>
@@ -155,6 +157,7 @@ function ResultToast({ game, streak, onClose }: { game: Game; streak: number; on
   const champs = useChampionMap()
   const players = usePlayerMap()
   const undo = useAction(() => api.undo(game.id))
+  const { canManage } = useAccess()
   const won = game.status === 'won'
   const tone = won ? 'var(--color-hex-300)' : game.status === 'lost' ? '#e5283c' : '#636d80'
   const name = (pid: number | string) => players.get(Number(pid))?.display_name ?? `Player ${pid}`
@@ -212,14 +215,16 @@ function ResultToast({ game, streak, onClose }: { game: Game; streak: number; on
       )}
 
       <div className="flex items-center gap-2">
-        <button
-          className="btn-secondary"
-          disabled={undo.isPending}
-          onClick={() => undo.mutate(undefined, { onSuccess: onClose })}
-          title="Put the game back to waiting for a result"
-        >
-          Undo
-        </button>
+        {canManage && (
+          <button
+            className="btn-secondary"
+            disabled={undo.isPending}
+            onClick={() => undo.mutate(undefined, { onSuccess: onClose })}
+            title="Put the game back to waiting for a result"
+          >
+            Undo
+          </button>
+        )}
         <Link to="/wheels" className="btn-secondary" onClick={onClose}>
           View
         </Link>

@@ -68,11 +68,48 @@ class Champion(SQLModel, table=True):
     positions: list[str] = json_field()
 
 
+class User(SQLModel, table=True):
+    """A login account. Each one plays as at most one roster Player (joined through an invite)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    username: str = Field(unique=True, index=True)  # stored lowercase; login is case-insensitive
+    password_hash: str
+    player_id: int | None = Field(default=None, foreign_key="player.id", unique=True)
+    # The site owner: the first account made. Manages players, settings, invites and every run.
+    is_admin: bool = False
+    created_at: datetime = dt_field(default_now=True)
+    last_login_at: datetime | None = dt_field()
+
+
+class AuthSession(SQLModel, table=True):
+    """A signed-in browser. The cookie holds a random token; only its SHA-256 is stored."""
+
+    token_hash: str = Field(primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    created_at: datetime = dt_field(default_now=True)
+    expires_at: datetime = dt_field(nullable=False)
+
+
+class Invite(SQLModel, table=True):
+    """A one-time sign-up link for one roster player. Only the token's SHA-256 is stored."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    token_hash: str = Field(unique=True, index=True)
+    player_id: int = Field(foreign_key="player.id", index=True)
+    created_by_user_id: int = Field(foreign_key="user.id")
+    created_at: datetime = dt_field(default_now=True)
+    expires_at: datetime = dt_field(nullable=False)
+    used_at: datetime | None = dt_field()
+    used_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    revoked: bool = False
+
+
 class Run(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     status: str = "active"  # "active" | "ended"
     owner_player_id: int | None = None
+    owner_user_id: int | None = Field(default=None, foreign_key="user.id")  # spins, results, settings
     lobby_code: str | None = None
     options_per_player: int = 3  # 3 | 4
     win_count: int = 0

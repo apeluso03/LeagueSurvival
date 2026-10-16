@@ -4,13 +4,21 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import ChallengeGame, Player, RiotMatch
+from app.models import ChallengeGame, Player, RiotMatch, Run, User
+from app.routers.access import current_user, require_manager
 from app.routers.common import champion_keys, game_out, get_app_settings, get_or_404
 from app.schemas import AssignmentsPatch, GameOut, LinkMatchIn, ResultIn, ReviewIn
 from app.services import matcher, rules, stats, sync
 from app.services.riot_client import RiotClient, RiotError
 
 router = APIRouter(prefix="/api/games", tags=["games"])
+
+
+def _managed_game(session: Session, game_id: int, user: User) -> ChallengeGame:
+    """A game whose result, picks or match only the run's owner may change."""
+    game = get_or_404(session, ChallengeGame, game_id, "Game")
+    require_manager(user, session.get(Run, game.run_id))
+    return game
 
 
 @router.get("", response_model=list[GameOut])
@@ -37,33 +45,33 @@ def option_facts(game_id: int, session: Session = Depends(get_session)):
 
 
 @router.patch("/{game_id}/assignments", response_model=GameOut)
-def set_assignments(game_id: int, body: AssignmentsPatch, session: Session = Depends(get_session)):
-    game = get_or_404(session, ChallengeGame, game_id, "Game")
+def set_assignments(game_id: int, body: AssignmentsPatch, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    game = _managed_game(session, game_id, user)
     rules.set_played(session, game, [rules.Pick(**p.model_dump()) for p in body.picks])
     session.commit()
     return game_out(session, game)
 
 
 @router.post("/{game_id}/result", response_model=GameOut)
-def set_result(game_id: int, body: ResultIn, session: Session = Depends(get_session)):
-    game = get_or_404(session, ChallengeGame, game_id, "Game")
+def set_result(game_id: int, body: ResultIn, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    game = _managed_game(session, game_id, user)
     rules.apply_result(session, game, body.result, source="manual", void_reason=body.reason)
     session.commit()
     return game_out(session, game)
 
 
 @router.post("/{game_id}/undo", response_model=GameOut)
-def undo(game_id: int, session: Session = Depends(get_session)):
-    game = get_or_404(session, ChallengeGame, game_id, "Game")
+def undo(game_id: int, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    game = _managed_game(session, game_id, user)
     rules.undo_result(session, game)
     session.commit()
     return game_out(session, game)
 
 
 @router.post("/{game_id}/review", response_model=GameOut)
-def review(game_id: int, body: ReviewIn, session: Session = Depends(get_session)):
+def review(game_id: int, body: ReviewIn, user: User = Depends(current_user), session: Session = Depends(get_session)):
     """For a game flagged "needs review": accept the Riot match anyway, or reject it."""
-    game = get_or_404(session, ChallengeGame, game_id, "Game")
+    game = _managed_game(session, game_id, user)
     if body.action == "accept":
         matcher.accept_review(session, game, get_app_settings(session))
     else:
@@ -73,10 +81,10 @@ def review(game_id: int, body: ReviewIn, session: Session = Depends(get_session)
 
 
 @router.post("/{game_id}/link-match", response_model=GameOut)
-async def link_match(game_id: int, body: LinkMatchIn, session: Session = Depends(get_session)):
+async def link_match(game_id: int, body: LinkMatchIn, user: User = Depends(current_user), session: Session = Depends(get_session)):
     """Attach a Riot match to a hand-recorded game and pay out its gold (SPEC 7.7). The recorded
     result stays as it is. Fetches the match from Riot if it hasn't been imported yet."""
-    game = get_or_404(session, ChallengeGame, game_id, "Game")
+    game = _managed_game(session, game_id, user)
     match_id = body.riot_match_id.strip().upper()
     if "_" not in match_id:
         raise HTTPException(400, "Match IDs look like NA1_1234567890")

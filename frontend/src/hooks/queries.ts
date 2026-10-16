@@ -127,7 +127,7 @@ export function useAction<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>)
     // Not awaited on purpose: the refetch can unmount the caller (e.g. the pending game panel), and
     // per-call onSuccess callbacks are skipped once that happens.
     onSuccess: () => {
-      void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'champions' })
+      void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'champions' && q.queryKey[0] !== 'me' })
     },
   })
 }

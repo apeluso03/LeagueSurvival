@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import ReviveToken
+from app.models import ReviveToken, Run, User
+from app.routers.access import current_user, require_act_for
 from app.routers.common import get_or_404
 from app.schemas import TokenUseIn
 from app.services import rules
@@ -28,8 +29,9 @@ def list_tokens(
 
 
 @router.post("/{token_id}/use", response_model=ReviveToken)
-def use_token(token_id: int, body: TokenUseIn, session: Session = Depends(get_session)):
+def use_token(token_id: int, body: TokenUseIn, user: User = Depends(current_user), session: Session = Depends(get_session)):
     token = get_or_404(session, ReviveToken, token_id, "Token")
+    require_act_for(user, session.get(Run, token.run_id), token.player_id)
     rules.use_token(session, token, body.champion_id)
     session.commit()
     session.refresh(token)

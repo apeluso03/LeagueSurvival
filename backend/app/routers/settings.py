@@ -3,7 +3,8 @@ from sqlmodel import Session
 
 from app.config import get_settings
 from app.db import get_session
-from app.models import AppSettings, Run
+from app.models import AppSettings, Run, User
+from app.routers.access import require_admin
 from app.routers.common import get_app_settings, get_or_404
 from app.schemas import SettingsOut, SettingsPatch
 from app.services import rules
@@ -21,7 +22,7 @@ def read_settings(session: Session = Depends(get_session)):
 
 
 @router.patch("", response_model=SettingsOut)
-def update_settings(body: SettingsPatch, session: Session = Depends(get_session)):
+def update_settings(body: SettingsPatch, _: User = Depends(require_admin), session: Session = Depends(get_session)):
     s = get_app_settings(session)
     changes = body.model_dump(exclude_unset=True, exclude={"void_pending"})
     if changes.get("active_run_id") is not None:

@@ -1614,3 +1614,67 @@ html.overlay-mode body::before {
   .slot-pop { animation: none; }
   .item-tile { transition: none; }
 }
+
+/* --- accounts: user chip and menu --------------------------------------------------------- */
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2rem;
+  padding: 0 0.85rem 0 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--color-slate-100);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--team) 22%, transparent), rgb(255 255 255 / 0.04));
+  box-shadow: inset 2px 0 0 var(--team), inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  transition: filter 150ms;
+}
+.user-chip:hover {
+  filter: brightness(1.2);
+}
+.user-chip-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--team);
+}
+.user-chip-role {
+  padding: 0 0.35rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #1a1408;
+  background: var(--color-gold-400);
+}
+.user-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  z-index: 60;
+  width: 14rem;
+  padding-bottom: 0.25rem;
+  background: rgb(9 12 18 / 0.98);
+  box-shadow: 0 0 0 1px rgb(46 155 255 / 0.35), 0 18px 40px -12px rgb(0 0 0 / 0.8);
+}
+.user-menu-item {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--color-slate-200);
+}
+.user-menu-item:hover,
+.user-menu-item:focus-visible {
+  background: rgb(46 155 255 / 0.12);
+  color: #fff;
+  outline: none;
+}
+
+/* "Only the run's owner can..." note in place of controls a player can't use. */
+.owner-only-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--color-slate-400);
+}

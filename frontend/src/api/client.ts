@@ -1,5 +1,9 @@
 import type {
+  Account,
   AppSettings,
+  Invite,
+  InviteInfo,
+  Me,
   Champion,
   AchievementReport,
   ChampionLine,
@@ -45,6 +49,12 @@ export class ApiError extends Error {
 
 export const isUnreachable = (e: unknown) => e instanceof ApiError && e.unreachable
 
+/** Called when the backend says the session is gone (signed out elsewhere, expired). */
+let onSignedOut: (() => void) | null = null
+export function setSignedOutHandler(fn: () => void) {
+  onSignedOut = fn
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response
   try {
@@ -69,6 +79,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     }
     // The backend always answers errors with JSON; a bare 5xx means the dev proxy couldn't reach it.
     if (!fromBackend && res.status >= 500) throw new ApiError(res.status, UNREACHABLE, true)
+    if (res.status === 401 && !path.startsWith('/auth/')) onSignedOut?.()
     throw new ApiError(res.status, message)
   }
   return res.status === 204 ? (undefined as T) : res.json()
@@ -84,6 +95,18 @@ function qs(params: Record<string, string | number | boolean | undefined>) {
 }
 
 export const api = {
+  me: () => get<Me>('/auth/me'),
+  setUp: (body: { username: string; password: string; player_id: number | null }) => post<Me>('/auth/setup', body),
+  login: (body: { username: string; password: string }) => post<Me>('/auth/login', body),
+  logout: () => post<void>('/auth/logout'),
+  changePassword: (body: { current_password: string; new_password: string }) => post<Me>('/auth/password', body),
+  invite: (token: string) => get<InviteInfo>(`/auth/invites/${encodeURIComponent(token)}`),
+  register: (body: { token: string; username: string; password: string }) => post<Me>('/auth/register', body),
+  accounts: () => get<{ accounts: Account[]; invites: Invite[] }>('/accounts'),
+  createInvite: (playerId: number) => post<Invite & { token: string }>('/accounts/invites', { player_id: playerId }),
+  revokeInvite: (id: number) => request<void>('DELETE', `/accounts/invites/${id}`),
+  deleteAccount: (id: number) => request<void>('DELETE', `/accounts/${id}`),
+
   settings: () => get<AppSettings>('/settings'),
   updateSettings: (body: Partial<AppSettings> & { void_pending?: boolean }) =>
     patch<AppSettings>('/settings', body),

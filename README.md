@@ -2,7 +2,18 @@
 
 A web app for running the "League of Legends Survival" challenge with friends: a shared champion pool, spin wheels, eliminations on losses, and revive tokens for win streaks. See [SPEC.md](SPEC.md) for the full design.
 
-**Status:** milestones M0 to M5 of the 2.0 spec are built: the manual challenge loop, Riot linking and stats, automatic results, and gold and the shop (items, contracts, rating grades). The online lobby (M7) is next.
+**Status:** milestones M0 to M5 of the 2.0 spec are built: the manual challenge loop, Riot linking and stats, automatic results, and gold and the shop (items, contracts, rating grades). Accounts are built: an owner account, invite links for each player, and per-player permissions. Live updates (WebSockets) and hosting come next.
+
+## Accounts
+
+The app needs a sign-in. The first time you open it, it asks you to make the **owner account**. That account owns every run made before accounts existed, and it manages the players, the settings and the invites.
+
+- **Inviting friends:** in Settings, under Accounts and invites, make an invite link for each player and send it to them. Each link works once and expires after 7 days. Whoever opens it picks a username and password, and plays as that player.
+- **What players can do:** see everything; buy and use their own items; see and spend their own gold; use their own revive tokens; and pick their own team colour and title.
+- **What only the run's owner can do:** spins, results, undo, pool fixes and shop settings. The owner can also open every player's shop and use anyone's items, so one person can still run the whole group.
+- **Lost passwords:** remove that person's account in Settings and send them a new invite link. Their games, gold and items stay.
+
+Passwords are hashed with scrypt. Sign-ins use an HttpOnly cookie that lasts 30 days.
 
 ## Running locally
 

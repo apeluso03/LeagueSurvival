@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import Champion
+from app.models import Champion, User
+from app.routers.access import require_admin
 from app.routers.common import get_or_404
 from app.services import ddragon, stats
 
@@ -18,7 +19,7 @@ def list_champions(session: Session = Depends(get_session)):
 
 
 @router.post("/refresh")
-async def refresh_champions(session: Session = Depends(get_session)):
+async def refresh_champions(_: User = Depends(require_admin), session: Session = Depends(get_session)):
     try:
         count = await ddragon.refresh_champions(session)
     except httpx.HTTPError as e:

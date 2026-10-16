@@ -6,6 +6,7 @@ import { splashUrl } from '../lib/champions'
 import { classColor } from '../lib/reel'
 import { num, pct } from '../lib/stats'
 import type { PoolEntry, Run } from '../types'
+import { useAccess } from '../hooks/useAuth'
 import { useOwnedItem } from '../hooks/useItems'
 import { BlacklistIcon, ShieldIcon, WheelIcon } from './icons'
 import { ErrorText, Modal, Spinner } from './ui'
@@ -61,8 +62,10 @@ export function ChampionCard({
   const color = classColor(entry.tags)
   const r = report.data
 
+  const { canManage, canActFor } = useAccess(run)
+  // Only tokens you may spend: your own (the run's owner can spend anyone's).
   const tokenByPlayer = new Map<number, number>()
-  for (const t of tokens.data ?? []) if (!tokenByPlayer.has(t.player_id)) tokenByPlayer.set(t.player_id, t.id)
+  for (const t of tokens.data ?? []) if (canActFor(t.player_id) && !tokenByPlayer.has(t.player_id)) tokenByPlayer.set(t.player_id, t.id)
 
   const reviveButtons =
     tokenByPlayer.size > 0 ? (
@@ -77,7 +80,9 @@ export function ChampionCard({
         </div>
       </div>
     ) : (
-      <p className="text-sm text-slate-400">No revive tokens. Win 3 in a row to get one.</p>
+      <p className="text-sm text-slate-400">
+        {canManage ? 'No revive tokens.' : "You don't have a revive token."} Win 3 in a row to get one.
+      </p>
     )
 
   return (
@@ -194,7 +199,7 @@ export function ChampionCard({
             )}
             <ErrorText error={report.error} />
 
-            {active && (
+            {active && canManage && (
               <details className="text-sm">
                 <summary className="cursor-pointer text-slate-400">Fix a mistake</summary>
                 <div className="mt-2 flex gap-2">

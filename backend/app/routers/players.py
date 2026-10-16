@@ -3,7 +3,8 @@ from sqlmodel import Session, col, delete, select
 
 from app.config import get_settings
 from app.db import get_session
-from app.models import Player, PlayerMatchStats, ReviveToken, Run, SpinAssignment
+from app.models import Player, PlayerMatchStats, ReviveToken, Run, SpinAssignment, User
+from app.routers.access import can_act_for, current_user, require_admin
 from app.routers.common import get_app_settings, get_or_404
 from app.schemas import PlayerIn, PlayerOut, PlayerPatch
 from app.services import achievements, recap, sync
@@ -37,30 +38,44 @@ async def _try_link(session: Session, player: Player) -> str | None:
     return None
 
 
-def player_out(player: Player, link_error: str | None = None) -> PlayerOut:
-    return PlayerOut(**player.model_dump(), link_error=link_error)
+# What a player may change about themselves; everything else (name, Riot ID) is the site owner's.
+SELF_FIELDS = {"color", "title"}
+
+
+def player_out(session: Session, player: Player, link_error: str | None = None) -> PlayerOut:
+    username = session.exec(select(User.username).where(User.player_id == player.id)).first()
+    return PlayerOut(**player.model_dump(), link_error=link_error, username=username)
 
 
 @router.get("", response_model=list[PlayerOut])
 def list_players(session: Session = Depends(get_session)):
-    return [player_out(p) for p in session.exec(select(Player).order_by(col(Player.display_name))).all()]
+    usernames = {pid: name for pid, name in session.exec(select(User.player_id, User.username)).all() if pid is not None}
+    players = session.exec(select(Player).order_by(col(Player.display_name))).all()
+    return [PlayerOut(**p.model_dump(), username=usernames.get(p.id)) for p in players]
 
 
 @router.post("", response_model=PlayerOut, status_code=201)
-async def create_player(body: PlayerIn, session: Session = Depends(get_session)):
+async def create_player(body: PlayerIn, _: User = Depends(require_admin), session: Session = Depends(get_session)):
     _check_region(body.region)
     player = Player(**body.model_dump())
     link_error = await _try_link(session, player)
     session.add(player)
     session.commit()
     session.refresh(player)
-    return player_out(player, link_error)
+    return player_out(session, player, link_error)
 
 
 @router.patch("/{player_id}", response_model=PlayerOut)
-async def update_player(player_id: int, body: PlayerPatch, session: Session = Depends(get_session)):
+async def update_player(
+    player_id: int, body: PlayerPatch, user: User = Depends(current_user), session: Session = Depends(get_session)
+):
     player = get_or_404(session, Player, player_id, "Player")
     changes = body.model_dump(exclude_unset=True)
+    if not user.is_admin:
+        if user.player_id != player_id:
+            raise HTTPException(403, "You can only edit your own player")
+        if set(changes) - SELF_FIELDS:
+            raise HTTPException(403, "Only the site owner can change names and Riot IDs")
     _check_region(changes.get("region"))
     if changes.get("title") is not None:
         earned = achievements.evaluate(session).get(player_id, {})
@@ -78,11 +93,11 @@ async def update_player(player_id: int, body: PlayerPatch, session: Session = De
     session.add(player)
     session.commit()
     session.refresh(player)
-    return player_out(player, link_error)
+    return player_out(session, player, link_error)
 
 
 @router.post("/{player_id}/link", response_model=PlayerOut)
-async def link_player(player_id: int, session: Session = Depends(get_session)):
+async def link_player(player_id: int, _: User = Depends(require_admin), session: Session = Depends(get_session)):
     """Retry the Riot ID lookup. Errors are returned as HTTP errors so the UI can show them."""
     player = get_or_404(session, Player, player_id, "Player")
     try:
@@ -94,12 +109,14 @@ async def link_player(player_id: int, session: Session = Depends(get_session)):
         raise HTTPException(code, str(e)) from e
     session.commit()
     session.refresh(player)
-    return player_out(player)
+    return player_out(session, player)
 
 
 @router.delete("/{player_id}", status_code=204)
-def delete_player(player_id: int, session: Session = Depends(get_session)):
+def delete_player(player_id: int, _: User = Depends(require_admin), session: Session = Depends(get_session)):
     player = get_or_404(session, Player, player_id, "Player")
+    if session.exec(select(User.id).where(User.player_id == player_id)).first():
+        raise HTTPException(409, "Someone plays as this player. Remove their account first.")
     in_games = session.exec(select(SpinAssignment.id).where(SpinAssignment.player_id == player_id)).first()
     has_tokens = session.exec(select(ReviveToken.id).where(ReviveToken.player_id == player_id)).first()
     if in_games or has_tokens:
@@ -114,9 +131,18 @@ def delete_player(player_id: int, session: Session = Depends(get_session)):
 
 
 @router.get("/{player_id}/profile")
-def player_profile(player_id: int, run_id: int | None = None, session: Session = Depends(get_session)):
-    """A player's page: stats, champions, recent games, runs, items and (for one run) gold over time."""
+def player_profile(
+    player_id: int, run_id: int | None = None, user: User = Depends(current_user), session: Session = Depends(get_session)
+):
+    """A player's page: stats, champions, recent games, runs, items and (for one run) gold over time.
+    Items and the gold timeline are private: only the player and the run's owner see them."""
     player = get_or_404(session, Player, player_id, "Player")
-    if run_id is not None:
-        get_or_404(session, Run, run_id, "Run")
-    return recap.player_profile(session, player, run_id)
+    run = get_or_404(session, Run, run_id, "Run") if run_id is not None else None
+    profile = recap.player_profile(session, player, run_id)
+    mine = user.is_admin or user.player_id == player_id or (run is not None and can_act_for(user, run, player_id))
+    if not mine:
+        profile["items"] = None
+        profile["gold_timeline"] = None
+        if isinstance(profile.get("stats"), dict):
+            profile["stats"]["gold_balance"] = None
+    return profile

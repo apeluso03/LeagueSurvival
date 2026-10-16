@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { ChampionCard } from '../components/ChampionCard'
 import { PoolCard, type CardAction } from '../components/PoolCard'
 import { EmptyState, ErrorText, LoadingState } from '../components/ui'
-import { useActiveRun, useChampionLines, useEconomy, usePlayerMap, usePool } from '../hooks/queries'
+import { useActiveRun, useChampionLines, useEconomy, usePlayerMap, usePool, useTokens } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
 import { docRect, flyCardTo } from '../lib/cardFlight'
 import {
   POOL_SORTS,
@@ -104,7 +105,9 @@ function Pool({ run }: { run: Run }) {
   const lines = linesQuery.data ?? NO_LINES
   const entries = useMemo(() => pool.data ?? [], [pool.data])
   const active = run.status === 'active'
-  const canRevive = active && run.tokens_available > 0
+  const { canActFor } = useAccess(run)
+  const myTokens = (useTokens(run.id).data ?? []).filter((t) => canActFor(t.player_id)).length
+  const canRevive = active && myTokens > 0
   const canShield = active && (economy.data ?? []).some((e) => (e.unused.shield ?? 0) > 0)
 
   // Search + quick filter first; class counts are taken from that, then the class filter applies.
@@ -230,7 +233,7 @@ function Pool({ run }: { run: Run }) {
 
       {canRevive && deadTotal > 0 && (
         <p className="glass rounded-2xl px-4 py-2.5 text-sm text-gold-200">
-          ✦ You have {run.tokens_available} revive token{run.tokens_available > 1 ? 's' : ''}. Hit Revive on an eliminated
+          ✦ You have {myTokens} revive token{myTokens > 1 ? 's' : ''}. Hit Revive on an eliminated
           champion to bring them back.
         </p>
       )}

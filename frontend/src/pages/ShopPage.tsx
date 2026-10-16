@@ -17,6 +17,7 @@ import {
   usePool,
   useShop,
 } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
 import { useCountUp } from '../hooks/useCountUp'
 import { ITEM_META, ITEM_ORDER, signedGold } from '../lib/items'
 import { playPurchase, unlock } from '../lib/sound'
@@ -51,6 +52,7 @@ function Shop({ run }: { run: Run }) {
   const players = usePlayers()
   const economy = useEconomy(run.id)
   const shop = useShop(run.id)
+  const { canActFor, canManage } = useAccess(run)
   const [playerId, setPlayerId] = useState<number | null>(() => {
     try {
       return Number(localStorage.getItem(PLAYER_KEY)) || null
@@ -58,7 +60,8 @@ function Shop({ run }: { run: Run }) {
       return null
     }
   })
-  const list = players.data ?? []
+  // Your own shop; the run's owner can open everyone's (MVP single-user play).
+  const list = (players.data ?? []).filter((p) => canActFor(p.id))
   const current = list.find((p) => p.id === playerId) ?? list[0]
   useEffect(() => {
     if (!current) return
@@ -70,6 +73,13 @@ function Shop({ run }: { run: Run }) {
   }, [current])
 
   if (players.isLoading || shop.isLoading) return <LoadingState />
+  if (!canManage && !list.length) {
+    return (
+      <EmptyState title="Your account isn't linked to a player">
+        <p className="text-sm text-slate-400">Ask the owner for an invite link for your player to get your own shop.</p>
+      </EmptyState>
+    )
+  }
   if (!current || !shop.data) return <EmptyState title="Add players in Settings first" />
   const econ = economy.data?.find((e) => e.player_id === current.id)
 
@@ -77,7 +87,7 @@ function Shop({ run }: { run: Run }) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-2 text-2xl font-bold text-gold-100">Shop</h1>
-        <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Whose shop">
+        {list.length > 1 && <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Whose shop">
           {list.map((p) => {
             const on = p.id === current.id
             const bal = economy.data?.find((e) => e.player_id === p.id)?.balance
@@ -101,7 +111,7 @@ function Shop({ run }: { run: Run }) {
               </button>
             )
           })}
-        </div>
+        </div>}
       </div>
 
       {run.status !== 'active' && <p className="text-sm text-red-200">This run has ended, so the shop is closed.</p>}

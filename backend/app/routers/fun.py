@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import Champion, Run
+from app.models import Champion, Run, User
+from app.routers.access import require_admin
 from app.routers.common import get_or_404
 from app.services import achievements, meta, shame
 
@@ -54,7 +55,7 @@ def meta_status(session: Session = Depends(get_session)):
 
 
 @router.post("/meta/positions/refresh")
-async def refresh_positions(session: Session = Depends(get_session)):
+async def refresh_positions(_: User = Depends(require_admin), session: Session = Depends(get_session)):
     try:
         count = await meta.refresh_positions(session)
     except httpx.HTTPError as e:

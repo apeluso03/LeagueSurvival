@@ -25,6 +25,7 @@ export interface Player {
   color: string | null // broadcast team colour; null = the default for their id
   title: string | null // achievement id whose title they show
   link_error?: string | null
+  username: string | null // the account that plays as this player, if anyone has signed up
 }
 
 export interface Champion {
@@ -53,6 +54,7 @@ export interface Run {
   pending_game_id: number | null
   games_played: number
   owner_player_id: number | null
+  owner_user_id: number | null // the account that runs spins, results and settings for this run
   lobby_code: string | null
   shielded_count: number
 }
@@ -398,9 +400,47 @@ export interface PlayerProfile {
   champions: { champion_id: string; games: number; wins: number }[]
   games: ProfileGame[]
   runs: { run_id: number; name: string; status: 'active' | 'ended'; games: number; wins: number }[]
-  items: Partial<Record<ItemType, { bought: number; used: number }>>
-  gold_timeline: { at: string; balance: number; amount: number; reason: string }[]
+  // Private: null unless it's your own player (or you run this run).
+  items: Partial<Record<ItemType, { bought: number; used: number }>> | null
+  gold_timeline: { at: string; balance: number; amount: number; reason: string }[] | null
   tokens_earned: number
+}
+
+// --- accounts ---------------------------------------------------------------------------------
+
+export interface MeUser {
+  id: number
+  username: string
+  player_id: number | null
+  is_admin: boolean // the site owner
+}
+
+export interface Me {
+  user: MeUser | null
+  setup_needed: boolean
+  players: { id: number; display_name: string }[] // only while setting up
+}
+
+export interface Account {
+  id: number
+  username: string
+  player_id: number | null
+  is_admin: boolean
+  created_at: string
+  last_login_at: string | null
+}
+
+export interface Invite {
+  id: number
+  player_id: number
+  created_at: string
+  expires_at: string
+}
+
+export interface InviteInfo {
+  player_id: number
+  display_name: string
+  expires_at: string
 }
 
 // --- trophies, hall of shame, wrapped -------------------------------------------------------

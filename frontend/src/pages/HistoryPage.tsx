@@ -15,6 +15,7 @@ import {
   usePoolEvents,
   useRuns,
 } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
 import type { Game, PoolEvent, Run } from '../types'
 
 const STATUS_STYLE: Record<Game['status'], string> = {
@@ -90,6 +91,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
   const champs = useChampionMap()
   const players = usePlayerMap()
   const undo = useAction((id: number) => api.undo(id))
+  const { canManage } = useAccess(run ?? null)
   const [filter, setFilter] = useState<Game['status'] | 'all'>('all')
 
   if (games.isLoading) return <LoadingState />
@@ -121,7 +123,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
 
       <ul className="flex flex-col gap-2">
         {shown.map((g) => {
-          const canUndo = g === latest && g.status !== 'pending' && run?.status === 'active'
+          const canUndo = canManage && g === latest && g.status !== 'pending' && run?.status === 'active'
           return (
             <li key={g.id} className="card flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -199,7 +201,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                 </div>
               )}
               {g.match && <MatchSummaryView match={g.match} flagOptions={g.needs_review} />}
-              {(g.status === 'won' || g.status === 'lost') && !g.riot_match_id && run?.status === 'active' && (
+              {canManage && (g.status === 'won' || g.status === 'lost') && !g.riot_match_id && run?.status === 'active' && (
                 <LinkMatchForm gameId={g.id} />
               )}
             </li>

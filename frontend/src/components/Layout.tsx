@@ -6,6 +6,7 @@ import { setMuted, useMuted } from '../lib/sound'
 import { ErrorBoundary } from './ErrorBoundary'
 import { LogoMark, SoundOffIcon, SoundOnIcon } from './icons'
 import { ModeToggle } from './ModeToggle'
+import { UserMenu } from './UserMenu'
 import { BackendDownBanner, ResultWatcher, NoChampionsBanner } from './StatusBanners'
 
 const TABS = [
@@ -97,7 +98,10 @@ export function Layout() {
             <ModeToggle />
             <SoundToggle />
           </div>
-          <RunSummary />
+          <div className="flex items-center gap-3">
+            <RunSummary />
+            <UserMenu />
+          </div>
         </div>
         <nav className="mx-auto max-w-7xl overflow-x-auto px-4">
           <div className="tab-strip">

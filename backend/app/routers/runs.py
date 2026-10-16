@@ -4,7 +4,8 @@ from fastapi import APIRouter, Body, Depends
 from sqlmodel import Session, col, select
 
 from app.db import get_session
-from app.models import Champion, InventoryItem, Player, PoolEntry, PoolEvent, ReviveToken, Run
+from app.models import Champion, InventoryItem, Player, PoolEntry, PoolEvent, ReviveToken, Run, User
+from app.routers.access import current_user, require_act_for, require_admin, require_manager
 from app.routers.common import game_out, get_app_settings, get_or_404, run_out
 from app.schemas import AssignmentOut, PoolEntryOut, RunIn, RunOut, SpinIn, SpinOut
 from app.services import recap, rules, stats
@@ -19,8 +20,9 @@ def list_runs(session: Session = Depends(get_session)):
 
 
 @router.post("", response_model=RunOut, status_code=201)
-def create_run(body: RunIn, session: Session = Depends(get_session)):
+def create_run(body: RunIn, user: User = Depends(require_admin), session: Session = Depends(get_session)):
     run = rules.create_run(session, body.name, body.options_per_player, body.champion_ids)
+    run.owner_user_id = user.id
     if body.owner_player_id is not None:
         get_or_404(session, Player, body.owner_player_id, "Player")
         run.owner_player_id = body.owner_player_id
@@ -37,15 +39,19 @@ def get_run(run_id: int, session: Session = Depends(get_session)):
 
 
 @router.delete("/{run_id}", status_code=204)
-def delete_run(run_id: int, session: Session = Depends(get_session)):
+def delete_run(run_id: int, user: User = Depends(current_user), session: Session = Depends(get_session)):
     """Permanently delete a run and everything in it (games, pool, gold, items)."""
-    rules.delete_run(session, get_or_404(session, Run, run_id, "Run"))
+    run = get_or_404(session, Run, run_id, "Run")
+    require_manager(user, run)
+    rules.delete_run(session, run)
     session.commit()
 
 
 @router.post("/{run_id}/end", response_model=RunOut)
-def end_run(run_id: int, session: Session = Depends(get_session)):
-    run = rules.end_run(session, get_or_404(session, Run, run_id, "Run"))
+def end_run(run_id: int, user: User = Depends(current_user), session: Session = Depends(get_session)):
+    run = get_or_404(session, Run, run_id, "Run")
+    require_manager(user, run)
+    run = rules.end_run(session, run)
     session.commit()
     return run_out(session, run)
 
@@ -91,8 +97,9 @@ def champion_lines(run_id: int, session: Session = Depends(get_session)):
 
 
 @router.post("/{run_id}/pool/{champion_id}/eliminate", response_model=RunOut)
-def eliminate(run_id: int, champion_id: str, session: Session = Depends(get_session)):
+def eliminate(run_id: int, champion_id: str, user: User = Depends(current_user), session: Session = Depends(get_session)):
     run = get_or_404(session, Run, run_id, "Run")
+    require_manager(user, run)
     rules.manual_eliminate(session, run, champion_id)
     session.commit()
     return run_out(session, run)
@@ -103,25 +110,29 @@ def revive(
     run_id: int,
     champion_id: str,
     token_id: int | None = Body(default=None, embed=True),
+    user: User = Depends(current_user),
     session: Session = Depends(get_session),
 ):
-    """Revive with a token when token_id is given, otherwise a logged manual fix."""
+    """Revive with a token when token_id is given, otherwise a logged manual fix (run owner only)."""
     run = get_or_404(session, Run, run_id, "Run")
     if token_id is None:
+        require_manager(user, run)
         rules.manual_revive(session, run, champion_id)
     else:
         token = get_or_404(session, ReviveToken, token_id, "Token")
         if token.run_id != run_id:
             raise rules.RuleError("That token belongs to a different run")
+        require_act_for(user, run, token.player_id)
         rules.use_token(session, token, champion_id)
     session.commit()
     return run_out(session, run)
 
 
 @router.post("/{run_id}/spins", response_model=SpinOut)
-def spin(run_id: int, body: SpinIn, session: Session = Depends(get_session)):
+def spin(run_id: int, body: SpinIn, user: User = Depends(current_user), session: Session = Depends(get_session)):
     """Spin for the given players. With challenge mode off, this is a practice spin that saves nothing."""
     run = get_or_404(session, Run, run_id, "Run")
+    require_manager(user, run)
     settings = get_app_settings(session)
 
     if settings.challenge_mode:
