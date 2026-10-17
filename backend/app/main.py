@@ -2,7 +2,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, select
@@ -10,8 +10,9 @@ from sqlmodel import Session, select
 from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
-from app.routers import champions, fun, games, players, riot, runs, settings, shop, stats, tokens
-from app.jobs import crawler, poller
+from app.routers import account, champions, fun, games, live, players, riot, runs, settings, shop, stats, tokens
+from app.routers.access import current_user
+from app.jobs import crawler, live_tracker, poller
 from app.services import ddragon, meta
 from app.services.rules import RuleError
 
@@ -61,6 +62,7 @@ async def lifespan(_app: FastAPI):
         tasks = [
             asyncio.create_task(poller.run_forever(engine)),
             asyncio.create_task(crawler.run_forever(engine)),
+            asyncio.create_task(live_tracker.run_forever(engine)),
             asyncio.create_task(import_positions_if_missing()),
         ]
     yield
@@ -88,5 +90,7 @@ def health():
     return {"ok": True}
 
 
-for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun):
-    app.include_router(module.router)
+# Signing in and invite links work signed out; everything else needs an account.
+app.include_router(account.router)
+for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun, live):
+    app.include_router(module.router, dependencies=[Depends(current_user)])

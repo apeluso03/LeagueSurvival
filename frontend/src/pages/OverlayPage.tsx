@@ -7,20 +7,23 @@ import { LowerThird } from '../components/LowerThird'
 import { ResultWatcher } from '../components/StatusBanners'
 import { useChampionMap, useTeamColors } from '../hooks/queries'
 import { loadingUrl } from '../lib/champions'
+import { BLUE, DRAGON_COLOR, RED, SIDE_COLOR, clock, goldShort } from '../lib/live'
 import { teamColor } from '../lib/teams'
-import type { Game } from '../types'
+import type { Game, LiveState, TeamId } from '../types'
 
 const POLL_MS = 4000
 
 /**
  * Stream overlay for OBS (add it as a Browser Source, 1920x1080). Transparent page with the run's
  * score bug, the current picks, and the VICTORY / ELIMINATED / LOCKED IN moments.
- * ?picks=0 hides the picks, ?moments=0 hides the moments.
+ * During a tracked game it adds a live score bar (kills, clock, gold lead, towers, dragons).
+ * ?picks=0 hides the picks, ?moments=0 hides the moments, ?live=0 hides the live bar.
  */
 export function OverlayPage() {
   const [params] = useSearchParams()
   const showPicks = params.get('picks') !== '0'
   const showMoments = params.get('moments') !== '0'
+  const showLive = params.get('live') !== '0'
   useTeamColors()
 
   // Transparent page while the overlay is open.
@@ -36,6 +39,8 @@ export function OverlayPage() {
   const gameId = run.data?.pending_game_id
   const game = useQuery({ queryKey: ['game', gameId], queryFn: () => api.game(gameId!), enabled: gameId != null, refetchInterval: POLL_MS })
   const r = run.data
+  const live = useQuery({ queryKey: ['live'], queryFn: api.live, refetchInterval: 3000, enabled: showLive })
+  const liveState = live.data?.live && live.data.live.ended_at == null ? live.data.live.state : null
 
   return (
     <div className="overlay-root">
@@ -67,7 +72,8 @@ export function OverlayPage() {
           </div>
         </div>
       )}
-      {showPicks && game.data?.status === 'pending' && <OverlayPicks game={game.data} />}
+      {showLive && liveState && <OverlayLive st={liveState} />}
+      {showPicks && game.data?.status === 'pending' && !liveState && <OverlayPicks game={game.data} />}
       {showMoments && (
         <>
           <ResultWatcher toasts={false} />
@@ -93,6 +99,43 @@ function OverlayPicks({ game }: { game: Game }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/** Broadcast-style live score bar: kills, clock and item-gold lead, towers and dragons per side. */
+function OverlayLive({ st }: { st: LiveState }) {
+  const blue = st.teams['100']
+  const red = st.teams['200']
+  const lead = blue.gold - red.gold
+  const side = (team: TeamId, right: boolean) => {
+    const t = team === BLUE ? blue : red
+    return (
+      <div className={`flex items-center gap-3 ${right ? 'flex-row-reverse' : ''}`}>
+        <b className="font-display text-4xl text-white tabular-nums">{t.kills}</b>
+        <span className="flex flex-col text-xs text-slate-200 tabular-nums" style={{ alignItems: right ? 'flex-end' : 'flex-start' }}>
+          <span>
+            {goldShort(t.gold)} gold · {t.towers} {t.towers === 1 ? 'tower' : 'towers'}
+          </span>
+          <span className="flex gap-0.5">
+            {t.dragons.map((d, i) => (
+              <span key={i} className="h-2.5 w-2.5 rotate-45" style={{ background: DRAGON_COLOR[d] ?? '#8a93a5' }} />
+            ))}
+          </span>
+        </span>
+      </div>
+    )
+  }
+  return (
+    <div className="overlay-live" style={{ '--blue': SIDE_COLOR[BLUE], '--red': SIDE_COLOR[RED] } as CSSProperties}>
+      {side(BLUE, false)}
+      <div className="flex flex-col items-center px-4">
+        <b className="font-display text-2xl text-white tabular-nums">{clock(st.game_time)}</b>
+        <small className="text-xs text-slate-300 tabular-nums">
+          {lead === 0 ? 'Even' : `${lead > 0 ? 'Blue' : 'Red'} +${goldShort(Math.abs(lead))}`}
+        </small>
+      </div>
+      {side(RED, true)}
     </div>
   )
 }

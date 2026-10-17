@@ -66,7 +66,7 @@ export function LockInMoment({ game, onDone }: { game: Game; onDone: () => void 
 }
 
 /** The pending game once everyone has picked, laid out like the in-game loading screen. */
-export function LoadingScreen({ game, onEdit, builds }: { game: Game; onEdit: () => void; builds: Map<string, CompPick> }) {
+export function LoadingScreen({ game, onEdit, builds }: { game: Game; onEdit?: () => void; builds: Map<string, CompPick> }) {
   const picks = usePicks(game)
   const pool = usePool(game.run_id)
   const shielded = new Set((pool.data ?? []).filter((e) => e.shield_item_id).map((e) => e.champion_id))
@@ -74,9 +74,11 @@ export function LoadingScreen({ game, onEdit, builds }: { game: Game; onEdit: ()
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-2 px-1">
         <h2 className="text-xs font-semibold tracking-[0.16em] text-slate-400 uppercase">Loading into game {game.id}</h2>
-        <button className="text-xs text-slate-400 underline hover:text-slate-200" onClick={onEdit}>
+        {onEdit && (
+          <button className="text-xs text-slate-400 underline hover:text-slate-200" onClick={onEdit}>
           Change picks
         </button>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3 sm:flex sm:justify-center">
         {picks.map((p, i) => (

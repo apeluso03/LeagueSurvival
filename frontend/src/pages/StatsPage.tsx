@@ -10,6 +10,7 @@ import {
   useRiotStatus,
   useRuns,
 } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
 import { num, pct, sortRows } from '../lib/stats'
 import { GoldBadge } from '../components/Gold'
 import { LowerThird } from '../components/LowerThird'
@@ -32,6 +33,7 @@ export function StatsPage() {
   const runs = useRuns()
   const riot = useRiotStatus()
   const sync = useAction(api.sync)
+  const { isAdmin } = useAccess()
   const [challengeOnly, setChallengeOnly] = useState(true)
   // undefined = follow the active run; null = all runs
   const [pickedRun, setPickedRun] = useState<number | null | undefined>(undefined)
@@ -71,7 +73,7 @@ export function StatsPage() {
             </option>
           ))}
         </select>
-        {riot.data?.key_set && (
+        {riot.data?.key_set && isAdmin && (
           <button className="btn-secondary ml-auto" disabled={sync.isPending} onClick={() => sync.mutate(undefined)}>
             {sync.isPending ? 'Syncing...' : 'Sync matches'}
           </button>

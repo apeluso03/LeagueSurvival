@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
 import { useAction, useActiveRun, useChampions, usePlayers, useRiotStatus, useRuns, useSettings, useShop } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
+import { AccountSection, AccountsAdminSection } from './SettingsAccounts'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { allTags, filterChampions } from '../lib/champions'
 import { QUEUES } from '../lib/queues'
@@ -11,16 +13,28 @@ import { TEAM_COLORS, teamColor } from '../lib/teams'
 import type { AppSettings, Player, Run, ShopConfig } from '../types'
 
 export function SettingsPage() {
+  const { isAdmin, canManage, myPlayerId } = useAccess()
+  const me = usePlayers().data?.find((p) => p.id === myPlayerId)
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [hash])
+  // Site settings are the owner's; the run's owner handles its shop and gold; everyone has an account.
   return (
     <div className="flex flex-col gap-6">
-      <PlayersSection />
-      <RunsSection />
-      <ShopSettingsSection />
-      <GoldAdjustSection />
-      <ChallengeSection />
-      <MetaSection />
-      <OverlaySection />
-      <ChampionsSection />
+      <AccountSection colorPicker={me && <TeamColorPicker player={me} />} />
+      {isAdmin && <AccountsAdminSection />}
+      {isAdmin && <PlayersSection />}
+      {isAdmin && <RunsSection />}
+      {canManage && <ShopSettingsSection />}
+      {canManage && <GoldAdjustSection />}
+      {isAdmin && <ChallengeSection />}
+      {isAdmin && <MetaSection />}
+      {isAdmin && <OverlaySection />}
+      {isAdmin && <ChampionsSection />}
+      {!isAdmin && !canManage && (
+        <p className="text-sm text-slate-400">Players, runs and the rest of the settings are managed by the site owner.</p>
+      )}
     </div>
   )
 }
@@ -806,7 +820,8 @@ function MetaSection() {
     <Section title="High-elo data (comp suggestions)">
       <p className="text-sm text-slate-400">
         Riot doesn't publish global win rates, so the app collects its own: it downloads recent ranked games from the
-        Challenger, Grandmaster and Master ladders and counts each champion's roles, rune pages and items. It runs in the
+        Challenger, Grandmaster and Master ladders and counts each champion's roles, rune pages, items, summoner spells and
+        how it does against every enemy champion (for suggested bans). It runs in the
         background at about half your Riot key's rate limit, and keeps the two newest patches.
       </p>
       <div className="flex flex-wrap items-center gap-3">
@@ -859,6 +874,12 @@ function MetaSection() {
           {s.last_run_at ? `Last batch ${new Date(s.last_run_at).toLocaleTimeString()}.` : 'Starting up...'} Roughly 30,000 matches a day; rarely played champs fill in last.
         </p>
       )}
+      {s?.key_set && on && s.backfill_remaining > 0 && (
+        <p className="text-xs text-hex-200">
+          Filling in summoner spells and matchups for {s.backfill_remaining.toLocaleString()} matches counted before they
+          were tracked (about {Math.max(1, Math.round((s.backfill_remaining * 2.5) / 60))} min).
+        </p>
+      )}
       {s?.last_error && <p className="text-sm text-red-300">Last error: {s.last_error}</p>}
       {positions.data && <p className="text-sm text-hex-200">Updated roles for {positions.data.count} champions.</p>}
       <ErrorText error={update.error ?? positions.error ?? status.error} />
@@ -882,7 +903,8 @@ function OverlaySection() {
       <p className="text-sm text-slate-400">
         Add this page to OBS (Sources → + → Browser, width 1920, height 1080). It has a see-through background and shows
         the run's score bug, the current picks, and the VICTORY / ELIMINATED / LOCKED IN moments. Add{' '}
-        <code>?picks=0</code> or <code>?moments=0</code> to hide parts.
+        <code>?picks=0</code> or <code>?moments=0</code> to hide parts. The overlay needs a signed-in browser: in OBS,
+        right-click the source, pick Interact, and sign in once.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <code className="rounded-sm bg-black/50 px-3 py-2 text-sm text-hex-200">{url}</code>

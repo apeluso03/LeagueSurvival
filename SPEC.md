@@ -1,6 +1,6 @@
 # League of Legends Survival Tracker: Project Spec
 
-Version 0.2 (MVP plan + Gold and Shop). Owner: Alex Peluso.
+Version 0.3 (MVP, Gold and Shop, accounts; plan for a public site with many groups). Owner: Alex Peluso.
 Repo: github.com/apeluso03/LeagueSurvival
 
 ## 1. Overview
@@ -18,7 +18,9 @@ A web app for a group of friends doing the "League of Legends Survival" challeng
 
 Riot API integration pulls match data so the app can track stats, award gold, and remove champions automatically. A challenge mode switch keeps casual games from affecting the pool or earning gold.
 
-For the MVP the app is used by one person (Alex, the run owner) on behalf of the group, including buying and using items for other players. The design leaves room for a shared online lobby later, where each player logs in and uses their own shop.
+Each person signs in with their own account. The run's owner runs the wheels and records results, and can still act for everyone (buying and using items for other players), so one person can run the whole group alone. Every other player manages their own gold, shop and items from their own device.
+
+**Long-term goal:** a public website. Anyone can sign up, start their own group and run as its owner, and invite their own friends, each group with its own players and settings. Section 12 has the plan.
 
 ## 2. Goals and Non-Goals
 
@@ -33,8 +35,8 @@ For the MVP the app is used by one person (Alex, the run owner) on behalf of the
 8. Award gold per player per run from Riot match stats, and let the owner buy and use shop items on each player's behalf.
 
 ### Non-goals for MVP
-- Multi-user accounts or logins (single user only).
-- Real-time multiplayer lobby (planned for later, see Section 12).
+- Open sign-up and separate groups on one site (planned, see 12.4). Today one site holds one group, and new accounts join only through invite links.
+- Real-time updates between devices (planned next, see 12.3).
 - Reading live champ select data (the public Riot API does not offer this).
 - Mobile app (web only, but the layout should work on a phone).
 
@@ -71,21 +73,26 @@ Keep the Riot API key on the backend only. The frontend never talks to Riot dire
 LeagueSurvival/
 ├── SPEC.md
 ├── README.md
-├── docker-compose.yml
+├── dev.ps1                      # Windows quick start: sets up and runs both servers
 ├── .env.example
 ├── backend/
 │   ├── pyproject.toml
-│   ├── alembic/
+│   ├── alembic/                 # migrations (idempotent; see 12.5 on SQLite)
 │   ├── app/
-│   │   ├── main.py              # FastAPI app, startup tasks
-│   │   ├── config.py            # env settings (RIOT_API_KEY, DB_URL, etc.)
+│   │   ├── main.py              # FastAPI app, startup tasks (migrations, champion import, jobs)
+│   │   ├── config.py            # env settings (RIOT_API_KEY, DATABASE_URL, CORS_ORIGINS, ...)
 │   │   ├── db.py                # engine, session
 │   │   ├── models/              # SQLModel tables
 │   │   ├── schemas/             # request/response models
-│   │   ├── routers/             # players, runs, pool, spins, games, stats, shop, settings, sync
+│   │   ├── routers/
+│   │   │   ├── access.py        # who is signed in, and permission checks
+│   │   │   ├── account.py       # sign-up, sign-in, invites, account management
+│   │   │   ├── fun.py           # trophies, hall of shame, wrapped, high-elo meta, comp suggestions
+│   │   │   └── ...              # players, runs, games, tokens, shop, stats, settings, riot, champions
 │   │   ├── services/
+│   │   │   ├── auth.py          # password hashing, sessions, invites, sign-in throttle
 │   │   │   ├── ddragon.py       # champion list and images
-│   │   │   ├── riot_client.py   # Account-V1, Match-V5, rate limiting
+│   │   │   ├── riot_client.py   # Account-V1, Match-V5, League-V4, rate limiting
 │   │   │   ├── spin.py          # random draw logic (respects blacklists)
 │   │   │   ├── matcher.py       # links Riot matches to challenge games
 │   │   │   ├── rules.py         # elimination, shields, streaks, revive tokens
@@ -93,30 +100,40 @@ LeagueSurvival/
 │   │   │   ├── shop.py          # catalog, purchases, item effects
 │   │   │   ├── contracts.py     # contract goal generation and resolution
 │   │   │   ├── rating.py        # in-app performance grade (see 7.10)
-│   │   │   └── stats.py         # stat calculations
+│   │   │   ├── stats.py         # stat calculations, champion lines, option facts
+│   │   │   ├── recap.py         # run recap and player profile pages
+│   │   │   ├── achievements.py  # trophies and the titles they unlock
+│   │   │   ├── shame.py         # hall of shame and monthly Wrapped
+│   │   │   └── meta.py          # high-elo crawler data, role and build suggestions
 │   │   └── jobs/
-│   │       └── poller.py        # checks for new matches
+│   │       ├── poller.py        # checks for new matches of tracked players
+│   │       └── crawler.py       # slowly crawls high-elo matches for build suggestions
 │   └── tests/
 └── frontend/
     ├── package.json
+    ├── public/fonts/            # League display font (see README credits)
     └── src/
         ├── api/                 # typed API client
         ├── types/
-        ├── components/          # Wheel, ChampionCard, PlayerCard, ModeToggle, ItemCard, GoldBadge, ...
+        ├── lib/                 # reel math, odds, danger, facts, teams, tiers, sound, ...
+        ├── components/          # CaseReel, LowerThird, PickBar, LockIn, WinMoment, BuildStrip, UserMenu, ...
         ├── pages/
-        │   ├── WheelsPage.tsx
-        │   ├── StatsPage.tsx
-        │   ├── PoolPage.tsx
-        │   ├── ShopPage.tsx
-        │   ├── HistoryPage.tsx
-        │   └── SettingsPage.tsx
-        └── hooks/
+        │   ├── LandingPage.tsx, AuthPages.tsx (sign in, set up, invite)
+        │   ├── WheelsPage.tsx, PoolPage.tsx, ShopPage.tsx, StatsPage.tsx
+        │   ├── TrophiesPage.tsx, WrappedPage.tsx, HistoryPage.tsx
+        │   ├── PlayerPage.tsx, RecapPage.tsx, OverlayPage.tsx
+        │   └── SettingsPage.tsx, SettingsAccounts.tsx
+        └── hooks/               # queries, useAuth (access rules for the UI), items, ...
 ```
 
 ## 6. Key Concepts
 
 - **Player:** a friend in the group, linked to a Riot ID (`gameName#tagLine`).
-- **Owner:** the person who created the run. Only the owner can use the Wheels tab, record results, and (in the MVP) act for other players in the shop.
+- **Account (User):** a username and password. Plays as at most one Player. Accounts are made through the first-run setup or an invite link.
+- **Site owner:** the first account made on a site. Manages players, invites, settings and every run. (In the public version this role becomes a support admin, and each group has its own owner; see 12.4.)
+- **Run owner:** the account that created the run. Spins, records results, undoes, fixes the pool, edits shop settings, and can act for any player in that run (their gold, shop, items and tokens).
+- **Invite:** a one-time sign-up link for one Player. Expires after 7 days. Only the site owner can make one.
+- **Group (planned, 12.4):** a set of friends with their own players, runs, settings and invites, owned by one account.
 - **Run:** one full attempt at the challenge. Has its own pool, win count, streak, and gold balances. Lets the group restart without losing history.
 - **Pool:** the set of champions in a run, each marked alive or eliminated, and optionally shielded.
 - **Spin:** one press of "Spin" for 2 to 5 players. Creates a Challenge Game.
@@ -124,7 +141,9 @@ LeagueSurvival/
 - **Challenge Mode:** global on/off switch. When off, spins are "practice spins" that do not create Challenge Games, and imported matches never affect the pool or earn gold.
 - **Revive Token:** earned by a 3-game win streak. Spent to bring one eliminated champion back.
 - **Gold:** per-player, per-run currency earned from Riot stats in challenge games. Starts at 0 for every new run.
-- **Item:** something bought in the shop. Owned by one player. Only that player's items can be used for that player.
+- **Item:** something bought in the shop. Owned by one player. Only that player (or the run owner) can use it.
+- **Achievement and title:** trophies unlocked by play (22 so far, see 10.7). Each unlocks a title a player can show on their profile.
+- **Team colour:** each player's broadcast colour, used on name bars, reels and charts. Picked in Settings.
 
 ## 7. Game Rules (Source of Truth)
 
@@ -286,15 +305,18 @@ Each part is normalized to 0..1 against the player's own team in that match, the
 Player
   id, display_name, riot_game_name, riot_tag_line, puuid (nullable),
   platform (e.g. "na1"), region (e.g. "americas"),
-  pin_hash (nullable, for future login), discord_id (nullable, for future login),
+  pin_hash (nullable, unused), discord_id (nullable, for Discord login later),
+  color (nullable, "#rrggbb" team colour), title (nullable, achievement id shown as a title),
   created_at
 
 Champion                      # cached from Data Dragon
   id (string, e.g. "MonkeyKing"), key (int, e.g. 62, matches Riot match data),
-  name (e.g. "Wukong"), title, tags (JSON, e.g. ["Fighter"]), image_url, ddragon_version
+  name (e.g. "Wukong"), title, tags (JSON, e.g. ["Fighter"]), image_url, ddragon_version,
+  positions (JSON, roles it's played in, most common first; from Meraki Analytics)
 
 Run
   id, name, status ("active" | "ended"), owner_player_id, lobby_code,
+  owner_user_id (the account that runs it),
   options_per_player (3 | 4), win_count, current_streak, best_streak,
   shop_config (JSON: item prices, contract targets and payouts, gold rates),
   started_at, ended_at
@@ -352,9 +374,40 @@ PlayerMatchStats              # one row per tracked player per match
   vision_score, game_duration, queue_id, rating_grade,
   is_challenge (bool), challenge_game_id (nullable)
 
-AppSettings                   # single row
+AppSettings                   # single row today; one per group later (12.4)
   challenge_mode (bool), active_run_id, allowed_queue_ids (JSON),
-  poll_interval_seconds, remake_threshold_seconds
+  poll_interval_seconds, remake_threshold_seconds, last_used_player_ids (JSON),
+  last_sync_at, last_sync_error,
+  meta_crawl (bool), meta_platform (e.g. "na1"), meta_region (e.g. "americas")
+
+User                          # a login account
+  id, username (unique, lowercase), password_hash (scrypt),
+  player_id (nullable, unique: the Player they play as), is_admin (site owner),
+  created_at, last_login_at
+
+AuthSession                   # one signed-in browser
+  token_hash (SHA-256 of the cookie token, primary key), user_id, created_at, expires_at
+
+Invite                        # one-time sign-up link for a Player
+  id, token_hash (SHA-256 of the link token), player_id, created_by_user_id,
+  created_at, expires_at, used_at, used_by_user_id, revoked (bool)
+
+MetaMatch                     # a high-elo match already counted (never counted twice)
+  match_id, patch, counted_at, extras (bool: spells and matchups counted too)
+MetaChampRole                 # games and wins per champion, role and patch
+  champion_key, role, patch, games, wins
+MetaRunePage                  # same, per rune page ("tree:perks|tree:perks|shards")
+  champion_key, role, patch, page, games, wins
+MetaItem                      # same, per completed item
+  champion_key, role, patch, item_id, games, wins
+LiveGame                      # the live game a pending challenge game is played in (9.6)
+  game_id, riot_game_id, platform, queue_id, started_at, detected_at, checked_at,
+  updated_at, ended_at, our_team, participants (JSON), bans (JSON), state (JSON summary)
+MetaSpells                    # same, per summoner spell pair ("4,14", lowest id first)
+  champion_key, role, patch, spells, games, wins
+MetaMatchup                   # a champion's record against each enemy champion
+  champion_key, enemy_key, patch, games, wins                # single row: the crawler's queue and status
+  puuids (JSON), next_index, refreshed_at, last_run_at, last_error, matches_counted
 ```
 
 ## 9. Riot API Integration
@@ -367,6 +420,11 @@ AppSettings                   # single row
 | Match details | `GET /lol/match/v5/matches/{matchId}` | regional |
 | Champion list | `https://ddragon.leagueoflegends.com/api/versions.json` then `/cdn/{version}/data/en_US/champion.json` | Data Dragon (no key) |
 | Champion images | `/cdn/{version}/img/champion/{id}.png` | Data Dragon |
+| Ranked-solo ladders (high-elo crawler) | `GET /lol/league/v4/{challenger,grandmaster,master}leagues/by-queue/RANKED_SOLO_5x5` | platform (`na1.api.riotgames.com`) |
+| Items, runes and summoner spells (names, icons) | `/cdn/{version}/data/en_US/item.json`, `runesReforged.json`, `summoner.json` | Data Dragon |
+| Live game (champions, spells, runes, bans) | `GET /lol/spectator/v5/active-games/by-summoner/{puuid}` | platform |
+| Live stats (items, KDA, CS, events) | `https://127.0.0.1:2999/liveclientdata/allgamedata` (the game client, no key) | the PC playing the game |
+| Champion positions (roles) | `https://cdn.merakianalytics.com/riot/lol/resources/latest/en-US/champions.json` | Meraki Analytics (no key) |
 
 Note: match data uses the numeric champion `key`, while Data Dragon's main id is a string (for example Wukong is `MonkeyKing`). Store both and always join on `key`.
 
@@ -376,6 +434,7 @@ All gold, contract, and rating fields come from each participant object in the M
 - A development key expires every 24 hours. Fine for building, bad for daily use.
 - Apply for a **personal API key** on the Riot Developer Portal for this project. It does not expire but has low rate limits, which is fine for a small group.
 - Check the portal for current limits and wrap all calls in a simple rate limiter that respects `429` responses and the `Retry-After` header.
+- **A public site needs a production key.** Personal keys are for a developer and a few friends. Before opening the site to the public (12.4), apply for a production key: Riot reviews the app, its policies page and its use of the data. All Riot calls (poller, crawler, linking) share one rate limiter.
 
 ### 9.3 Match polling and auto-matching
 The poller runs every `poll_interval_seconds` (default 90) **only while a Challenge Game is pending**, plus a manual "Sync now" button.
@@ -399,9 +458,32 @@ Every match fetched for a registered player is also saved to `PlayerMatchStats` 
 - The switch is shown in the header on every tab with a clear color so it is never set wrong by accident.
 - Turning the mode off while a game is pending asks whether to void that game or keep it pending.
 
+### 9.5 High-elo build crawler (comp suggestions)
+After a spin, the app suggests a role for each rolled champion and a high-elo build for it (10.1). The data comes from a slow background crawler (`jobs/crawler.py`, `services/meta.py`):
+
+- Every 12 hours it reads the Challenger, Grandmaster and Master ranked-solo ladders (League-V4) for `meta_platform` and keeps up to 400 players, shuffled.
+- One player at a time, it fetches their ranked-solo (queue 420) match IDs from the last 7 days (up to 10), then each match it hasn't counted yet.
+- Each match adds games and wins per champion and role (`teamPosition`), per rune page (keystone, both trees, all six runes, shards), per completed item, and per summoner spell pair, by patch. It also counts each champion's record against every champion on the enemy team (matchups, for bans). Only the 2 newest patches are kept.
+- Matches counted before spells and matchups were tracked (`MetaMatch.extras = false`) are re-fetched first, 10 per crawler step, to fill those in without counting their roles, runes and items twice.
+- It waits 2.5 seconds between calls so it never crowds out the match poller, and commits before every Riot call (SQLite allows one writer). It can be turned off in Settings (`meta_crawl`).
+- **Roles:** with 20+ high-elo games, a champion's role scores are 80% its high-elo role share and 20% Meraki's position list; with fewer, Meraki alone. The best assignment for the whole team is picked over all permutations. A role played in under 5% of a champion's high-elo games is marked off-role, and its build then comes from the champion's usual role.
+- **Builds:** the most played rune page, the 3 most built core items plus boots, and the most taken summoner spell pair (Flash shown second) for that champion and role, with pick and win rates.
+- **Suggested bans (5):** enemy champions the rolled champions do worst against. For each rolled champion, its win rate against an enemy is pulled toward its overall win rate by 10 games (so a 0-2 record doesn't outrank 40-60), and an enemy's threat is how far it drags those rates down, added up over the rolled champions. Champions on anyone's option list are never suggested. Team-wide matchups (any role), not lane matchups, since that data fills in much faster.
+
+### 9.6 Live game tracking
+A background job (`jobs/live_tracker.py`, `services/live.py`) watches the pending challenge game:
+
+- **Finding the game:** every 30 seconds it asks Spectator-V5 whether the game's linked players are in a game (one call, for the first linked player). It counts only when every linked player is in it, on one team. Once found it checks every 60 seconds and marks the game ended when Riot stops listing it.
+- **Auto picks:** as soon as the game is found, each player's played champion is filled in (option index, or "other"). Picks someone already set by hand are kept; a difference shows as a note on the Live tab.
+- **Live stats:** every 3 seconds it reads the game client's Live Client Data API on the PC running the backend (`LIVE_CLIENT_URL`, default `https://127.0.0.1:2999`, self-signed; `off` disables it). The game counts when every player with a Riot ID is in it on one team. This also fills in picks, so it works without a Riot key.
+- **What is stored** (`LiveGame`, one row per challenge game): Spectator's participants (champion, team, spells, keystone, which of ours) and bans, plus a summary of the latest client data: per player champion, level, KDA, CS, ward score, items and their value, spells, keystone, dead and respawn time; per team kills, item gold, towers, inhibitors, dragons by type, barons, heralds, grubs, Atakhan; the newest 40 events; the gold lead sampled every 30 game seconds; the result once the game ends. The raw client data is not kept.
+- **Gold:** the client only shares gold for its own player, so team and lane gold are the value of items held (Data Dragon prices), the usual broadcast estimate.
+- **Not tracked:** summoner spell or ultimate cooldowns. Neither API reports them, and Riot's game-integrity rules restrict tracking enemy cooldowns.
+- **Hosted version (12.5):** the backend won't be on a player's PC, so the client reader becomes a small companion app one player runs during games, posting the same data to the site.
+
 ## 10. Frontend: Tabs and Screens
 
-### 10.1 Wheels tab (owner only)
+### 10.1 Wheels tab
 - Pick 2 to 5 players (chips or checkboxes, remembers the last group).
 - Before spinning, each player card shows their gold, an armed Blacklist if any, and an active Contract goal if any. Buttons to arm a Blacklist or buy a Contract for that player.
 - One wheel per player, all spin at once with a single "Spin" button.
@@ -411,6 +493,20 @@ Every match fetched for a registered player is also saved to `PlayerMatchStats` 
 - Pending game panel: shows status ("Waiting for match...", "Matched: Win", "Needs review"), with manual Win / Loss / Void buttons as a fallback.
 - After a result: a summary showing eliminations, shields that saved a champion, gold earned per player, and contract outcomes.
 - Header summary: run name, wins, current streak, champions left, tokens available.
+
+Built since (v0.3):
+- **Spin:** each reel is a horizontal case-opening strip. The reels stop one after another (first at 9.5s, then every 0.6s, so a five-player spin lands at about 11.9s) with a gentle top speed. A reroll replays one reel (8s).
+- **Backups are the neighbours:** the two champions right next to the landed one on the reel are options #2 and #3 (and #4 when a run uses 4), so what you saw land is what you get.
+- **Pick bar:** "2/4 picked" plus each player's state, shown above the cards.
+- **After the spin, on one screen:** each player's card shows their options with quick facts ("You 2-0 · Riot 58% of 12 · Group 4-1", "New for you"), the suggested role, and the high-elo build (keystone, trees, summoner spells, 3 core items and boots; see 9.5). The pick bar shows 5 suggested bans with the rolled champions' win rate against each. The result bar (game status, Riot status, Win / Loss / Void / Re-roll) is a single row. It fits a 1920×1080 desktop or a 1536×730 laptop browser window without scrolling.
+- **Moments:** LOCKED IN when everyone has picked, then a loading-screen view with each champion's art, role and build. Win and elimination moments play as replay highlights (cards crack and shatter on a loss), with streak banners at 5, 10, then every 10.
+- **Before the spin:** a danger meter (how many losses until spins shrink or stop) and survival odds (a Monte Carlo estimate of reaching the next win targets, using each player's shrunk win rate and the revive-token rules).
+- **Signed in as a player (not the run owner):** a "Waiting for the owner to spin" panel with your own Blacklist and Contract buttons. The page checks for a new spin every 10 seconds until live updates exist (12.3). After the spin you see everyone's options and builds, but item buttons only on your own card, and the result bar only shows the status.
+
+### 10.1b Live tab (`/live`)
+- Shown in the nav with a red dot while a game is live. Before a game starts it explains what will happen; once found through Riot only, it lists both teams' champions, spells, keystones and bans.
+- With live stats, a broadcast layout: score bug (kills per side, game clock, item-gold lead, towers, dragons by type, grubs, herald, baron); bans; lane-by-lane rows pairing each player with their opponent (portrait with level and respawn timer, spells, keystone, KDA, CS, all 7 item slots, lane gold and CS difference); our players marked with their team colour, which spin option they're on, and a shield icon if their champion is shielded; a gold-lead graph; contract progress for kills and assists goals; a play-by-play feed.
+- The Wheels tab's result bar says "In game · 12:34 · picks filled in from the live game" with a Watch live link. The stream overlay swaps the picks for a live score bar during the game (`?live=0` hides it).
 
 ### 10.2 Stats tab
 - Filter: Challenge only / All tracked games, and Run selector.
@@ -434,9 +530,10 @@ Every match fetched for a registered player is also saved to `PlayerMatchStats` 
 - Revive flow: if a player has a token, they pick an eliminated champion and confirm.
 - Shield flow: if a player owns an unused Shield, they pick an alive, unshielded champion and confirm.
 - Manual eliminate / revive actions for fixing mistakes (owner only, logged as manual events).
+- Built as a card grid (v0.3), replacing the water pools of 17.4: large or compact cards, sorts (A–Z, most played, best win rate, recently eliminated, never rolled first), quick filters (shielded, played, never played, on the current spin), class filters, and a collapsible eliminated section. Each card shows short numbers for the run. Players only see Revive and Shield buttons for their own tokens and shields.
 
 ### 10.4 Shop tab
-- Player selector at the top (MVP: owner picks whose shop to view; online: locked to the logged-in player).
+- Player selector at the top. Players only see their own shop; the run owner sees a tab per player.
 - Gold balance and a per-game gold history with the breakdown from 7.7 (kills, assists, damage, vision, multikills, contracts).
 - Item cards with name, price, short description, and a Buy button disabled when the player cannot afford it.
 - Blacklist card shows the current cap ("You can ban up to 5 champions").
@@ -456,6 +553,31 @@ Every match fetched for a registered player is also saved to `PlayerMatchStats` 
 - Poll interval, remake threshold.
 - Riot API status: key valid or not, last sync time.
 - Manual gold adjustment per player (logged).
+- Since v0.3: **Your account** (everyone): username, team colour, change password, sign out. **Accounts and invites** (site owner): an invite link per player, open invites, remove an account. Team colour picker per player. High-elo data status and refresh. Stream overlay link. Players who aren't the owner only see their account section.
+
+### 10.7 Trophies tab
+- **Achievements:** 22 trophies in four rarities (bronze, silver, gold, prismatic), computed from history, e.g. First Blood, On Fire (5 wins in a row), Pentakill, Untouchable (win without dying), Flawless (S+ grade), Necromancer (3 revives), Bodyguard (a shield you placed saved a champion), Whale (5,000 gold spent). Each shows who has it and how rare it is, and unlocks a title.
+- **Hall of Shame:** worst games by KDA, most deaths, fastest losses, cursed champions (2+ games and a losing record), feeders, reapers (most champions lost) and wasted items. Per run or all time.
+
+### 10.8 Wrapped (monthly)
+- A story of slides for one month: games, wins, best and worst moments, each player's numbers, top champions and pentas. Month picker for past months.
+
+### 10.9 Player pages (`/players/:id`)
+- Hero with their most played champion's art, team colour, title (the player or the site owner can change it) and Riot ID.
+- Record, win rate, KDA and more; champions played; recent games; runs with links to recaps.
+- Private to the player and the run owner: their items and the gold-over-time chart.
+
+### 10.10 Run recap (`/runs/:id/recap`)
+- A post-game stats graphic: totals, a win/loss timeline, per-player lines and awards (MVP, Cleanest hands, Top marks, Multikill king, Grim reaper, Big spender, First to fall, Survivor, Workhorse). Can be saved as an image.
+
+### 10.11 Stream overlay (`/overlay`)
+- A see-through page for OBS (browser source, 1920×1080): score bug, current picks, and the LOCKED IN / VICTORY / ELIMINATED moments. `?picks=0` and `?moments=0` hide parts. Needs a signed-in browser (in OBS: Interact, then sign in once).
+
+### 10.12 Sign-in pages
+- `/setup` (only while the site has no accounts): make the owner account and say which player you are.
+- `/login`: username and password. After 5 wrong passwords from one device, that device waits 15 minutes.
+- `/invite/:token`: "Join as Bea": pick a username and password for that player.
+- Every other page needs a signed-in account; signed-out visitors are sent to `/login` (or `/setup`) and come back to the page they asked for.
 
 ## 11. Backend API (first draft)
 
@@ -509,38 +631,116 @@ GET    /api/stats/players/{id}
 POST   /api/sync                           # run the matcher now
 ```
 
-## 12. Future: Online Lobby (design for it now, build later)
+Added since (v0.3):
 
-Target: 3 or more friends join a shared lobby from their own devices. The owner runs the wheels, and each player manages their own gold, shop, and items.
+```
+# accounts (signed out)
+GET    /api/auth/me                        # who's signed in; setup_needed on a new site
+POST   /api/auth/setup                     # first account = site owner (only with no accounts)
+POST   /api/auth/login
+POST   /api/auth/logout
+GET    /api/auth/invites/{token}           # which player an invite is for
+POST   /api/auth/register                  # sign up from an invite
+# accounts (signed in)
+POST   /api/auth/password                  # change password; signs out other browsers
+GET    /api/accounts                       # site owner: accounts and open invites
+POST   /api/accounts/invites               # site owner: new invite link for a player
+DELETE /api/accounts/invites/{id}          # site owner: cancel an invite
+DELETE /api/accounts/{id}                  # site owner: remove an account (history stays)
 
-What to do now so this is easy later:
-- Keep all spin, rules, gold, and item logic on the server. The frontend only shows results. That way a spin or an item use is just an event the server can send to many clients.
-- Every item use already records which player it belongs to, so switching from "owner acts for everyone" to "players act for themselves" is a permissions change, not a data change.
-- Keep the API resource-based so a lobby is just another resource (`/api/lobbies`) that groups players and a pending spin.
+# pages and extras
+GET    /api/runs/{id}/recap
+GET    /api/runs/{id}/champion-lines       # short numbers for every Pool card
+GET    /api/runs/{id}/events               # pool activity log
+GET    /api/runs/{id}/economy              # gold and items for every player you may see
+DELETE /api/runs/{id}
+GET    /api/games/{id}/option-facts        # quick facts under each rolled champion
+POST   /api/games/{id}/review              # accept or reject a "needs review" match
+GET    /api/players/{id}/profile
+POST   /api/players/{id}/link              # retry the Riot ID lookup
+GET    /api/champions/{id}/stats
+GET    /api/achievements
+GET    /api/shame?run_id=
+GET    /api/wrapped?month=2026-10
+GET    /api/meta/status                    # high-elo crawler status
+POST   /api/meta/positions/refresh         # re-import champion roles (Meraki)
+POST   /api/comp                           # body: champion_ids, exclude; roles, builds, spells, bans
+GET    /api/riot/status?check=
+GET    /api/live                           # the live game for the pending challenge game
+GET    /api/games/{id}/live
+```
 
-Access and login:
-- The owner shares the run's **lobby code** (with an optional run password). The code gets someone into the run.
-- The player then picks who they are and confirms with their **PIN** (stored as a hash). This is the first login option.
-- **Discord login** (OAuth) comes after, linking a Discord account to a Player so no PIN is needed.
+Every endpoint except `/api/health` and the signed-out `/api/auth/*` ones needs a session cookie (401 without one). Permissions are checked on the server (`routers/access.py`); the UI only hides what a user can't do. See 12.2.
 
-What each role can do:
+## 12. Accounts, Groups and Going Public
 
-| Action | Owner | Player |
-|---|---|---|
-| Wheels tab, spins, record results, undo | Yes | No |
-| View Stats, Pool, History | Yes | Yes |
-| Use own revive tokens | Yes | Yes |
-| Shop: buy and use own items, see own gold | Yes | Yes |
-| Use items for other players | Yes | No |
-| Manual eliminate/revive, gold adjustments, settings | Yes | No |
+### 12.1 Accounts (built, v0.3)
+- **Sign-up is invite-only today.** The first person to open a new site makes the owner account on `/setup`; it takes over every run made before accounts existed. Everyone else joins through an invite link the site owner makes for their player in Settings.
+- **Invites:** one-time, tied to one Player, expire after 7 days. A new link for the same player cancels the old one. Only a SHA-256 of the token is stored, so a link is shown once.
+- **Passwords:** scrypt (Python's standard library), 8 to 200 characters. Usernames are 3 to 24 letters, numbers, dots, dashes or underscores, case-insensitive.
+- **Sessions:** a random token in an HttpOnly, SameSite=Lax cookie (secure on https), valid for 30 days. Only its SHA-256 is stored. Signing out deletes it on the server; changing your password signs out every other browser.
+- **Sign-in throttle:** 5 wrong passwords for one username from one address, or 20 from one address, means a 15-minute wait. A stranger guessing someone's password only locks themselves out. (In memory; a hosted site with several servers needs a shared store.)
+- **Lost password:** the site owner removes the account and sends a new invite. The player's games, gold and items stay.
 
-Item timing online:
-- Reroll, Swap, and Choose a Champ show as buttons on the player's own device after the spin. When used, the owner's wheel screen updates live.
-- Blacklists and Contracts are set up by the player before the owner spins.
+### 12.2 Who can do what (built)
 
-What it will need later:
-- Real-time updates with FastAPI WebSockets: lobby join/leave, ready state, spin results, item uses, game results, gold changes.
-- Move from SQLite to Postgres and deploy (for example Fly.io, Railway, or Render).
+| Action | Site owner | Run owner | Player |
+|---|---|---|---|
+| View runs, pool, stats, history, trophies, wrapped, recaps | Yes | Yes | Yes |
+| Spin, mark picks, record results, undo, review, link match | Yes | That run | No |
+| Manual eliminate/revive, adjust gold, shop prices, end or delete run | Yes | That run | No |
+| See gold balance and history, inventory; buy and use items; spend revive tokens | Everyone | Everyone in that run | Their own |
+| Arm a Blacklist or buy a Contract before a spin | Everyone | Everyone in that run | Their own |
+| Change team colour and title | Anyone | No | Their own |
+| Create runs; add, edit or remove players; site settings; challenge mode; Riot sync; invites and accounts | Yes | No | No |
+
+Gold *earned* and per-game gold stay public as stats (Stats leaderboard, game results); balances, gold history and owned items are private.
+
+### 12.3 Live updates (next)
+Players now sit on their own devices, so changes must show up everywhere at once.
+- One WebSocket per signed-in browser (FastAPI), authenticated by the session cookie, subscribed to the runs that user can see.
+- Events: spin started (with the strips, so every device plays the same reels), item used (reroll replays that reel everywhere), picks marked, lock-in, result, undo, pool changes, gold changes, player joined.
+- The client keeps TanStack Query as the source of truth: an event invalidates or patches the matching queries. The 10-second polling on the Wheels tab goes away.
+- Ready check before a spin (optional): players tap "Ready" and the owner sees who is set.
+
+### 12.4 Groups: anyone can start their own (planned)
+Goal: anyone can open the site, make an account, start a group, and invite their own friends. Each group runs its own challenge with its own settings, and the creator owns it.
+
+- **New table `Group`:** id, name, owner_user_id, created_at. Players, runs, invites and settings (`AppSettings` becomes one row per group) all get a `group_id`. The active run becomes per group.
+- **Membership:** `GroupMember` (group_id, user_id, player_id, role: owner | member). One account can belong to several groups and switches between them; a player belongs to one group.
+- **Open sign-up:** `/signup` makes an account with no group; the next screen offers "Start a group" (you become its owner) or "Join with an invite link".
+- **Permissions:** 12.2 stays the same with "site owner" replaced by "group owner", scoped to that group. Every query filters by the current group; a request for another group's data is a 404, so ids don't leak which groups exist.
+- **Site admin:** the old site-owner flag becomes a support role (see all groups, remove abuse). It does not play in other groups.
+- **Shared data stays shared:** champions, Riot match cache, and the high-elo meta are global.
+- **Existing data:** a migration puts every current player, run, invite and setting into one group owned by the current site owner.
+- **Limits:** caps on groups per account, players per group and runs per group, so one account can't fill the database.
+
+### 12.5 Hosting (planned)
+- **Postgres** instead of SQLite (one writer at a time won't hold up with many groups). Migrations must also run on Postgres; the current ones are written to be safe to re-run on SQLite.
+- **Host:** a container on Fly.io, Railway or Render, with the frontend built and served from the same domain (so the session cookie stays first-party) or from a CDN with the API on a subdomain.
+- **HTTPS everywhere.** Cookies switch to secure automatically on https.
+- **Background jobs:** the poller and crawler move out of the web process (or run on exactly one instance) so scaling the web servers doesn't start duplicate jobs.
+- **Backups:** daily database backups with a tested restore; migrations take a backup first.
+- **Secrets:** `RIOT_API_KEY` and the database URL from the host's secret store, never in the repo.
+- **Monitoring:** error tracking and a health check; logs for Riot rate-limit hits.
+
+### 12.6 Riot API at scale (planned)
+- **Production key** (see 9.2) before public launch.
+- **Fair polling:** one queue of match checks for all groups, only for pending games, ordered by how long each has waited, inside the key's limits. Stats import for idle players runs at a lower priority.
+- **Crawler:** stays one global job; its data is shared by every group.
+- **Policies:** follow Riot's developer policies (no features that give an in-game advantage beyond what's allowed; show "Not affiliated with Riot Games"; a privacy policy describing what Riot data is stored).
+
+### 12.7 Safety, privacy and abuse (planned, before public launch)
+- Sign-up rate limits per address, plus a CAPTCHA or email check if sign-up spam shows up.
+- Optional email on accounts for password reset (today resets go through the group owner).
+- Delete my account and export my data; a group owner can delete their group and everything in it.
+- Group and player names are user content: length limits, and a way for the site admin to remove abusive ones.
+- Terms of use and a privacy policy pages.
+- Sign-in throttle moves to a shared store (Redis or the database) once there's more than one server.
+
+### 12.8 Discord (later)
+- Discord login (OAuth) as a second way to sign in, linked to an existing account.
+- A Discord webhook per group posting spins, eliminations, shield saves, contract wins and run recaps.
 
 ## 13. Milestones
 
@@ -553,10 +753,14 @@ What it will need later:
 | M4 | Auto results | Poller and matcher link games, auto elimination, "needs review" flow, challenge mode switch fully enforced |
 | M5 | Gold and Shop | Gold ledger and calculation, Link match for manual games, Shop tab, all six items, contracts, rating grade, undo covers gold |
 | M6 | Polish | Wheel animation, History tab, mobile layout, empty and error states, result summary screen |
-| M7 | Online lobby | Lobby code + PIN login, player permissions, live updates (Section 12) |
-| M8 | Discord login | Discord OAuth linked to players |
+| M7 | Accounts | Username/password accounts, invite links, per-player permissions (12.1, 12.2) |
+| M8 | Live updates | WebSockets: spins, items, picks and results show on every device at once (12.3) |
+| M9 | Groups | Open sign-up, anyone can start a group and own its runs, per-group players and settings (12.4) |
+| M10 | Hosting | Postgres, deployed with HTTPS, backups, jobs outside the web process (12.5) |
+| M11 | Public launch | Production Riot key, fair polling, abuse protection, privacy and terms pages (12.6, 12.7) |
+| M12 | Discord | Discord login and per-group webhooks (12.8) |
 
-Status note: M0 to M4 are built. Most of M6 (wheel animation, History tab, mobile layout, empty and error states) was built early, together with the visual overhaul in Section 17.
+Status note (v0.3): M0 to M7 are built, plus the extras in Section 18 (esports look, comp and build suggestions, trophies, hall of shame, wrapped, recaps, player pages, stream overlay). The online lobby code + PIN idea from earlier drafts was replaced by accounts and invite links. M8 is next.
 
 ## 14. Testing Priorities
 1. `rules.py`: loss eliminates only played champs, win does not, void changes nothing, a shield blocks exactly one elimination and is then gone, streak and token math (3, 6, 9), undo restores the exact previous state including shields.
@@ -567,6 +771,9 @@ Status note: M0 to M4 are built. Most of M6 (wheel animation, History tab, mobil
 6. `rating.py`: grade thresholds against saved real matches.
 7. `matcher.py`: uses saved sample match JSON files as fixtures. Cases: clean match, wrong champion, wrong queue, players on different teams, remake, no match yet, champion changed by an item.
 8. `stats.py`: KDA with zero deaths, KP with zero team kills, best champions threshold.
+9. Accounts and access (`test_auth.py`): setup only once, invites one-time and expiring, only hashes stored, throttle, password change signs out other browsers, and a permission matrix: players can't spin, record results, change settings or touch another player's gold, items or tokens; the run owner can act for everyone.
+10. `meta.py`: match counting by patch, role blending and off-role builds, the crawler never holds the database while waiting on Riot.
+11. Once groups exist (12.4): no request can read or change another group's data.
 
 ## 15. Open Questions
 1. When a revive token is earned, does every player in that 3rd win get one, or does the whole team share one? (Current plan: every player.)
@@ -579,17 +786,25 @@ Status note: M0 to M4 are built. Most of M6 (wheel animation, History tab, mobil
 8. Contracts: the "win/lose" goal type is written here as "win the game." Was there also a loss-based goal in mind (for example "lose but still get 10+ kills")?
 9. Rating: is the in-app grade (7.10) close enough, or should A+ contracts be dropped if it doesn't feel right after testing?
 10. Prices are based on the average (about 100) and good (about 200) game benchmarks in 7.7. Check real gold per game after the first 10 or so games and adjust if the benchmarks are off.
+11. Public site: should gold earned stay visible to the whole group, or become private like balances?
+12. Groups: how many players and runs per group, and how many groups per account? Can a player be in two groups at once?
+13. Public site: email required at sign-up (for password reset), or optional?
+14. Live updates: should players see the reels spin on their own device in sync with the owner's, or just the result?
+15. Who can create a run in a group: only the group owner, or any member (who then owns that run)?
 
 ## 16. Ideas Backlog (post-MVP)
-- More shop items: Extra Options (2 more backups next spin), buyable Revive, Mystery Box, Gift gold, cosmetics (titles, badges, wheel colors).
-- Discord bot or webhook posting spin results, eliminations, shield saves, and contract wins.
+- More shop items: Extra Options (2 more backups next spin), buyable Revive, Mystery Box, Gift gold, cosmetics (badges, wheel colours).
+- Discord bot or webhook posting spin results, eliminations, shield saves, and contract wins (12.8).
 - "Graveyard" page with stats on each eliminated champion.
 - Run comparison: compare runs over time.
-- Champion role filter (needs a lane data source, since Data Dragon only has class tags).
-- Achievements (first pentakill in a run, flawless 5-game streak).
-- Shareable run summary image.
+- Ready check before spins and spectator mode for friends not playing (with live updates).
+- Public group pages or leaderboards across groups (opt-in).
+
+Done since v0.2: achievements and titles, shareable run recap image, champion roles (Meraki plus high-elo data), hall of shame, monthly Wrapped, stream overlay.
 
 ## 17. Visual Design and UX Overhaul (v0.2)
+
+> Superseded in parts by the esports broadcast style in Section 18 (colours, type, shapes, spin timing and the Pool tab). Kept for history.
 
 Goal: the app should feel like a polished companion to the League client, not a spreadsheet. Two influences: the **League client's palette and ornament** (deep navy, hextech blue, gold trim) and **iOS-style shapes and motion** (rounded continuous corners, frosted-glass panels, quick spring-like animations).
 
@@ -629,3 +844,30 @@ Goal: the app should feel like a polished companion to the League client, not a 
 ### 17.5 Other polish
 - Header becomes a frosted bar with a segmented, pill-shaped tab control.
 - Toasts and sheets slide up from the bottom; consistent focus rings for keyboard use.
+
+## 18. Esports Broadcast Style and Extras (v0.3)
+
+### 18.1 Look
+- **Mood:** sharp, high-energy, built to watch, like a League esports broadcast.
+- **Colours:** near-black cool backgrounds; one strong accent, electric blue `#2e9bff`; gold accents to keep the League feel; a team colour per player (picked in Settings) used on name bars, reels, charts and the user chip.
+- **Type:** the League display font for headings (FontGet.com, credited in the README) and a clean sans for body text.
+- **Shapes:** slanted, angled panels and parallelogram buttons (clip-path); lower-third name bars; broadcast tags ("LIVE", "PICK PHASE", "REPLAY"); a score bug in the header with the run's wins, streak, champions alive and tokens.
+- **Screens as broadcast moments:** the reels are a draft-phase screen with a timer; results play as replay highlights; the recap reads like a post-game stats graphic.
+
+### 18.2 Performance rules
+Learned while making the reels smooth; keep to them.
+- Animate only `transform` and `opacity`. Glows are an opacity fade on a pseudo-element, never an animated `box-shadow`.
+- No infinite animations inside clip-path elements (a blinking dot repainted the page ~90 times a second); live dots are static.
+- All reels in one spin start together (no fixed start time) and tick sounds are scheduled from the animation's real start.
+- Don't refetch every query when a spin starts: seed the cache with the spin response and refresh everything after the reels land.
+- Hardware acceleration must be on in the browser; without it the reels stutter whatever the code does.
+
+### 18.3 Reel timing
+- Ease-out over 10.5s base, gentle top speed so names can be read as they pass. Reels land one after another 0.6s apart (9.5s to 11.9s). A reroll takes 8s. "Skip" lands everything at once; reduced-motion users skip straight to the result.
+
+### 18.4 Extras built
+- Run recap (10.10), player pages (10.9), Trophies and Hall of Shame (10.7), monthly Wrapped (10.8), stream overlay (10.11).
+- Auto-result toast with Undo when a result arrives from Riot while you're on another tab.
+- Comp suggestions after each spin: roles and high-elo builds (9.5).
+- Champion quick facts under each option, item reminders before the spin, streak milestones, danger meter and survival odds (10.1).
+- Live game tracking: auto picks from the live game and a broadcast-style Live tab (9.6, 10.1b).

@@ -2,9 +2,11 @@
 
 The Riot API has no global win rates, so a background job (jobs/crawler.py) builds them:
 it walks the Challenger / Grandmaster / Master ranked solo ladders, downloads their recent ranked
-games and counts, per champion and role and patch: games and wins, full rune pages, and items.
+games and counts, per champion and role and patch: games and wins, full rune pages, items and
+summoner spells, plus how each champion does against every champion on the enemy team.
 `suggest_comp` turns those counts (plus Meraki's position list as a fallback) into a suggested role
-for each rolled champion with its most played rune page and core items.
+for each rolled champion with its most played rune page, core items and summoner spells, and
+suggests bans: the enemy champions the rolled champions do worst against.
 """
 
 import random
@@ -24,8 +26,11 @@ from app.models import (
     MetaCrawlState,
     MetaItem,
     MetaMatch,
+    MetaMatchup,
     MetaRunePage,
+    MetaSpells,
 )
+from app.services.riot_client import RiotError
 
 RANKED_SOLO = 420
 ROLES = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")
@@ -40,6 +45,10 @@ MIN_ROLE_GAMES = 20  # below this, roles come from Meraki's position list instea
 HIGH_ELO_WEIGHT = 0.8  # with enough games: 80% high-elo role share, 20% Meraki's position list
 OFF_ROLE_SHARE = 0.05  # a role played in under 5% of a champ's high-elo games is "off-role"
 TRINKETS = {3340, 3363, 3364, 3330, 3513}
+FLASH = 4
+BACKFILL_BATCH = 10  # matches re-fetched per crawler step to fill in spells and matchups
+BAN_COUNT = 5
+BAN_PRIOR_GAMES = 10  # matchup win rates are pulled toward the champ's overall rate by this many games
 
 
 def patch_of(game_version: str) -> str:
@@ -92,9 +101,29 @@ def count_match(session: Session, match: dict) -> bool:
         for item_id in {p.get(f"item{i}", 0) for i in range(6)}:
             if item_id and item_id not in TRINKETS:
                 _bump(session, MetaItem, {**base, "item_id": item_id}, win)
-    session.add(MetaMatch(match_id=match_id, patch=patch))
+    count_extras(session, info, patch)
+    session.add(MetaMatch(match_id=match_id, patch=patch, extras=True))
     session.flush()
     return True
+
+
+def spells_key(p: dict) -> str | None:
+    spells = sorted(x for x in (p.get("summoner1Id"), p.get("summoner2Id")) if x)
+    return ",".join(str(x) for x in spells) if len(spells) == 2 else None
+
+
+def count_extras(session: Session, info: dict, patch: str) -> None:
+    """Summoner spells per champion and role, and each champion's record against the enemy team."""
+    players = [p for p in info.get("participants", []) if p.get("championId")]
+    for p in players:
+        win = bool(p.get("win"))
+        role, key = p.get("teamPosition"), p["championId"]
+        spells = spells_key(p)
+        if role in ROLES and spells:
+            _bump(session, MetaSpells, {"champion_key": key, "role": role, "patch": patch, "spells": spells}, win)
+        for enemy in players:
+            if enemy.get("teamId") != p.get("teamId"):
+                _bump(session, MetaMatchup, {"champion_key": key, "enemy_key": enemy["championId"], "patch": patch}, win)
 
 
 def recent_patches(session: Session, n: int = 2) -> list[str]:
@@ -106,7 +135,7 @@ def prune_old_patches(session: Session, keep: int = 2) -> None:
     keepers = recent_patches(session, keep)
     if not keepers:
         return
-    for model in (MetaMatch, MetaChampRole, MetaRunePage, MetaItem):
+    for model in (MetaMatch, MetaChampRole, MetaRunePage, MetaItem, MetaSpells, MetaMatchup):
         session.exec(delete(model).where(col(model.patch).not_in(keepers)))
 
 
@@ -158,6 +187,8 @@ async def crawl_step(session: Session, client, pause=None) -> int:
     """
     settings = session.get(AppSettings, 1) or AppSettings()
     platform, region = settings.meta_platform, settings.meta_region
+    if await backfill_step(session, client, region, pause):
+        return 0  # spent this step filling in older matches
     state = crawl_state(session)
     stale = state.refreshed_at is None or datetime.now(UTC) - state.refreshed_at > LADDER_REFRESH
     if stale or state.next_index >= len(state.puuids):
@@ -196,6 +227,40 @@ async def crawl_step(session: Session, client, pause=None) -> int:
     return counted
 
 
+def needs_backfill(session: Session, limit: int | None = None) -> list[str]:
+    """Matches from the kept patches counted before spells and matchups were tracked."""
+    patches = recent_patches(session)
+    if not patches:
+        return []
+    query = select(MetaMatch.match_id).where(MetaMatch.extras == False, col(MetaMatch.patch).in_(patches))  # noqa: E712
+    return list(session.exec(query.limit(limit) if limit else query).all())
+
+
+async def backfill_step(session: Session, client, region: str, pause=None) -> int:
+    """Re-fetch a few already-counted matches and add their summoner spells and matchups.
+    Returns how many it looked at (0 when there's nothing left to fill in). Commits."""
+    ids = needs_backfill(session, BACKFILL_BATCH)
+    session.commit()
+    for match_id in ids:
+        if pause:
+            await pause()
+        try:
+            match = await client.match(region, match_id)
+        except RiotError as e:
+            if e.status != 404:
+                raise
+            match = None  # gone from Riot: nothing to add
+        row = session.get(MetaMatch, match_id)
+        if row is not None and not row.extras:
+            info = (match or {}).get("info", {})
+            if info:
+                count_extras(session, info, row.patch)
+            row.extras = True
+            session.add(row)
+        session.commit()
+    return len(ids)
+
+
 def status(session: Session) -> dict:
     state = session.get(MetaCrawlState, 1)
     settings = session.get(AppSettings, 1) or AppSettings()
@@ -215,6 +280,7 @@ def status(session: Session) -> dict:
         "ladder_position": state.next_index if state else 0,
         "last_run_at": state.last_run_at if state else None,
         "last_error": state.last_error if state else None,
+        "backfill_remaining": len(needs_backfill(session)),
     }
 
 
@@ -233,6 +299,7 @@ async def load_static(version: str, client: httpx.AsyncClient | None = None) -> 
     try:
         items = (await client.get(f"{base}/cdn/{version}/data/en_US/item.json")).raise_for_status().json()["data"]
         runes = (await client.get(f"{base}/cdn/{version}/data/en_US/runesReforged.json")).raise_for_status().json()
+        spells = (await client.get(f"{base}/cdn/{version}/data/en_US/summoner.json")).raise_for_status().json()["data"]
     finally:
         if own:
             await client.aclose()
@@ -254,6 +321,16 @@ async def load_static(version: str, client: httpx.AsyncClient | None = None) -> 
             for k, v in items.items()
         },
         "perks": perk_names,
+        "spells": {
+            int(v["key"]): {"name": v["name"], "icon": f"{base}/cdn/{version}/img/spell/{v['image']['full']}"}
+            for v in spells.values()
+            if str(v.get("key", "")).isdigit()
+        },
+        # The game client names spells by Data Dragon id ("SummonerFlash"), not number.
+        "spells_by_name": {
+            v["id"]: {"name": v["name"], "icon": f"{base}/cdn/{version}/img/spell/{v['image']['full']}"}
+            for v in spells.values()
+        },
     }
     return _static[version]
 
@@ -285,6 +362,7 @@ class Pick:
     runes: dict | None = None
     items: list[dict] = field(default_factory=list)
     boots: dict | None = None
+    spells: dict | None = None  # {"spells": [{id, name, icon}, ...], "games", "pick_rate", "win_rate"}
 
 
 def role_scores(session: Session, champ: Champion, patches: list[str]) -> tuple[dict[str, float], str, dict[str, MetaChampRole]]:
@@ -378,6 +456,86 @@ def build_for(session: Session, champ: Champion, role: str, patches: list[str], 
     return runes, [item_out(*c) for c in core], item_out(*boots) if boots else None
 
 
+def spells_for(session: Session, champ: Champion, role: str, patches: list[str], static: dict | None) -> dict | None:
+    """The most played summoner spell pair for a champion in a role, Flash second (on F)."""
+    if not patches:
+        return None
+    pairs: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    for r in session.exec(
+        select(MetaSpells).where(col(MetaSpells.patch).in_(patches), MetaSpells.champion_key == champ.key, MetaSpells.role == role)
+    ).all():
+        pairs[r.spells][0] += r.games
+        pairs[r.spells][1] += r.wins
+    if not pairs:
+        return None
+    total = sum(g for g, _ in pairs.values())
+    key, (games, wins) = max(pairs.items(), key=lambda kv: (kv[1][0], kv[1][1]))
+    ids = sorted((int(x) for x in key.split(",")), key=lambda i: (i == FLASH, i))
+    names = (static or {}).get("spells", {})
+    return {
+        "spells": [{"id": i, **names.get(i, {"name": f"Spell {i}", "icon": None})} for i in ids],
+        "games": games,
+        "pick_rate": games / total if total else None,
+        "win_rate": _rate(wins, games),
+    }
+
+
+def suggest_bans(
+    session: Session, champs: list[Champion], patches: list[str], n: int = BAN_COUNT, exclude: set[str] | None = None
+) -> list[dict]:
+    """Enemy champions the rolled champions do worst against, in high elo.
+
+    For each rolled champion, its win rate against an enemy is pulled toward its overall win rate by
+    BAN_PRIOR_GAMES games, so a 0-2 record doesn't outrank a 40-60 one. An enemy's threat is how far it
+    drags those win rates down, added up over the rolled champions. Our own champions, and any in
+    `exclude` (everyone's backup options), are never bans.
+    """
+    if not patches or not champs:
+        return []
+    ours = {c.key: c for c in champs}
+    base: dict[int, float] = {}
+    for key in ours:
+        games = wins = 0
+        for r in session.exec(
+            select(MetaChampRole).where(MetaChampRole.champion_key == key, col(MetaChampRole.patch).in_(patches))
+        ).all():
+            games += r.games
+            wins += r.wins
+        base[key] = wins / games if games else 0.5
+
+    vs: dict[int, dict[int, list[int]]] = defaultdict(lambda: defaultdict(lambda: [0, 0]))  # enemy -> ours -> [g, w]
+    for r in session.exec(
+        select(MetaMatchup).where(col(MetaMatchup.champion_key).in_(list(ours)), col(MetaMatchup.patch).in_(patches))
+    ).all():
+        if r.enemy_key not in ours:
+            vs[r.enemy_key][r.champion_key][0] += r.games
+            vs[r.enemy_key][r.champion_key][1] += r.wins
+
+    by_key = {c.key: c.id for c in session.exec(select(Champion)).all()}
+    scored = []
+    for enemy, rows in vs.items():
+        if enemy not in by_key or by_key[enemy] in (exclude or ()):
+            continue
+        threat, games, wins, against = 0.0, 0, 0, []
+        for key, (g, w) in rows.items():
+            shrunk = (w + BAN_PRIOR_GAMES * base[key]) / (g + BAN_PRIOR_GAMES)
+            threat += base[key] - shrunk
+            games, wins = games + g, wins + w
+            against.append({"champion_id": ours[key].id, "games": g, "win_rate": _rate(w, g)})
+        if threat > 0:
+            scored.append(
+                {
+                    "champion_id": by_key[enemy],
+                    "threat": round(threat, 4),
+                    "games": games,
+                    "win_rate": _rate(wins, games),  # our rolled champions' combined record against it
+                    "against": sorted(against, key=lambda a: -a["games"]),
+                }
+            )
+    scored.sort(key=lambda b: -b["threat"])
+    return scored[:n]
+
+
 def describe_page(page: str, games: int, wins: int, static: dict | None) -> dict:
     primary, sub, shards = page.split("|")
     p_style, p_perks = primary.split(":")
@@ -401,7 +559,9 @@ def describe_page(page: str, games: int, wins: int, static: dict | None) -> dict
     }
 
 
-def suggest_comp(session: Session, champion_ids: list[str], static: dict | None = None) -> dict:
+def suggest_comp(
+    session: Session, champion_ids: list[str], static: dict | None = None, exclude: list[str] | None = None
+) -> dict:
     champs = {c.id: c for c in session.exec(select(Champion).where(col(Champion.id).in_(champion_ids))).all()}
     order = [cid for cid in champion_ids if cid in champs][: len(ROLES)]
     patches = recent_patches(session)
@@ -416,6 +576,7 @@ def suggest_comp(session: Session, champion_ids: list[str], static: dict | None 
         # Off-role: show the build from the role the champ is usually played in.
         build_role = max(rows.values(), key=lambda r: r.games).role if off_role else role
         runes, items, boots = build_for(session, champ, build_role, patches, static)
+        spells = spells_for(session, champ, build_role, patches, static)
         picks.append(
             Pick(
                 champion_id=cid,
@@ -429,10 +590,12 @@ def suggest_comp(session: Session, champion_ids: list[str], static: dict | None 
                 runes=runes,
                 items=items,
                 boots=boots,
+                spells=spells,
             )
         )
     matches = session.exec(select(func.count()).select_from(MetaMatch)).one()
-    return {"patches": patches, "matches": matches, "picks": picks}
+    bans = suggest_bans(session, [champs[cid] for cid in order], patches, exclude=set(exclude or []))
+    return {"patches": patches, "matches": matches, "picks": picks, "bans": bans}
 
 
 # --- champion positions from Meraki Analytics (community data, no key needed) ----------------

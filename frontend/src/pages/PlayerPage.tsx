@@ -7,6 +7,7 @@ import { SkullIcon } from '../components/icons'
 import { ItemArt } from '../components/ItemArt'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Stat } from '../components/ui'
 import { useAchievements, useAction, useActiveRun, useChampionMap, usePlayerMap, useRuns } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { loadingUrl, splashUrl } from '../lib/champions'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
@@ -77,7 +78,7 @@ export function PlayerPage() {
       <Numbers profile={p} oneRun={runId != null} />
       <div className="grid gap-5 lg:grid-cols-[1fr_22rem]">
         <div className="flex flex-col gap-5">
-          {p.gold_timeline.length > 1 && (
+          {p.gold_timeline && p.gold_timeline.length > 1 && (
             <Section title="Gold this run" right={<GoldBadge amount={p.gold_timeline.at(-1)!.balance} />}>
               <GoldChart points={p.gold_timeline.map((g) => g.balance)} />
             </Section>
@@ -125,16 +126,19 @@ function TitlePicker({ playerId }: { playerId: number }) {
   const report = useAchievements()
   const players = usePlayerMap()
   const update = useAction((title: string | null) => api.updatePlayer(playerId, { title }))
+  const { isAdmin, myPlayerId } = useAccess()
   const current = players.get(playerId)?.title ?? null
   const unlocked = (report.data?.players[String(playerId)] ?? [])
     .map((u) => report.data!.catalog.find((a) => a.id === u.id))
     .filter((a): a is NonNullable<typeof a> => !!a)
   const shown = unlocked.find((a) => a.id === current)
   if (!unlocked.length) return null
+  // Only the player (or the site owner) picks their title; everyone else just sees it.
+  const canEdit = isAdmin || myPlayerId === playerId
   return (
     <div className="flex flex-wrap items-center gap-2">
       {shown && <span className="font-display text-lg tracking-wide text-gold-300 italic">“{shown.title}”</span>}
-      <select
+      {canEdit && <select
         className="input py-1 text-xs"
         aria-label="Title"
         value={current ?? ''}
@@ -147,7 +151,7 @@ function TitlePicker({ playerId }: { playerId: number }) {
             {a.icon} {a.title}
           </option>
         ))}
-      </select>
+      </select>}
     </div>
   )
 }
@@ -259,8 +263,9 @@ function Champions({ profile: p }: { profile: PlayerProfile }) {
 }
 
 function Items({ profile: p }: { profile: PlayerProfile }) {
-  const owned = ITEM_ORDER.filter((t) => p.items[t]?.bought)
-  if (!owned.length) return null
+  const items = p.items
+  const owned = ITEM_ORDER.filter((t) => items?.[t]?.bought)
+  if (!items || !owned.length) return null  // null: someone else's items are private
   return (
     <Section title="Shop items">
       <ul className="flex flex-col gap-2">
@@ -269,7 +274,7 @@ function Items({ profile: p }: { profile: PlayerProfile }) {
             <ItemArt type={t} size={32} />
             <span className="flex-1">{ITEM_META[t].name}</span>
             <span className="text-slate-400 tabular-nums">
-              {p.items[t]!.bought} bought · {p.items[t]!.used} used
+              {items[t]!.bought} bought · {items[t]!.used} used
             </span>
           </li>
         ))}

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(BACKEND_DIR / 'survival.db').as_posix()}"
     cors_origins: str = "http://localhost:5173"
     ddragon_base_url: str = "https://ddragon.leagueoflegends.com"
+    # The game client's Live Client Data API, only up while this PC is in a game. "off" turns it off.
+    live_client_url: str = "https://127.0.0.1:2999"
     # Run migrations and import champions (if none are cached) on startup. Tests turn this off.
     startup_tasks: bool = True
 

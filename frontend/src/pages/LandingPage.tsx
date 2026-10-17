@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ChartIcon, ClockIcon, GearIcon, LogoMark, PoolIcon, ShopIcon, WheelIcon } from '../components/icons'
 import { SoundToggle } from '../components/Layout'
 import { ModeToggle } from '../components/ModeToggle'
+import { UserMenu } from '../components/UserMenu'
 import { BackendDownBanner, NoChampionsBanner } from '../components/StatusBanners'
 import { Stat } from '../components/ui'
 import { useActiveRun, useChampions } from '../hooks/queries'
@@ -23,7 +24,7 @@ const TILES: Tile[] = [
   { to: '/settings', title: 'Settings', blurb: 'Players, runs and your Riot key', Icon: GearIcon },
 ]
 
-/** Title page (SPEC 17.2). Sign-in is reserved for the online lobby. */
+/** Title page (SPEC 17.2). */
 export function LandingPage() {
   usePageTitle('')
   const { run } = useActiveRun()
@@ -46,13 +47,7 @@ export function LandingPage() {
       <div className="relative z-10 flex items-center justify-end gap-2 px-4 pt-4">
         <ModeToggle />
         <SoundToggle />
-        <button
-          disabled
-          title="Coming with online play"
-          className="btn-secondary px-3 py-1.5 text-xs"
-        >
-          Sign in · soon
-        </button>
+        <UserMenu />
       </div>
 
       <main className="page-in relative z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col items-center px-4 pt-6 pb-12 text-center sm:pt-10">

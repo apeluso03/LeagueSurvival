@@ -1,11 +1,12 @@
 import type React from 'react'
+import type { ReactNode } from 'react'
 import { useChampionMap, usePlayerMap } from '../hooks/queries'
 import type { Game } from '../types'
 import { teamColor } from '../lib/teams'
 import { ChampionPortrait } from './ui'
 
 /** Pinned under the header while a game is pending: who has marked their champion, and who hasn't. */
-export function PickBar({ game }: { game: Game }) {
+export function PickBar({ game, extra }: { game: Game; extra?: ReactNode }) {
   const champs = useChampionMap()
   const players = usePlayerMap()
   const done = game.assignments.filter((a) => a.played_champion_id).length
@@ -31,6 +32,7 @@ export function PickBar({ game }: { game: Game }) {
             </span>
           )
         })}
+        {extra && <div className="ml-auto shrink-0 pl-2">{extra}</div>}
       </div>
     </div>
   )

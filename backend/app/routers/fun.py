@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import Champion, Run
+from app.models import Champion, Run, User
+from app.routers.access import require_admin
 from app.routers.common import get_or_404
 from app.services import achievements, meta, shame
 
@@ -46,6 +47,8 @@ def get_wrapped(month: str | None = None, session: Session = Depends(get_session
 
 class CompIn(BaseModel):
     champion_ids: list[str] = Field(min_length=1, max_length=5)
+    # Never suggest banning these (everyone's options, so a backup isn't banned away).
+    exclude: list[str] = Field(default_factory=list, max_length=30)
 
 
 @router.get("/meta/status")
@@ -54,7 +57,7 @@ def meta_status(session: Session = Depends(get_session)):
 
 
 @router.post("/meta/positions/refresh")
-async def refresh_positions(session: Session = Depends(get_session)):
+async def refresh_positions(_: User = Depends(require_admin), session: Session = Depends(get_session)):
     try:
         count = await meta.refresh_positions(session)
     except httpx.HTTPError as e:
@@ -73,5 +76,5 @@ async def suggest_comp(body: CompIn, session: Session = Depends(get_session)):
             static = await meta.load_static(version)
         except httpx.HTTPError:
             static = None  # names and icons are optional; ids still work
-    result = meta.suggest_comp(session, body.champion_ids, static)
+    result = meta.suggest_comp(session, body.champion_ids, static, exclude=body.exclude)
     return {**result, "picks": [asdict(p) for p in result["picks"]]}

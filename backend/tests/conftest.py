@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-from app.models import AppSettings, Champion, Player
+from app.models import AppSettings, Champion, Player, User
+from app.services import auth
 
 
 def make_champions(n: int) -> list[Champion]:
@@ -33,8 +34,25 @@ def session(engine):
         yield s
 
 
+TEST_PASSWORD = "correct horse battery"
+_HASH = None
+
+
+def make_user(session: Session, username: str, player_id: int | None = None, is_admin: bool = False) -> User:
+    """An account straight in the database (hashing once per test run keeps the suite fast)."""
+    global _HASH
+    if _HASH is None:
+        _HASH = auth.hash_password(TEST_PASSWORD)
+    user = User(username=username, password_hash=_HASH, player_id=player_id, is_admin=is_admin)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
 @pytest.fixture
-def client(engine, session):
+def anon_client(engine, session):
+    """A signed-out browser."""
     from app.db import get_session
     from app.main import app
 
@@ -42,7 +60,41 @@ def client(engine, session):
         with Session(engine) as s:
             yield s
 
+    auth.pair_throttle.__init__(limit=5)
+    auth.address_throttle.__init__(limit=20)
     app.dependency_overrides[get_session] = _override
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def sign_in(engine, anon_client):
+    """sign_in(user) -> a TestClient signed in as that user (its own cookie jar)."""
+    from app.main import app
+
+    clients = []
+
+    def _sign_in(user: User) -> TestClient:
+        with Session(engine) as s:
+            token = auth.start_session(s, s.get(User, user.id))
+            s.commit()
+        c = TestClient(app)
+        c.cookies.set(auth.SESSION_COOKIE, token)
+        clients.append(c)
+        return c
+
+    yield _sign_in
+    for c in clients:
+        c.close()
+
+
+@pytest.fixture
+def owner(session) -> User:
+    """The site owner: the account most tests act as."""
+    return make_user(session, "owner", is_admin=True)
+
+
+@pytest.fixture
+def client(owner, sign_in):
+    return sign_in(owner)

@@ -3,7 +3,8 @@ from sqlmodel import Session, col, select
 
 from app.config import get_settings
 from app.db import get_session
-from app.models import Player
+from app.models import Player, User
+from app.routers.access import require_admin
 from app.routers.common import get_app_settings
 from app.schemas import RiotStatusOut, SyncOut
 from app.services import matcher, sync
@@ -38,7 +39,7 @@ async def riot_status(check: bool = False, session: Session = Depends(get_sessio
 
 
 @router.post("/sync", response_model=SyncOut)
-async def sync_now(session: Session = Depends(get_session)):
+async def sync_now(_: User = Depends(require_admin), session: Session = Depends(get_session)):
     """Import recent matches for every linked player, then try to resolve pending games."""
     settings = get_app_settings(session)
     async with RiotClient() as client:

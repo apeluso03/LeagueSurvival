@@ -46,10 +46,10 @@ export const useOptionFacts = (gameId: number | null | undefined) =>
 export const useAchievements = () => useQuery({ queryKey: ['achievements'], queryFn: api.achievements })
 
 /** Suggested roles, runes and items for the rolled champions (high-elo data). */
-export const useComp = (championIds: string[]) =>
+export const useComp = (championIds: string[], exclude: string[] = []) =>
   useQuery({
-    queryKey: ['comp', ...championIds],
-    queryFn: () => api.comp(championIds),
+    queryKey: ['comp', ...championIds, '|', ...exclude],
+    queryFn: () => api.comp(championIds, exclude),
     enabled: championIds.length > 0,
     staleTime: 5 * 60_000,
   })
@@ -96,6 +96,17 @@ export const useTokens = (runId: number | null | undefined) =>
     enabled: runId != null,
   })
 
+/**
+ * The live game for the pending challenge game. Checks every 3s while live stats are coming in,
+ * every 10s while a game is pending (to notice it starting), and every 30s otherwise.
+ */
+export const useLive = () =>
+  useQuery({
+    queryKey: ['live'],
+    queryFn: api.live,
+    refetchInterval: (q) => (q.state.data?.live?.streaming ? 3_000 : q.state.data?.game_id ? 10_000 : 30_000),
+  })
+
 /** The active run, resolved through settings. */
 export function useActiveRun() {
   const settings = useSettings()
@@ -127,7 +138,7 @@ export function useAction<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>)
     // Not awaited on purpose: the refetch can unmount the caller (e.g. the pending game panel), and
     // per-call onSuccess callbacks are skipped once that happens.
     onSuccess: () => {
-      void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'champions' })
+      void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'champions' && q.queryKey[0] !== 'me' })
     },
   })
 }

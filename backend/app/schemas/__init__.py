@@ -77,6 +77,7 @@ class RunOut(BaseModel):
     best_streak: int
     started_at: datetime
     ended_at: datetime | None
+    owner_user_id: int | None = None
     alive_count: int
     total_count: int
     tokens_available: int
@@ -220,6 +221,7 @@ class PlayerOut(BaseModel):
     title: str | None = None
     # Set when a Riot ID lookup was attempted on this request and failed for a reason other than "not found".
     link_error: str | None = None
+    username: str | None = None  # the account that plays as this player, if anyone has signed up
 
 
 class RiotStatusOut(BaseModel):

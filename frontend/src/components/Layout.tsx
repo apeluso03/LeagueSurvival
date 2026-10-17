@@ -1,15 +1,17 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { useActiveRun, useTeamColors } from '../hooks/queries'
+import { useActiveRun, useLive, useTeamColors } from '../hooks/queries'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { setMuted, useMuted } from '../lib/sound'
 import { ErrorBoundary } from './ErrorBoundary'
 import { LogoMark, SoundOffIcon, SoundOnIcon } from './icons'
 import { ModeToggle } from './ModeToggle'
+import { UserMenu } from './UserMenu'
 import { BackendDownBanner, ResultWatcher, NoChampionsBanner } from './StatusBanners'
 
 const TABS = [
   { to: '/wheels', label: 'Wheels' },
+  { to: '/live', label: 'Live' },
   { to: '/pool', label: 'Pool' },
   { to: '/shop', label: 'Shop' },
   { to: '/stats', label: 'Stats' },
@@ -79,6 +81,8 @@ function useHeaderHeight() {
 
 export function Layout() {
   const { pathname } = useLocation()
+  const live = useLive().data?.live
+  const inGame = !!live && live.ended_at == null
   const headerRef = useHeaderHeight()
   useTeamColors()
   // Tabs set the title here; other pages (player, recap) set their own.
@@ -97,13 +101,17 @@ export function Layout() {
             <ModeToggle />
             <SoundToggle />
           </div>
-          <RunSummary />
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
+            <RunSummary />
+            <UserMenu />
+          </div>
         </div>
         <nav className="mx-auto max-w-7xl overflow-x-auto px-4">
           <div className="tab-strip">
             {TABS.map((t) => (
               <NavLink key={t.to} to={t.to} end className={({ isActive }) => `tab ${isActive ? 'is-active' : ''}`}>
                 {t.label}
+                {t.to === '/live' && inGame && <span className="tab-live-dot" title="A game is live" />}
               </NavLink>
             ))}
           </div>

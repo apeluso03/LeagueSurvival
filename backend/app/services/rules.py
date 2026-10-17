@@ -135,7 +135,7 @@ def delete_run(session: Session, run: Run) -> None:
     remaining run becomes selected."""
     from sqlmodel import delete
 
-    from app.models import AppSettings, Contract, GoldLedger
+    from app.models import AppSettings, Contract, GoldLedger, LiveGame
 
     game_ids = list(session.exec(select(ChallengeGame.id).where(ChallengeGame.run_id == run.id)).all())
     item_ids = list(session.exec(select(InventoryItem.id).where(InventoryItem.run_id == run.id)).all())
@@ -152,6 +152,7 @@ def delete_run(session: Session, run: Run) -> None:
     session.exec(delete(InventoryItem).where(col(InventoryItem.run_id) == run.id))
     session.exec(delete(ReviveToken).where(col(ReviveToken.run_id) == run.id))
     session.exec(delete(SpinAssignment).where(col(SpinAssignment.game_id).in_(game_ids)))
+    session.exec(delete(LiveGame).where(col(LiveGame.game_id).in_(game_ids)))
     session.exec(delete(ChallengeGame).where(col(ChallengeGame.run_id) == run.id))
 
     settings = session.get(AppSettings, 1)
