@@ -10,7 +10,7 @@ from sqlmodel import Session, select
 from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
-from app.routers import account, champions, fun, games, live, players, riot, runs, settings, shop, stats, tokens
+from app.routers import account, champions, fun, games, live, players, privacy, riot, runs, settings, shop, stats, tokens
 from app.routers.access import current_user
 from app.jobs import crawler, live_tracker, poller
 from app.services import ddragon, meta
@@ -70,7 +70,7 @@ async def lifespan(_app: FastAPI):
         task.cancel()
 
 
-app = FastAPI(title="LoL Survival Tracker", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Hardcore Draft", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -92,5 +92,5 @@ def health():
 
 # Signing in and invite links work signed out; everything else needs an account.
 app.include_router(account.router)
-for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun, live):
+for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun, live, privacy):
     app.include_router(module.router, dependencies=[Depends(current_user)])

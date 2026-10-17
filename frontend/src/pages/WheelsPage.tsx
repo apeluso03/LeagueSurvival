@@ -208,7 +208,7 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {run.status === 'ended' && (
         <p className="rounded-2xl bg-red-950/50 px-4 py-2.5 text-sm text-red-200 ring-1 ring-red-800/60 ring-inset">
           This run has ended with <b>{run.win_count}</b> wins. Start a new one in Settings.

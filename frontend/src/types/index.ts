@@ -629,7 +629,6 @@ export interface LiveIcon {
 }
 
 export interface LivePlayer {
-  name: string
   champion_id: string | null
   team: TeamId
   position: string // "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | ""
@@ -665,8 +664,9 @@ export interface LiveEvent {
   t: number
   type: 'kill' | 'multikill' | 'first_blood' | 'ace' | 'dragon' | 'baron' | 'herald' | 'grubs' | 'atakhan' | 'tower' | 'inhibitor'
   team: TeamId | null
-  killer?: string | null
-  victim?: string | null
+  // Who: a champion, plus our player when it's one of ours (in-game names are never stored)
+  killer?: { champion_id: string | null; player_id: number | null } | null
+  victim?: { champion_id: string | null; player_id: number | null } | null
   streak?: number
   detail?: string | null
   stolen?: boolean

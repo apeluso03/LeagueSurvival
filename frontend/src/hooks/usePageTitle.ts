@@ -4,6 +4,6 @@ import { useEffect } from 'react'
 export function usePageTitle(title: string | null) {
   useEffect(() => {
     if (title === null) return
-    document.title = title ? `${title} · LoL Survival` : 'LoL Survival'
+    document.title = title ? `${title} · Hardcore Draft` : 'Hardcore Draft'
   }, [title])
 }

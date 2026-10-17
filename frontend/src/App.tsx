@@ -3,6 +3,7 @@ import { Layout } from './components/Layout'
 import { InvitePage, LoginPage, RequireAuth, SetupPage } from './pages/AuthPages'
 import { HistoryPage } from './pages/HistoryPage'
 import { LandingPage } from './pages/LandingPage'
+import { LegalPage } from './pages/LegalPage'
 import { LivePage } from './pages/LivePage'
 import { OverlayPage } from './pages/OverlayPage'
 import { PlayerPage } from './pages/PlayerPage'
@@ -21,6 +22,7 @@ export default function App() {
       <Route path="login" element={<LoginPage />} />
       <Route path="setup" element={<SetupPage />} />
       <Route path="invite/:token" element={<InvitePage />} />
+      <Route path="legal" element={<LegalPage />} />
       <Route element={<RequireAuth />}>
         <Route index element={<LandingPage />} />
         <Route path="overlay" element={<OverlayPage />} />

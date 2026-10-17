@@ -3,6 +3,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, isUnreachable } from '../api/client'
 import { LogoMark } from '../components/icons'
+import { LegalNotice } from '../components/LegalNotice'
 import { ErrorText, LoadingState } from '../components/ui'
 import { useMe, useSession } from '../hooks/useAuth'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -43,13 +44,14 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle?: Re
       <div className="page-in relative z-10 flex w-full max-w-sm flex-col items-center">
         <LogoMark className="h-16 w-16" />
         <div className="font-display mt-3 text-sm tracking-[0.2em] uppercase">
-          <span className="text-white">LoL</span> <span className="blue-text">Survival</span>
+          <span className="text-white">Hardcore</span> <span className="blue-text">Draft</span>
         </div>
         <div className="card mt-6 w-full bg-slate-900/80">
           <h1 className="text-xl font-bold text-gold-100">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
           <div className="mt-5">{children}</div>
         </div>
+        <LegalNotice className="mt-6" />
       </div>
     </div>
   )

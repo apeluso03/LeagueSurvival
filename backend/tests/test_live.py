@@ -154,8 +154,12 @@ def test_client_summary(session, game):
     assert alex["option_index"] == 0 and alex["spells"][0]["name"] == "Flash" and alex["kills"] == 5
     bea = next(p for p in st["players"] if p["player_id"] == 2)
     assert bea["option_index"] == 2
-    foe = next(p for p in st["players"] if p["name"] == "Foe1")
+    foe = next(p for p in st["players"] if p["champion_id"] == "Champ019")
     assert foe["dead"] and foe["respawn"] == 12 and foe["player_id"] is None
+    # Nobody's in-game name is stored: opponents are their champion, ours are their player id.
+    assert "Foe1" not in str(st) and "AlexR" not in str(st)
+    kill = next(e for e in st["events"] if e["type"] == "kill")
+    assert kill["killer"]["player_id"] == 1 and kill["victim"] == {"champion_id": "Champ019", "player_id": None}
     assert [e["type"] for e in st["events"]][:3] == ["multikill", "grubs", "tower"]  # newest first
     assert st["events"][-1]["type"] == "first_blood" and st["events"][-1]["team"] == 100
     # picks were filled in from the client too

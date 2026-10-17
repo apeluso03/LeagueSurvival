@@ -107,6 +107,9 @@ export const api = {
   createInvite: (playerId: number) => post<Invite & { token: string }>('/accounts/invites', { player_id: playerId }),
   revokeInvite: (id: number) => request<void>('DELETE', `/accounts/invites/${id}`),
   deleteAccount: (id: number) => request<void>('DELETE', `/accounts/${id}`),
+  forgetPlayer: (playerId: number) => post<{ ok: boolean }>(`/privacy/players/${playerId}/forget`),
+  forgetPuuids: (puuids: string[]) => post<{ requested: number; players_forgotten: number }>('/privacy/forget', { puuids }),
+  purgeRiotData: () => post<{ match_stats: number; matches: number }>('/privacy/purge', { confirm: 'DELETE' }),
 
   settings: () => get<AppSettings>('/settings'),
   updateSettings: (body: Partial<AppSettings> & { void_pending?: boolean }) =>

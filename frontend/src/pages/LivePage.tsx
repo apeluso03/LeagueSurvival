@@ -347,7 +347,7 @@ function PlayerCell({ p, side, gameId }: { p: LivePlayer | undefined; side: Team
       <div className={`flex min-w-0 flex-1 flex-col gap-1 ${right ? 'items-end' : ''}`}>
         <div className={`flex max-w-full min-w-0 items-center gap-1.5 ${right ? 'flex-row-reverse' : ''}`}>
           <span className={`truncate text-sm font-semibold ${ours ? 'text-white' : 'text-slate-200'}`}>
-            {ours?.display_name ?? p.name}
+            {ours?.display_name ?? c?.name ?? 'Opponent'}
           </span>
           {optionTag && (
             <span
@@ -362,7 +362,7 @@ function PlayerCell({ p, side, gameId }: { p: LivePlayer | undefined; side: Team
               <ShieldIcon className="h-3.5 w-3.5" />
             </span>
           )}
-          <span className="hidden truncate text-xs text-slate-500 lg:inline">{c?.name}</span>
+          {ours && <span className="hidden truncate text-xs text-slate-500 lg:inline">{c?.name}</span>}
         </div>
         <div className={`flex items-center gap-2 ${right ? 'flex-row-reverse' : ''}`}>
           <span className={`flex gap-0.5 ${right ? 'flex-row-reverse' : ''}`}>
@@ -425,7 +425,9 @@ function OurTeam({ st, gameId }: { st: LiveState; gameId: number }) {
   )
 }
 
-function eventText(e: LiveEvent, name: (n?: string | null) => string): string {
+type Who = LiveEvent['killer']
+
+function eventText(e: LiveEvent, name: (w: Who) => string): string {
   switch (e.type) {
     case 'kill':
       return `${name(e.killer)} killed ${name(e.victim)}`
@@ -455,10 +457,14 @@ function eventText(e: LiveEvent, name: (n?: string | null) => string): string {
 function Feed({ events }: { events: LiveEvent[] }) {
   const players = usePlayerMap()
   // Riot names of our players read better as their app names.
-  const known = new Map(
-    [...players.values()].filter((p) => p.riot_game_name).map((p) => [p.riot_game_name!, p.display_name]),
-  )
-  const name = (n?: string | null) => (n ? (known.get(n) ?? n) : 'Someone')
+  const champs = useChampionMap()
+  // Our players by their app name, everyone else by champion (in-game names are never stored).
+  const name = (w: Who) =>
+    !w
+      ? 'Someone'
+      : w.player_id != null
+        ? (players.get(w.player_id)?.display_name ?? 'Someone')
+        : (champs.get(w.champion_id ?? '')?.name ?? 'Someone')
   const big = new Set(['first_blood', 'multikill', 'ace', 'baron', 'dragon', 'atakhan'])
   return (
     <section className="card flex max-h-80 flex-col gap-2 overflow-y-auto p-4">

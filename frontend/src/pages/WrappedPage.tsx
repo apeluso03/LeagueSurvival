@@ -42,7 +42,7 @@ export function WrappedPage() {
           ← Trophies
         </Link>
         <span className="broadcast-tag" style={{ ['--tag' as string]: 'var(--color-gold-600)' }}>
-          Survival Wrapped
+          Hardcore Wrapped
         </span>
         <select className="input ml-auto" aria-label="Month" value={w.month} onChange={(e) => setMonth(e.target.value)}>
           {(w.months.includes(w.month) ? w.months : [w.month, ...w.months]).map((m) => (
@@ -85,7 +85,7 @@ function Story({ w }: { w: Wrapped }) {
       art: art(w.most_played?.champion_id),
       body: (
         <>
-          <span className="wrapped-kicker">Survival Wrapped</span>
+          <span className="wrapped-kicker">Hardcore Wrapped</span>
           {big(monthName(w.month))}
           <p className="wrapped-line">
             {w.games} games. {w.players.length} players. Let's see how it went.

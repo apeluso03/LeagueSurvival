@@ -1,4 +1,6 @@
-# League of Legends Survival Tracker: Project Spec
+# Hardcore Draft: Project Spec
+
+Formerly "LoL Survival Tracker": renamed so the name and domain don't use Riot trademarks (12.6b).
 
 Version 0.3 (MVP, Gold and Shop, accounts; plan for a public site with many groups). Owner: Alex Peluso.
 Repo: github.com/apeluso03/LeagueSurvival
@@ -730,12 +732,22 @@ Goal: anyone can open the site, make an account, start a group, and invite their
 - **Crawler:** stays one global job; its data is shared by every group.
 - **Policies:** follow Riot's developer policies (no features that give an in-game advantage beyond what's allowed; show "Not affiliated with Riot Games"; a privacy policy describing what Riot data is stored).
 
+### 12.6b Riot terms compliance (built, v0.3)
+Checked against Riot's API Terms and the "Legal Jibber Jabber" fan-content policy:
+- **Required notice** on every page (footer, sign-in pages, landing): "Hardcore Draft was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project." Plus a public `/legal` page (privacy policy and terms of use).
+- **Data minimisation** (`services/privacy.py`): saved matches keep game numbers for every participant but the identity (PUUID) only of registered players; names, PUUIDs, summoner ids and icons of everyone else are removed before saving, and existing data was scrubbed by migration `9a1f6b3c7e52`. A player linked later has their matches fetched again rather than kept in full. Live games store no in-game names: opponents are their champion, ours their player id. The crawler keeps only totals; its PUUID queue is temporary.
+- **Deletion:** remove one player's Riot data (Settings, player row), forget a list of PUUIDs from a Riot GDPR deletion request (Settings, Privacy), and delete all Riot data if API access ends (Settings, or `python -m app.privacy_cli purge-all`). The challenge's own records (runs, results, gold, items) stay.
+- **Not commercial:** no paywall; shop gold has no real value. No contests or prizes (stated in the terms).
+- **Game integrity:** nothing interferes with the game; no cooldown tracking.
+- **Name:** renamed to **Hardcore Draft** (no Riot trademarks). The domain must not use them either, e.g. `hardcoredraft.gg`. "League of Legends" may still be named in descriptions, as a plain reference.
+- **Still to do before launch:** register a domain; the production key application; delete database backups made before scrubbing.
+
 ### 12.7 Safety, privacy and abuse (planned, before public launch)
 - Sign-up rate limits per address, plus a CAPTCHA or email check if sign-up spam shows up.
 - Optional email on accounts for password reset (today resets go through the group owner).
 - Delete my account and export my data; a group owner can delete their group and everything in it.
 - Group and player names are user content: length limits, and a way for the site admin to remove abusive ones.
-- Terms of use and a privacy policy pages.
+- Terms of use and a privacy policy pages (built: `/legal`; extend for accounts by email once that exists).
 - Sign-in throttle moves to a shared store (Redis or the database) once there's more than one server.
 
 ### 12.8 Discord (later)

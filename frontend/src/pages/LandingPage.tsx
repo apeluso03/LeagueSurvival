@@ -2,6 +2,7 @@ import type { ComponentType, SVGProps } from 'react'
 import { Link } from 'react-router-dom'
 import { ChartIcon, ClockIcon, GearIcon, LogoMark, PoolIcon, ShopIcon, WheelIcon } from '../components/icons'
 import { SoundToggle } from '../components/Layout'
+import { LegalNotice } from '../components/LegalNotice'
 import { ModeToggle } from '../components/ModeToggle'
 import { UserMenu } from '../components/UserMenu'
 import { BackendDownBanner, NoChampionsBanner } from '../components/StatusBanners'
@@ -52,7 +53,7 @@ export function LandingPage() {
 
       <main className="page-in relative z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col items-center px-4 pt-6 pb-12 text-center sm:pt-10">
         <LogoMark className="h-24 w-24 drop-shadow-[0_0_30px_rgb(10_200_185/0.25)] sm:h-28 sm:w-28" />
-        <h1 className="gold-text mt-5 text-4xl font-black tracking-[0.12em] sm:text-6xl">LEAGUE SURVIVAL</h1>
+        <h1 className="gold-text mt-5 text-4xl font-black tracking-[0.12em] sm:text-6xl">HARDCORE DRAFT</h1>
         <p className="mt-3 max-w-md text-sm text-slate-300 sm:text-base">
           Spin for your champs. Win and you keep them. Lose and they're gone.
         </p>
@@ -105,8 +106,9 @@ export function LandingPage() {
         </nav>
       </main>
 
-      <footer className="relative z-10 pb-5 text-center text-[11px] text-slate-500">
-        {patch && <>Champion data from patch {patch} · </>}Not affiliated with Riot Games
+      <footer className="relative z-10 mx-auto max-w-3xl px-4 pb-5 text-center text-[11px] text-slate-500">
+        {patch && <p className="mb-1">Champion data from patch {patch}</p>}
+        <LegalNotice />
       </footer>
     </div>
   )

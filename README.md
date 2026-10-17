@@ -1,6 +1,10 @@
-# LoL Survival Tracker
+# Hardcore Draft
 
-A web app for running the "League of Legends Survival" challenge with friends: a shared champion pool, spin wheels, eliminations on losses, and revive tokens for win streaks. See [SPEC.md](SPEC.md) for the full design.
+*Spin your champs. Lose them forever.*
+
+A web app for running a hardcore champion challenge in League of Legends with friends: a shared champion pool, spin wheels, eliminations on losses, and revive tokens for win streaks. See [SPEC.md](SPEC.md) for the full design.
+
+Inspired by the hardcore Dead by Daylight challenge streams by Otzdarva and friends. (A fan project; not connected to them, Behaviour Interactive or Riot Games.)
 
 **Status:** milestones M0 to M7 are built:
 - the challenge loop, Riot linking, stats and automatic results;
@@ -179,8 +183,22 @@ The goal is a public website: anyone can sign up, start their own group, and run
 
 The details are in SPEC.md section 12.
 
+## Privacy and Riot's terms
+
+The app follows Riot's API terms and fan-content policy (SPEC.md section 12.6b):
+
+- **Notice:** every page shows Riot's required "Legal Jibber Jabber" notice, and there's a public privacy and terms page at `/legal`.
+- **What it keeps:** only registered players are identifiable in saved data. Other players in a match are saved without names or IDs, and the live tracker labels opponents by champion.
+- **Deleting data:** Settings, under Privacy and Riot data, can remove one player's Riot data, act on a Riot deletion list, or delete all Riot data. The same works from the command line:
+
+  ```sh
+  cd backend
+  python -m app.privacy_cli forget <puuid> ...     # or: forget-file list.txt
+  python -m app.privacy_cli purge-all              # everything from Riot (asks first)
+  ```
+
 ## Credits
 
 - **League** display font (`frontend/public/fonts/League.otf`) by [FontGet.com](https://www.fontget.com), free for personal and commercial use.
-- Champion data and images from Riot Games' Data Dragon. This project isn't affiliated with or endorsed by Riot Games.
+- Champion data and images from Riot Games' Data Dragon. Hardcore Draft was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.
 
