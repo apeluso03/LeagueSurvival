@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { api } from '../api/client'
 import { useAction, useChampionLines, useEconomy, usePlayerMap, useTokens } from '../hooks/queries'
 import { splashUrl } from '../lib/champions'
@@ -9,6 +9,7 @@ import type { PoolEntry, Run } from '../types'
 import { useAccess } from '../hooks/useAuth'
 import { useOwnedItem } from '../hooks/useItems'
 import { BlacklistIcon, ShieldIcon, WheelIcon } from './icons'
+import { MobaWidget } from './MobaWidget'
 import { ErrorText, Modal, Spinner } from './ui'
 
 function Fact({ label, value }: { label: string; value: ReactNode }) {
@@ -198,6 +199,7 @@ export function ChampionCard({
               </>
             )}
             <ErrorText error={report.error} />
+            <MobaSection championId={entry.champion_id} />
 
             {active && canManage && (
               <details className="text-sm">
@@ -254,5 +256,20 @@ function ShieldPlacer({ run, entry, onDone }: { run: Run; entry: PoolEntry; onDo
       </div>
       <ErrorText error={owned.error} />
     </div>
+  )
+}
+
+/** Mobalytics' build for this champion, loaded only when opened. */
+function MobaSection({ championId }: { championId: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <details className="text-sm" onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="cursor-pointer text-slate-400">Mobalytics build</summary>
+      {open && (
+        <div className="mt-2">
+          <MobaWidget championId={championId} compact />
+        </div>
+      )}
+    </details>
   )
 }

@@ -63,6 +63,12 @@ export function LegalPage() {
           (which champions you played, wins and losses) stays with the group, but your Riot match stats and account ID
           are deleted. We also act on deletion requests Riot Games passes on to developers.
         </p>
+        <p className="font-semibold text-slate-100">Mobalytics build widgets</p>
+        <p>
+          When you open a "Mobalytics" build, it loads from Mobalytics' servers (and Google Fonts), which see your IP
+          address like any website you visit. It runs in an isolated frame that can't see your account or this app.
+          Nothing is loaded from Mobalytics until you open one.
+        </p>
         <p>
           We don't sell or share your data. Riot data comes from the Riot Games API and is used only to show it in this
           app.

@@ -21,6 +21,7 @@ Next come live updates, then groups so anyone can start their own, then hosting.
   - each option's quick facts;
   - a suggested role and a high-elo build (runes, summoner spells, core items, boots) for each player;
   - 5 suggested bans: the champions your rolled champs do worst against;
+  - an **M** button for each champion's full Mobalytics build (skill order, tier, full runes);
   - a pick bar, then a LOCKED IN moment and a loading-screen view;
   - win and elimination replay moments.
 
@@ -199,6 +200,7 @@ The app follows Riot's API terms and fan-content policy (SPEC.md section 12.6b):
 
 ## Credits
 
+- Build widgets by [Mobalytics](https://github.com/mobalyticshq/mobalytics-widgets) (MIT), loaded only when you open one. The app serves a fixed copy (`frontend/public/vendor/`), because theirs stopped showing item icons once their item catalog passed 400 items. Refresh it with `python scripts/update_mobalytics.py`.
 - **League** display font (`frontend/public/fonts/League.otf`) by [FontGet.com](https://www.fontget.com), free for personal and commercial use.
 - Champion data and images from Riot Games' Data Dragon. Hardcore Draft was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project.
 
