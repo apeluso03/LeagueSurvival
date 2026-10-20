@@ -130,6 +130,7 @@ def game_out(session: Session, game: ChallengeGame, champ_by_key: dict[int, str]
         tokens_earned=list(earned),
         match=match_summary(session, game, assignments, champ_by_key),
         gold=economy.game_gold(session, game.id),
+        gold_breakdown=economy.game_gold_breakdown(session, game.id),
         grades=grades,
         items_used=[ItemUseOut(player_id=i.player_id, type=i.type, target=i.target) for i in shop.items_used_in_game(session, game.id)],
         shields_saved=list(saved),

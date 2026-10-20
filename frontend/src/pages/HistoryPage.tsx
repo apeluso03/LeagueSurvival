@@ -16,7 +16,7 @@ import {
   useRuns,
 } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
-import type { Game, PoolEvent, Run } from '../types'
+import type { Game, GoldBreakdown, PoolEvent, Run } from '../types'
 
 const STATUS_STYLE: Record<Game['status'], string> = {
   won: 'bg-emerald-500/15 text-emerald-300',
@@ -200,6 +200,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                   ))}
                 </div>
               )}
+              {Object.keys(g.gold_breakdown ?? {}).length > 0 && <GoldBreakdownTable game={g} />}
               {g.match && <MatchSummaryView match={g.match} flagOptions={g.needs_review} />}
               {canManage && (g.status === 'won' || g.status === 'lost') && !g.riot_match_id && run?.status === 'active' && (
                 <LinkMatchForm gameId={g.id} />
@@ -292,5 +293,79 @@ function LinkMatchForm({ gameId }: { gameId: number }) {
         <ErrorText error={link.error} />
       </div>
     </form>
+  )
+}
+
+/** One amount with what it was earned from, e.g. "90" over "9 kills". */
+function Source({ amount, detail }: { amount: number | undefined; detail?: string }) {
+  if (amount == null) return <td className="px-2 py-1.5 text-slate-600">—</td>
+  return (
+    <td className="px-2 py-1.5">
+      <div className={`tabular-nums ${amount ? 'text-gold-200' : 'text-slate-500'}`}>{amount}</div>
+      {detail && <div className="text-[10px] text-slate-500">{detail}</div>}
+    </td>
+  )
+}
+
+/** Where each player's gold from this game came from: stats, multikills and contract payouts. */
+function GoldBreakdownTable({ game }: { game: Game }) {
+  const rows = game.assignments
+    .map((a) => ({ pid: a.player_id, b: game.gold_breakdown[String(a.player_id)] as GoldBreakdown | undefined }))
+    .filter((r): r is { pid: number; b: GoldBreakdown } => !!r.b)
+  const total = rows.reduce((sum, r) => sum + r.b.total, 0)
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-200">
+        Gold breakdown · <span className="text-gold-300 tabular-nums">{total}</span> total
+      </summary>
+      <div className="mt-2 overflow-x-auto">
+        <table className="w-full min-w-[640px] text-left text-xs">
+          <thead className="text-[10px] tracking-[0.12em] text-slate-500 uppercase">
+            <tr>
+              <th className="px-2 py-1 font-semibold">Player</th>
+              <th className="px-2 py-1 font-semibold">Kills</th>
+              <th className="px-2 py-1 font-semibold">Assists</th>
+              <th className="px-2 py-1 font-semibold">Damage</th>
+              <th className="px-2 py-1 font-semibold">Vision</th>
+              <th className="px-2 py-1 font-semibold">Multikills</th>
+              <th className="px-2 py-1 font-semibold">Contract</th>
+              <th className="px-2 py-1 text-right font-semibold">Total</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {rows.map(({ pid, b }) => {
+              const multis = Object.entries(b.multikill_counts ?? {})
+                .filter(([, n]) => n > 0)
+                .map(([k, n]) => `${n} ${k}`)
+                .join(', ')
+              return (
+                <tr key={pid}>
+                  <td className="px-2 py-1.5 font-semibold">
+                    <PlayerLink id={pid} />
+                  </td>
+                  <Source amount={b.kills} detail={b.stats ? `${b.stats.kills} kills` : undefined} />
+                  <Source amount={b.assists} detail={b.stats ? `${b.stats.assists} assists` : undefined} />
+                  <Source
+                    amount={b.damage}
+                    detail={
+                      b.damage_counted != null
+                        ? `${b.damage_counted.toLocaleString()} ${b.support_bonus ? 'dmg + heal/shield' : 'damage'}`
+                        : undefined
+                    }
+                  />
+                  <Source amount={b.vision} detail={b.stats ? `${b.stats.vision} vision score` : undefined} />
+                  <Source amount={b.multikills} detail={multis || undefined} />
+                  <Source amount={b.contract} detail={b.contract_goal ?? undefined} />
+                  <td className="px-2 py-1.5 text-right font-bold text-gold-300 tabular-nums">{b.total}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Gold comes from Riot stats in challenge games, using this run's gold rates (Settings → Shop settings).
+      </p>
+    </details>
   )
 }

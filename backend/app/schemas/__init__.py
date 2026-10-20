@@ -154,6 +154,7 @@ class GameOut(BaseModel):
     review_reason: str | None = None
     match: MatchSummaryOut | None = None  # the linked Riot match, or the one waiting for review
     gold: dict[int, int] = {}  # player id -> gold earned from this game (incl. contract payouts)
+    gold_breakdown: dict[int, dict] = {}  # player id -> per-source amounts (economy.game_gold_breakdown)
     grades: dict[int, str] = {}  # player id -> rating grade from the linked match
     items_used: list["ItemUseOut"] = []
     shields_saved: list[str] = []  # champions a shield kept alive in this game

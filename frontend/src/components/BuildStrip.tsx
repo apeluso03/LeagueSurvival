@@ -30,18 +30,28 @@ function RuneIcon({ rune, size, title }: { rune: RuneRef | null | undefined; siz
   return <img src={rune.icon} alt={rune.name} title={title ?? rune.name} width={size} height={size} className="shrink-0" />
 }
 
-function ItemIcon({ item, boots = false }: { item: MetaItemInfo; boots?: boolean }) {
-  const tip = `${item.name}${item.pick_rate != null ? ` · built in ${pct(item.pick_rate)} of games` : ''}${
-    item.win_rate != null ? ` · ${pct(item.win_rate)} win rate` : ''
-  }`
-  return item.image ? (
-    <img
-      src={item.image}
-      alt={item.name}
-      title={tip}
-      className={`h-7 w-7 shrink-0 rounded-sm ring-1 ${boots ? 'ring-slate-500/60' : 'ring-gold-500/60'}`}
-    />
-  ) : null
+function ItemIcon({ item, boots = false, owned }: { item: MetaItemInfo; boots?: boolean; owned?: boolean }) {
+  const tip = `${item.name}${owned === true ? ' · built' : owned === false ? ' · not built yet' : ''}${
+    item.pick_rate != null ? ` · built in ${pct(item.pick_rate)} of games` : ''
+  }${item.win_rate != null ? ` · ${pct(item.win_rate)} win rate` : ''}`
+  if (!item.image) return null
+  return (
+    <span className="relative shrink-0">
+      <img
+        src={item.image}
+        alt={item.name}
+        title={tip}
+        className={`h-7 w-7 rounded-sm ring-1 ${boots ? 'ring-slate-500/60' : 'ring-gold-500/60'} ${
+          owned === false ? 'opacity-35 grayscale' : ''
+        }`}
+      />
+      {owned && (
+        <span className="absolute -right-1 -bottom-1 grid h-3.5 w-3.5 place-items-center rounded-full bg-emerald-500 text-[9px] font-bold text-black">
+          ✓
+        </span>
+      )}
+    </span>
+  )
 }
 
 function Spells({ pair }: { pair: SpellPair }) {
@@ -89,7 +99,19 @@ export function MobaButton({ pick }: { pick: CompPick }) {
 }
 
 /** One champion's high-elo build in two compact rows: rune page and summoner spells, then core items and boots. */
-export function BuildStrip({ pick, loading = false }: { pick: CompPick | undefined; loading?: boolean }) {
+/**
+ * `owned`: item ids the player holds right now (Live tab). Built items get a check, the rest are
+ * dimmed, so you can see what's next at a glance.
+ */
+export function BuildStrip({
+  pick,
+  loading = false,
+  owned,
+}: {
+  pick: CompPick | undefined
+  loading?: boolean
+  owned?: Set<number>
+}) {
   if (!pick) return <div className="build-strip text-[11px] text-slate-500">{loading ? 'Loading build...' : ''}</div>
   const r = pick.runes
   const all = r ? [...r.primary_perks, ...r.secondary_perks].map((p) => p.name).join(', ') : ''
@@ -119,12 +141,12 @@ export function BuildStrip({ pick, loading = false }: { pick: CompPick | undefin
       )}
       <div className="flex items-center gap-1">
         {pick.items.map((i) => (
-          <ItemIcon key={i.id} item={i} />
+          <ItemIcon key={i.id} item={i} owned={owned ? owned.has(i.id) : undefined} />
         ))}
         {pick.boots && (
           <>
             <span className="mx-0.5 text-[10px] text-slate-500">+</span>
-            <ItemIcon item={pick.boots} boots />
+            <ItemIcon item={pick.boots} boots owned={owned ? owned.has(pick.boots.id) : undefined} />
           </>
         )}
         <MobaButton pick={pick} />

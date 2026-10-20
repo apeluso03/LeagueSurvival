@@ -30,13 +30,14 @@ Next come live updates, then groups so anyone can start their own, then hosting.
   - the score, game clock and item-gold lead;
   - towers, dragons and other objectives;
   - each lane's matchup with items, spells, KDA and CS;
-  - a gold-lead graph, contract progress and a play-by-play feed.
+  - a gold-lead graph, contract progress and a play-by-play feed;
+  - your team's builds, with items already built checked off.
 - **Pool:** card grid of the run's champions with sorts and filters, shields, revives and each champion's numbers.
 - **Shop:** gold from your in-game stats; Reroll, Blacklist, Swap, Shield, Choose a Champ and Contracts.
 - **Stats:** per-player stats and a sortable leaderboard. Each player has their own page with their title, champions and recent games.
 - **Trophies:** 22 achievements that unlock titles, plus a Hall of Shame.
 - **Wrapped:** a monthly story of your group's games.
-- **History:** every game, the pool activity log, Undo, and Link match for hand-recorded games.
+- **History:** every game with a gold breakdown per player (kills, assists, damage, vision, multikills, contracts), the pool activity log, Undo, and Link match for hand-recorded games.
 - **Run recap:** a post-game stats graphic with awards. You can save it as an image.
 - **Stream overlay:** `/overlay`, a see-through page for OBS showing the score, picks and big moments.
 - **Accounts:** an owner account, invite links, and each player handling their own gold, shop and items (see below).
@@ -149,6 +150,7 @@ After a spin, the backend looks for your game.
 - **Live stats:** items, KDA, CS, objectives and kills come from the League client's local Live Client Data API, so **they only work when the backend runs on a PC that's in the game.** Set `LIVE_CLIENT_URL=off` to turn that off.
 - **Your picks:** either source fills in each player's champion as soon as the game loads, so you don't have to click picks. Picks you set by hand are kept.
 - **Gold numbers:** the game only shares gold for its own player, so team and lane gold are estimated from the value of items held, like a broadcast does.
+- **Preview:** to see the Live tab without being in a game, open it and click **Preview with sample data** (or go to `/live?preview=1`). It shows a made-up game built in your browser; nothing is saved.
 - **No cooldown timers:** summoner spells are shown, but not their cooldowns. Riot's rules restrict tracking those.
 
 ## High-elo builds (comp suggestions)

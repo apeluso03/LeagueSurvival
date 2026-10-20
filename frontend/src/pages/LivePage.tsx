@@ -1,9 +1,21 @@
-import type { CSSProperties, ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { BuildStrip, RoleChip } from '../components/BuildStrip'
 import { GoldLeadChart } from '../components/GoldLeadChart'
 import { ShieldIcon } from '../components/icons'
 import { ChampionPortrait, EmptyState, LoadingState } from '../components/ui'
-import { useActiveRun, useChampionMap, useEconomy, useLive, usePlayerMap, usePool } from '../hooks/queries'
+import {
+  useActiveRun,
+  useChampionMap,
+  useChampions,
+  useComp,
+  useEconomy,
+  useGame,
+  useLive,
+  usePlayerMap,
+  usePlayers,
+  usePool,
+} from '../hooks/queries'
 import {
   BLUE,
   DRAGON_COLOR,
@@ -16,6 +28,7 @@ import {
   goldShort,
   pairLanes,
 } from '../lib/live'
+import { makeDemoLive } from '../lib/liveDemo'
 import { queueName } from '../lib/queues'
 import { teamColor } from '../lib/teams'
 import type { LiveEvent, LiveGame, LiveIcon, LiveItem, LivePlayer, LiveState, LiveTeam, TeamId } from '../types'
@@ -23,6 +36,8 @@ import type { LiveEvent, LiveGame, LiveIcon, LiveItem, LivePlayer, LiveState, Li
 /** Live game tracker: a broadcast-style view of the game a pending spin is being played in. */
 export function LivePage() {
   const live = useLive()
+  const [params, setParams] = useSearchParams()
+  if (params.get('preview') === '1') return <LivePreview onExit={() => setParams({})} />
   if (live.isPending) return <LoadingState />
   const data = live.data
   if (!data?.live) return <NotLive pending={data?.game_id != null} />
@@ -46,20 +61,26 @@ function NotLive({ pending }: { pending: boolean }) {
           PC that's in the game.
         </li>
       </ul>
-      {!pending && (
-        <Link to="/wheels" className="btn-primary">
-          Go to Wheels
+      <div className="flex flex-wrap justify-center gap-2">
+        {!pending && (
+          <Link to="/wheels" className="btn-primary">
+            Go to Wheels
+          </Link>
+        )}
+        <Link to="/live?preview=1" className="btn-secondary">
+          Preview with sample data
         </Link>
-      )}
+      </div>
     </EmptyState>
   )
 }
 
-function Live({ live }: { live: LiveGame }) {
+function Live({ live, preview }: { live: LiveGame; preview?: ReactNode }) {
   const st = live.state
   const ended = live.ended_at != null
   return (
     <div className="flex flex-col gap-4">
+      {preview}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span
           className="broadcast-tag"
@@ -73,11 +94,13 @@ function Live({ live }: { live: LiveGame }) {
           {ended ? (st?.result ? `Game over · ${st.result === 'Win' ? 'Victory' : 'Defeat'}` : 'Game over') : 'Live'}
         </span>
         <h1 className="text-lg text-white">
-          Game {live.game_id}
+          {preview ? 'Sample game' : `Game ${live.game_id}`}
           {live.queue_id != null && <span className="text-slate-400"> · {queueName(live.queue_id)}</span>}
         </h1>
         <span className="ml-auto text-xs text-slate-500">
-          {live.streaming
+          {preview
+            ? 'Made-up numbers · nothing is saved'
+            : live.streaming
             ? 'Live stats from the game client · updates every few seconds'
             : st
               ? 'Live stats paused (the game client on this PC stopped answering)'
@@ -181,7 +204,14 @@ function Scoreboard({ live, st }: { live: LiveGame; st: LiveState }) {
       </section>
       <Bans live={live} />
       <div className="grid gap-4 xl:grid-cols-[1fr_22rem]">
-        <Lanes st={st} gameId={live.game_id} />
+        <div className="flex min-w-0 flex-col gap-4">
+          <Lanes st={st} gameId={live.game_id} />
+          <Builds
+            players={st.players
+              .filter((p) => p.player_id != null && p.champion_id)
+              .map((p) => ({ playerId: p.player_id!, championId: p.champion_id!, items: p.items.map((i) => i.id) }))}
+          />
+        </div>
         <div className="flex flex-col gap-4">
           <section className="card flex flex-col gap-2 p-4">
             <h2 className="text-sm font-semibold text-white">Gold lead</h2>
@@ -496,6 +526,11 @@ function SpectatorOnly({ live }: { live: LiveGame }) {
   return (
     <>
       <Bans live={live} />
+      <Builds
+        players={live.participants
+          .filter((p) => p.player_id != null && p.champion_id)
+          .map((p) => ({ playerId: p.player_id!, championId: p.champion_id! }))}
+      />
       <div className="grid gap-4 md:grid-cols-2">
         {[BLUE, RED].map((team) => (
           <section
@@ -540,4 +575,123 @@ function SpectatorOnly({ live }: { live: LiveGame }) {
       </div>
     </>
   )
+}
+
+// --- builds for our players (so nobody has to flip back to the Wheels tab mid-game) ---------------
+
+function Builds({ players }: { players: { playerId: number; championId: string; items?: number[] }[] }) {
+  const champs = useChampionMap()
+  const names = usePlayerMap()
+  const comp = useComp(players.map((p) => p.championId))
+  const picks = new Map((comp.data?.picks ?? []).map((p) => [p.champion_id, p]))
+  if (!players.length) return null
+  return (
+    <section className="card flex flex-col gap-3 p-4" aria-label="Your builds">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-white">Your builds</h2>
+        <span className="text-[11px] text-slate-500">
+          High-elo runes, spells and core items · ✓ already built · M opens the full Mobalytics build
+        </span>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+        {players.map((p) => {
+          const pick = picks.get(p.championId)
+          const owned = p.items ? new Set(p.items) : undefined
+          const core = pick?.items ?? []
+          const built = owned ? core.filter((i) => owned.has(i.id)).length : null
+          return (
+            <div
+              key={p.playerId}
+              className="flex flex-col gap-2 rounded-sm bg-white/[0.03] p-2.5 ring-1 ring-white/5 ring-inset"
+              style={{ boxShadow: `inset 2px 0 0 ${teamColor(p.playerId)}` }}
+            >
+              <div className="flex items-center gap-2">
+                <ChampionPortrait champion={champs.get(p.championId)} size="xs" className="rounded-sm" />
+                <span className="min-w-0 truncate text-sm font-semibold" style={{ color: teamColor(p.playerId) }}>
+                  {names.get(p.playerId)?.display_name}
+                </span>
+                <span className="truncate text-xs text-slate-400">{champs.get(p.championId)?.name}</span>
+                <RoleChip pick={pick} />
+                {built != null && core.length > 0 && (
+                  <span className="ml-auto shrink-0 text-[10px] text-slate-400 tabular-nums" title="Core items built so far">
+                    core {built}/{core.length}
+                  </span>
+                )}
+              </div>
+              <BuildStrip pick={pick} loading={comp.isLoading} owned={owned} />
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+// --- preview with sample data ----------------------------------------------------------------
+
+/**
+ * The Live tab filled with a made-up game, to check how it looks without being in one. Uses the
+ * current spin's players and champions (or the roster with sample champions), real art and the real
+ * build suggestions. Runs only in the browser: nothing is saved, nothing calls Riot.
+ */
+function LivePreview({ onExit }: { onExit: () => void }) {
+  const champions = useChampions()
+  const players = usePlayers()
+  const { run } = useActiveRun()
+  const game = useGame(run.data?.pending_game_id)
+  const [t, setT] = useState(14 * 60)
+  const [speed, setSpeed] = useState(1)
+
+  useEffect(() => {
+    if (!speed) return
+    const id = setInterval(() => setT((x) => Math.min(x + speed, 45 * 60)), 1000)
+    return () => clearInterval(id)
+  }, [speed])
+
+  const ours = useMemo(() => {
+    const spin = game.data?.status === 'pending' ? game.data.assignments : []
+    if (spin.length) return spin.map((a) => ({ playerId: a.player_id, championId: a.played_champion_id ?? a.options[0] }))
+    // No spin going: up to five players on sample champions.
+    const list = champions.data ?? []
+    return (players.data ?? []).slice(0, 5).map((p, i) => ({ playerId: p.id, championId: list[(i * 37 + 11) % Math.max(1, list.length)]?.id }))
+  }, [game.data, players.data, champions.data])
+
+  if (!champions.data?.length) return <LoadingState />
+  const live = makeDemoLive({
+    ours: ours.filter((o): o is { playerId: number; championId: string } => !!o.championId),
+    champions: champions.data,
+    t,
+    gameId: game.data?.id,
+  })
+
+  const banner = (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-sm bg-amber-500/10 px-3 py-2 text-xs text-amber-100 ring-1 ring-amber-400/30 ring-inset">
+      <span className="broadcast-tag" style={{ ['--tag' as string]: '#b8730c' } as CSSProperties}>
+        Preview
+      </span>
+      <span>
+        A made-up game so you can see the Live tab. {ours.length ? 'Your team is the current spin or your roster.' : ''} Real
+        games replace this automatically.
+      </span>
+      <span className="ml-auto flex items-center gap-1.5">
+        <span className="text-amber-200/70">Clock</span>
+        {[0, 1, 10].map((s) => (
+          <button
+            key={s}
+            className={`rounded-sm px-2 py-0.5 ring-1 ring-inset ${speed === s ? 'bg-amber-400/25 ring-amber-300/60' : 'ring-amber-300/25 hover:bg-amber-400/10'}`}
+            onClick={() => setSpeed(s)}
+          >
+            {s === 0 ? 'Pause' : `${s}×`}
+          </button>
+        ))}
+        <button className="rounded-sm px-2 py-0.5 ring-1 ring-amber-300/25 ring-inset hover:bg-amber-400/10" onClick={() => setT(14 * 60)}>
+          Restart
+        </button>
+        <button className="btn-secondary ml-1 px-3 py-1 text-xs" onClick={onExit}>
+          Exit preview
+        </button>
+      </span>
+    </div>
+  )
+  return <Live live={live} preview={banner} />
 }

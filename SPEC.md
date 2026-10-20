@@ -509,6 +509,8 @@ Built since (v0.3):
 ### 10.1b Live tab (`/live`)
 - Shown in the nav with a red dot while a game is live. Before a game starts it explains what will happen; once found through Riot only, it lists both teams' champions, spells, keystones and bans.
 - With live stats, a broadcast layout: score bug (kills per side, game clock, item-gold lead, towers, dragons by type, grubs, herald, baron); bans; lane-by-lane rows pairing each player with their opponent (portrait with level and respawn timer, spells, keystone, KDA, CS, all 7 item slots, lane gold and CS difference); our players marked with their team colour, which spin option they're on, and a shield icon if their champion is shielded; a gold-lead graph; contract progress for kills and assists goals; a play-by-play feed.
+- **Preview** (`/live?preview=1`, or "Preview with sample data" when no game is tracked): the whole tab with a made-up game (`lib/liveDemo.ts`), built in the browser from the current spin's players and champions (or the roster), real art and real build suggestions. The clock runs (pause, 1×, 10×, restart). Nothing is saved and nothing calls Riot.
+- **Your builds** under the lanes: each of our players' high-elo build (runes, spells, core items, boots, the Mobalytics button), with items they already hold checked and the rest dimmed ("core 2/3"), so nobody has to switch back to the Wheels tab mid-game. Shown from Spectator data too (without the checks).
 - The Wheels tab's result bar says "In game · 12:34 · picks filled in from the live game" with a Watch live link. The stream overlay swaps the picks for a live score bar during the game (`?live=0` hides it).
 
 ### 10.2 Stats tab
@@ -544,6 +546,7 @@ Built since (v0.3):
 - Buying a Contract reveals its goal right away with a short animation.
 
 ### 10.5 History tab
+- Each game with gold has a "Gold breakdown" table: per player, gold from kills, assists, damage (with healing and shielding for supports), vision, multikills and contract payouts, each with the counts behind it, and the total (`GameOut.gold_breakdown`, from the gold ledger).
 - List of Challenge Games: date, players, champions played, result, auto or manual, items used, gold earned, rating grades, link to match details.
 - "Link match" on manual games to pull Riot stats and award gold.
 - Undo button on the most recent result.

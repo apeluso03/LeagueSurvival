@@ -278,3 +278,21 @@ def test_contract_goal_is_random_and_uses_config(session, run):
     assert seen <= set(contracts.GOALS)
     stored = session.exec(select(Contract)).all()
     assert len(stored) == 4 and all(session.get(InventoryItem, c.item_id).price_paid == 100 for c in stored)
+
+
+def test_game_gold_breakdown_by_source(session, run):
+    give(session, run, 1, 100)
+    item, contract = shop.purchase(session, run, 1, "contract", random.Random(0))
+    contract.goal_type, contract.target = "kills", "8"
+    session.commit()
+    game = play(session, run, kills=(9, 1))
+    b = economy.game_gold_breakdown(session, game.id)
+    alex = b[1]
+    assert (alex["kills"], alex["assists"], alex["damage"], alex["vision"], alex["multikills"]) == (90, 14, 30, 10, 0)
+    assert alex["contract"] == 300 and "8" in alex["contract_goal"]
+    assert alex["total"] == 144 + 300
+    assert alex["stats"]["kills"] == 9 and alex["damage_counted"] == 15000
+    assert b[2]["contract"] == 0 and b[2]["total"] == economy.game_gold(session, game.id)[2]
+    rules.undo_result(session, game)
+    session.commit()
+    assert economy.game_gold_breakdown(session, game.id) == {}

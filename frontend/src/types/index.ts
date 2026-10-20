@@ -120,6 +120,7 @@ export interface Game {
   review_reason: string | null
   match: MatchSummary | null
   gold: Record<string, number> // player id -> gold from this game
+  gold_breakdown: Record<string, GoldBreakdown> // player id -> where it came from
   grades: Record<string, string> // player id -> rating grade
   items_used: { player_id: number; type: ItemType; target: Record<string, unknown> }[]
   shields_saved: string[]
@@ -706,4 +707,20 @@ export interface LiveGame {
   bans: { champion_id: string; team: TeamId }[]
   state: LiveState | null
   streaming: boolean // live stats are coming in right now
+}
+
+/** One player's gold from one game, by source (economy.game_gold_breakdown). */
+export interface GoldBreakdown {
+  total: number
+  kills?: number
+  assists?: number
+  damage?: number
+  vision?: number
+  multikills?: number
+  contract: number
+  contract_goal: string | null
+  support_bonus?: boolean // damage includes healing and shielding on teammates
+  damage_counted?: number
+  multikill_counts?: Record<string, number> // "double" | "triple" | "quadra" | "penta" -> count
+  stats?: { kills: number; deaths: number; assists: number; vision: number }
 }
