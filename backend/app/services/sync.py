@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, col, select
 
-from app.models import AppSettings, Player, PlayerMatchStats, RiotMatch, utcnow
+from app.models import Player, PlayerMatchStats, RiotMatch, utcnow
 from app.services import privacy, rating
 from app.services.riot_client import RiotClient, RiotError
 
@@ -160,7 +160,9 @@ async def sync_all(session: Session, client: RiotClient, player_ids: list[int] |
             if e.status in (0, 401, 403):  # key problem: every other call will fail too
                 break
 
-    settings = session.get(AppSettings, 1) or AppSettings(id=1)
+    from app.models import SiteSettings  # noqa: PLC0415
+
+    settings = session.get(SiteSettings, 1) or SiteSettings(id=1)
     settings.last_sync_at = utcnow()
     settings.last_sync_error = "; ".join(result.errors) or None
     session.add(settings)

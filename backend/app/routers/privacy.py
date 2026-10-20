@@ -1,13 +1,13 @@
-"""Deleting Riot data on request (services/privacy.py). Site owner only."""
+"""Deleting Riot data on request (services/privacy.py): one player (group owner), Riot deletion
+lists and everything (site admin)."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
 from app.db import get_session
-from app.models import Player, User
-from app.routers.access import require_admin
-from app.routers.common import get_or_404
+from app.models import User
+from app.routers.access import Ctx, get_player, require_admin, require_owner
 from app.services import privacy
 
 router = APIRouter(prefix="/api/privacy", tags=["privacy"])
@@ -23,9 +23,9 @@ class PurgeIn(BaseModel):
 
 
 @router.post("/players/{player_id}/forget")
-def forget_player(player_id: int, _: User = Depends(require_admin), session: Session = Depends(get_session)):
+def forget_player(player_id: int, ctx: Ctx = Depends(require_owner), session: Session = Depends(get_session)):
     """Delete a player's Riot data: PUUID, Riot ID and match stats. Their challenge history stays."""
-    privacy.forget_player(session, get_or_404(session, Player, player_id, "Player"))
+    privacy.forget_player(session, get_player(session, ctx, player_id))
     session.commit()
     return {"ok": True}
 

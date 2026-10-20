@@ -681,7 +681,7 @@ Every endpoint except `/api/health` and the signed-out `/api/auth/*` ones needs 
 ## 12. Accounts, Groups and Going Public
 
 ### 12.1 Accounts (built, v0.3)
-- **Sign-up is invite-only today.** The first person to open a new site makes the owner account on `/setup`; it takes over every run made before accounts existed. Everyone else joins through an invite link the site owner makes for their player in Settings.
+- **First account:** the first person to open a new site makes the site admin account on `/setup`; it takes over the group that existed before accounts. Since 12.4, new groups start with a site invite code (or open sign-up), and members join through player invite links.
 - **Invites:** one-time, tied to one Player, expire after 7 days. A new link for the same player cancels the old one. Only a SHA-256 of the token is stored, so a link is shown once.
 - **Passwords:** scrypt (Python's standard library), 8 to 200 characters. Usernames are 3 to 24 letters, numbers, dots, dashes or underscores, case-insensitive.
 - **Sessions:** a random token in an HttpOnly, SameSite=Lax cookie (secure on https), valid for 30 days. Only its SHA-256 is stored. Signing out deletes it on the server; changing your password signs out every other browser.
@@ -709,7 +709,16 @@ Players now sit on their own devices, so changes must show up everywhere at once
 - The client keeps TanStack Query as the source of truth: an event invalidates or patches the matching queries. The 10-second polling on the Wheels tab goes away.
 - Ready check before a spin (optional): players tap "Ready" and the owner sees who is set.
 
-### 12.4 Groups: anyone can start their own (planned)
+### 12.4 Groups: anyone can start their own (built, v0.4)
+
+Built as designed below, with these specifics:
+- Tables `group`, `groupmember` (role owner | member, player_id unique), `siteinvite` (one-time codes to start a group, 30 days), `sitesettings` (open_signup, Riot sync status, build crawler); `group_id` on player, run, invite and appsettings; `authsession.group_id` is the group a browser is viewing. Migration `b7d3e1f05a92` moved everything into one group owned by the first account.
+- Starting a group needs a site invite code, open sign-up, or being the site admin. Sign-up: `/signup?code=...` (new account + group); signed in: `/groups/new`. Player invites (`/invite/<token>`) work for new accounts and for signed-in accounts joining another group. Members switch groups from the user menu.
+- Access (`routers/access.py`): a `Ctx` (user, group, membership) on every group route; `get_run` / `get_player` / `get_game` answer 404 outside the group. Trophies, Hall of Shame, Wrapped, champion stats and option facts only count the group's games and players. The poller, matcher and live tracker work across all groups (each with its own settings).
+- Removing a member keeps their player and history; an account left in no group is deleted (its username is free again). Group owners can't be removed.
+- Sign-up throttle: 5 new accounts per address per hour (in memory).
+
+The original plan:
 Goal: anyone can open the site, make an account, start a group, and invite their own friends. Each group runs its own challenge with its own settings, and the creator owns it.
 
 - **New table `Group`:** id, name, owner_user_id, created_at. Players, runs, invites and settings (`AppSettings` becomes one row per group) all get a `group_id`. The active run becomes per group.
@@ -721,7 +730,15 @@ Goal: anyone can open the site, make an account, start a group, and invite their
 - **Existing data:** a migration puts every current player, run, invite and setting into one group owned by the current site owner.
 - **Limits:** caps on groups per account, players per group and runs per group, so one account can't fill the database.
 
-### 12.5 Hosting (planned)
+### 12.5 Hosting (built for Railway, v0.4)
+
+- `Dockerfile`: builds the frontend, then a Python 3.12 image running uvicorn with `--proxy-headers` (HTTPS behind Railway's proxy, so cookies are secure) and one worker. `FRONTEND_DIST` makes the backend serve the built app with an `index.html` fallback for app routes; `/api/*` stays the API. Security headers on every response (nosniff, referrer policy, frame options, HSTS on https).
+- `railway.json`: Dockerfile build, one replica (the background jobs run in-process), `/api/health` check.
+- Postgres via `psycopg`; `postgres://` URLs are accepted. Every migration and the whole test suite (`TEST_DATABASE_URL=...`) run on Postgres 16. `livegame.riot_game_id` is BIGINT (migration `d4a8c2e61f07`): Riot game ids don't fit 32 bits.
+- `scripts/sqlite_to_postgres.py` moves a local SQLite database into an empty Postgres one and checks the counts.
+- Step-by-step in the README ("Hosting on Railway").
+
+The original plan:
 - **Postgres** instead of SQLite (one writer at a time won't hold up with many groups). Migrations must also run on Postgres; the current ones are written to be safe to re-run on SQLite.
 - **Host:** a container on Fly.io, Railway or Render, with the frontend built and served from the same domain (so the session cookie stays first-party) or from a CDN with the API on a subdomain.
 - **HTTPS everywhere.** Cookies switch to secure automatically on https.

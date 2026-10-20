@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     live_client_url: str = "https://127.0.0.1:2999"
     # Run migrations and import champions (if none are cached) on startup. Tests turn this off.
     startup_tasks: bool = True
+    # The built frontend (frontend/dist) to serve from the same address as the API, when hosted.
+    # Empty: don't serve it (local development uses the Vite dev server).
+    frontend_dist: str = ""
 
     @field_validator("riot_api_key")
     @classmethod
@@ -28,6 +31,16 @@ class Settings(BaseSettings):
         # RIOT_API_KEY=off (or none/disabled) turns Riot calls off even when .env has a key.
         # Handy for test servers; on Windows an empty value can't override .env.
         return "" if v.strip().lower() in ("off", "none", "disabled") else v.strip()
+
+    @field_validator("database_url")
+    @classmethod
+    def _db_driver(cls, v: str) -> str:
+        # Hosts hand out "postgres://..." or "postgresql://..."; SQLAlchemy needs the driver named.
+        v = v.strip()
+        for prefix in ("postgres://", "postgresql://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix):]
+        return v
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -6,7 +6,7 @@ from sqlmodel import Session, col, select
 
 from app.db import get_session
 from app.models import Champion, User
-from app.routers.access import require_admin
+from app.routers.access import Ctx, get_run, group_ctx, require_admin
 from app.routers.common import get_or_404
 from app.services import ddragon, stats
 
@@ -29,7 +29,11 @@ async def refresh_champions(_: User = Depends(require_admin), session: Session =
 
 
 @router.get("/{champion_id}/stats")
-def champion_stats(champion_id: str, run_id: int | None = None, session: Session = Depends(get_session)):
-    """Everything the Pool tab shows on a champion's card (SPEC 17.4)."""
+def champion_stats(
+    champion_id: str, run_id: int | None = None, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)
+):
+    """Everything the Pool tab shows on a champion's card (SPEC 17.4), for this group."""
     champion = get_or_404(session, Champion, champion_id, "Champion")
-    return asdict(stats.champion_report(session, champion, run_id))
+    if run_id is not None:
+        get_run(session, ctx, run_id)
+    return asdict(stats.champion_report(session, champion, run_id, ctx.group_id))

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
@@ -21,7 +21,7 @@ const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString() :
 
 /** Your account: who you are, your team colour, password, sign out. Everyone sees this. */
 export function AccountSection({ colorPicker }: { colorPicker?: ReactNode }) {
-  const { user, isAdmin } = useAccess()
+  const { user, isOwner, isSiteAdmin, group, myPlayerId } = useAccess()
   const players = usePlayers()
   const { signedIn, logout } = useSession()
   const navigate = useNavigate()
@@ -32,7 +32,7 @@ export function AccountSection({ colorPicker }: { colorPicker?: ReactNode }) {
   const [saved, setSaved] = useState(false)
   const change = useAction(api.changePassword)
   if (!user) return null
-  const player = players.data?.find((p) => p.id === user.player_id)
+  const player = players.data?.find((p) => p.id === myPlayerId)
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -71,7 +71,14 @@ export function AccountSection({ colorPicker }: { colorPicker?: ReactNode }) {
             <span className="text-slate-300">nobody</span>
           )}
         </span>
-        {isAdmin && <span className="user-chip-role">Site owner</span>}
+        {group && (
+          <span>
+            <span className="text-slate-400">Group </span>
+            <b className="text-slate-100">{group.name}</b>
+          </span>
+        )}
+        {isOwner && <span className="user-chip-role">Group owner</span>}
+        {isSiteAdmin && <span className="user-chip-role">Site admin</span>}
       </div>
       <form onSubmit={submit} className="flex flex-col gap-2">
         <span className="text-xs font-semibold tracking-[0.1em] text-slate-300 uppercase">Change password</span>
@@ -142,10 +149,12 @@ export function AccountsAdminSection() {
 
   return (
     <Section id="accounts" title="Accounts and invites">
+      <GroupName />
       <p className="text-sm text-slate-400">
-        Send each friend an invite link for their player. They make a username and password, then handle their own gold,
-        shop and items. You can still do everything for everyone. Links work once and expire after 7 days. Lost password?
-        Remove their account and send a new link; their games, gold and items stay.
+        Send each friend an invite link for their player. New friends make a username and password; friends who already
+        have an account can join with it. They handle their own gold, shop and items, and you can still do everything for
+        everyone. Links work once and expire after 7 days. Lost password? Remove them from the group and send a new link;
+        their games, gold and items stay.
       </p>
       <ul className="flex flex-col divide-y divide-slate-800">
         {players.data?.map((p) => (
@@ -161,13 +170,13 @@ export function AccountsAdminSection() {
             onRevoke={(id) =>
               revoke.mutate(id, { onSuccess: () => setLinks(({ [p.id]: _, ...rest }) => rest) })
             }
-            onRemove={(a) => confirm(`Remove ${a.username}'s account? ${p.display_name}'s history stays.`) && remove.mutate(a.id)}
+            onRemove={(a) => confirm(`Remove ${a.username} from the group? ${p.display_name}'s history stays.`) && remove.mutate(a.id)}
           />
         ))}
       </ul>
       {unlinked.length > 0 && (
         <p className="text-xs text-slate-400">
-          Accounts not playing as anyone: {unlinked.map((a) => `${a.username}${a.id === user?.id ? ' (you)' : ''}`).join(', ')}
+          Members not playing as anyone: {unlinked.map((a) => `${a.username}${a.id === user?.id ? ' (you)' : ''}`).join(', ')}
         </p>
       )}
       <ErrorText error={accounts.error ?? makeInvite.error ?? revoke.error ?? remove.error} />
@@ -217,7 +226,7 @@ function AccountRow({
             <span className="text-xs text-slate-500">last signed in {when(account.last_login_at)}</span>
             {!isMe && (
               <button className="btn-secondary ml-auto px-3 py-1 text-xs" disabled={busy} onClick={() => onRemove(account)}>
-                Remove account
+                Remove from group
               </button>
             )}
           </>
@@ -249,5 +258,115 @@ function AccountRow({
         </div>
       )}
     </li>
+  )
+}
+
+/** The group owner renames the group. */
+function GroupName() {
+  const { group } = useAccess()
+  const { signedIn } = useSession()
+  const [name, setName] = useState(group?.name ?? '')
+  const rename = useMutation({ mutationFn: api.renameGroup, onSuccess: (me) => signedIn(me) })
+  if (!group) return null
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(e) => {
+        e.preventDefault()
+        rename.mutate(name)
+      }}
+    >
+      <span className="text-xs font-semibold tracking-[0.1em] text-slate-300 uppercase">Group name</span>
+      <input className="input" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
+      <button className="btn-secondary" disabled={rename.isPending || name.trim() === group.name}>
+        Rename
+      </button>
+      <ErrorText error={rename.error} />
+    </form>
+  )
+}
+
+/** Site admin: who can start a group (invite codes, or open sign-up). */
+export function SiteSection() {
+  const site = useQuery({ queryKey: ['site'], queryFn: api.site })
+  const update = useAction(api.updateSite)
+  const makeCode = useAction(api.createSiteInvite)
+  const revoke = useAction(api.revokeSiteInvite)
+  const [note, setNote] = useState('')
+  const [made, setMade] = useState<{ note: string; link: string }[]>([])
+  const [copied, setCopied] = useState<string | null>(null)
+  const s = site.data
+  const copy = (text: string) =>
+    void navigator.clipboard?.writeText(text).then(() => {
+      setCopied(text)
+      setTimeout(() => setCopied(null), 1500)
+    })
+
+  return (
+    <Section id="site" title="Site (admin)">
+      {s && (
+        <p className="text-sm text-slate-400">
+          {s.groups} {s.groups === 1 ? 'group' : 'groups'} · {s.users} {s.users === 1 ? 'account' : 'accounts'}
+        </p>
+      )}
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={!!s?.open_signup}
+          disabled={!s || update.isPending}
+          onChange={(e) => update.mutate({ open_signup: e.target.checked })}
+        />
+        <span>
+          <b className="text-slate-100">Open sign-up</b>
+          <span className="text-slate-400">
+            {' '}
+            · anyone can start a group without a code. Keep this off until your Riot production key is approved.
+          </span>
+        </span>
+      </label>
+      <form
+        className="flex flex-wrap items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          makeCode.mutate(note, {
+            onSuccess: (inv) => {
+              setMade((m) => [{ note: inv.note, link: `${window.location.origin}/signup?code=${inv.code}` }, ...m])
+              setNote('')
+            },
+          })
+        }}
+      >
+        <span className="text-xs font-semibold tracking-[0.1em] text-slate-300 uppercase">New group invite</span>
+        <input className="input" placeholder="Who it's for (optional)" value={note} maxLength={80} onChange={(e) => setNote(e.target.value)} />
+        <button className="btn-primary" disabled={makeCode.isPending}>
+          Make invite link
+        </button>
+      </form>
+      {made.map((m) => (
+        <div key={m.link} className="flex flex-wrap items-center gap-2">
+          <code className="max-w-full truncate rounded-sm bg-black/50 px-3 py-1.5 text-xs text-hex-200">{m.link}</code>
+          <button className="btn-secondary px-3 py-1 text-xs" onClick={() => copy(m.link)}>
+            {copied === m.link ? 'Copied!' : 'Copy'}
+          </button>
+          <span className="text-[11px] text-slate-500">
+            {m.note ? `For ${m.note}. ` : ''}One use, 30 days. It won't be shown again.
+          </span>
+        </div>
+      ))}
+      {!!s?.invites.length && (
+        <ul className="flex flex-col divide-y divide-slate-800 text-sm">
+          {s.invites.map((i) => (
+            <li key={i.id} className="flex items-center gap-3 py-1.5">
+              <span className="text-slate-300">{i.note || 'Group invite'}</span>
+              <span className="text-xs text-slate-500">expires {when(i.expires_at)}</span>
+              <button className="btn-secondary ml-auto px-3 py-1 text-xs" disabled={revoke.isPending} onClick={() => revoke.mutate(i.id)}>
+                Cancel
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <ErrorText error={site.error ?? update.error ?? makeCode.error ?? revoke.error} />
+    </Section>
   )
 }

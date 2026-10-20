@@ -412,23 +412,48 @@ export interface PlayerProfile {
 export interface MeUser {
   id: number
   username: string
+  is_admin: boolean // site admin (site-wide settings), not a group owner
+}
+
+/** A group you're in: your role there and which of its players you are. */
+export interface MeGroup {
+  id: number
+  name: string
+  role: 'owner' | 'member'
   player_id: number | null
-  is_admin: boolean // the site owner
 }
 
 export interface Me {
   user: MeUser | null
+  groups: MeGroup[]
+  group: MeGroup | null // the group this browser is viewing
   setup_needed: boolean
   players: { id: number; display_name: string }[] // only while setting up
+  open_signup: boolean
 }
 
+/** A member of the current group (the group owner's Accounts list). */
 export interface Account {
   id: number
   username: string
+  role: 'owner' | 'member'
   player_id: number | null
-  is_admin: boolean
   created_at: string
   last_login_at: string | null
+}
+
+export interface SiteInvite {
+  id: number
+  note: string
+  created_at: string
+  expires_at: string
+}
+
+export interface SiteInfo {
+  open_signup: boolean
+  groups: number
+  users: number
+  invites: SiteInvite[]
 }
 
 export interface Invite {
@@ -441,6 +466,7 @@ export interface Invite {
 export interface InviteInfo {
   player_id: number
   display_name: string
+  group_name: string
   expires_at: string
 }
 

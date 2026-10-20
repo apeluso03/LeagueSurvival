@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from sqlmodel import select
 
-from app.models import AppSettings, Player, PlayerMatchStats, RiotMatch
+from app.models import Player, PlayerMatchStats, RiotMatch, SiteSettings
 from app.services import sync
 from app.services.riot_client import RiotError
 from tests.factories import FakeRiotClient, P, make_match
@@ -116,7 +116,7 @@ def test_sync_all_records_time_and_errors(session, linked):
     client = FakeRiotClient(matches={"NA1_1": make_match("NA1_1", [P("puuid-alex", 62)])})
     result = run(sync.sync_all(session, client))
     assert (result.players_synced, result.new_matches, result.errors) == (2, 1, [])
-    s = session.get(AppSettings, 1)
+    s = session.get(SiteSettings, 1)
     assert s.last_sync_at is not None and s.last_sync_error is None
     assert session.get(RiotMatch, "NA1_1") is not None
 
@@ -126,4 +126,4 @@ def test_sync_all_stops_on_bad_key(session, linked):
     result = run(sync.sync_all(session, client))
     assert result.players_synced == 0
     assert len(result.errors) == 1  # stopped after the first failure
-    assert "rejected" in session.get(AppSettings, 1).last_sync_error
+    assert "rejected" in session.get(SiteSettings, 1).last_sync_error

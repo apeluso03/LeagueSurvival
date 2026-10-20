@@ -118,7 +118,7 @@ def run(session):
         p = session.get(Player, pid)
         p.puuid = puuid
         session.add(p)
-    r = rules.create_run(session, "R", 3)
+    r = rules.create_run(session, "R", 3, group_id=1)
     session.commit()
     return r
 

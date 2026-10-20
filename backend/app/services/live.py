@@ -39,9 +39,21 @@ OBJECTIVES = {
 # --- which game is ours ------------------------------------------------------------------
 
 
-def pending_game(session: Session) -> ChallengeGame | None:
-    """The newest pending challenge game in an active run."""
+def pending_games(session: Session) -> list[ChallengeGame]:
+    """Every pending challenge game in an active run, in any group (newest first)."""
     active = select(Run.id).where(Run.status == "active")
+    return list(
+        session.exec(
+            select(ChallengeGame)
+            .where(ChallengeGame.status == "pending", col(ChallengeGame.run_id).in_(active))
+            .order_by(col(ChallengeGame.id).desc())
+        ).all()
+    )
+
+
+def pending_game(session: Session, group_id: int) -> ChallengeGame | None:
+    """The newest pending challenge game in one group's active runs."""
+    active = select(Run.id).where(Run.status == "active", Run.group_id == group_id)
     return session.exec(
         select(ChallengeGame)
         .where(ChallengeGame.status == "pending", col(ChallengeGame.run_id).in_(active))

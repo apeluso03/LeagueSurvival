@@ -66,6 +66,23 @@ class PlayerStats:
     gold_spent: int | None = None
 
 
+def group_settings(session: Session, group_id: int | None) -> AppSettings:
+    row = session.exec(select(AppSettings).where(AppSettings.group_id == group_id)).first() if group_id else None
+    return row or AppSettings(group_id=group_id or 0)
+
+
+def group_player_ids(session: Session, group_id: int) -> list[int]:
+    from app.models import Player
+
+    return list(session.exec(select(Player.id).where(Player.group_id == group_id)).all())
+
+
+def group_run_ids(session: Session, group_id: int) -> list[int]:
+    from app.models import Run
+
+    return list(session.exec(select(Run.id).where(Run.group_id == group_id)).all())
+
+
 def kda(kills: int, deaths: int, assists: int) -> float:
     return (kills + assists) / max(deaths, 1)
 
@@ -144,7 +161,10 @@ def gather_records(
         records[a.player_id].append(GameRecord(a.played_champion_id, game.status == "won", detail))
 
     if not challenge_only:
-        settings = session.get(AppSettings, 1) or AppSettings()
+        from app.models import Player
+
+        first = session.get(Player, player_ids[0]) if player_ids else None
+        settings = group_settings(session, first.group_id if first else None)
         rows = session.exec(
             select(PlayerMatchStats, RiotMatch)
             .join(RiotMatch, col(RiotMatch.match_id) == col(PlayerMatchStats.match_id))
@@ -227,7 +247,8 @@ def _lines(rows: list[tuple[int, bool]]) -> list[PlayerChampionLine]:
     return sorted(lines, key=lambda line: (-line.games, -line.wins))
 
 
-def champion_report(session: Session, champion: Champion, run_id: int | None) -> ChampionReport:
+def champion_report(session: Session, champion: Champion, run_id: int | None, group_id: int) -> ChampionReport:
+    """A champion's numbers in one group (never other groups' games or players)."""
     from app.models import PoolEntry  # local: only needed here
 
     rep = ChampionReport(champion_id=champion.id)
@@ -235,7 +256,11 @@ def champion_report(session: Session, champion: Champion, run_id: int | None) ->
     played = session.exec(
         select(SpinAssignment, ChallengeGame)
         .join(ChallengeGame, col(ChallengeGame.id) == col(SpinAssignment.game_id))
-        .where(SpinAssignment.played_champion_id == champion.id, col(ChallengeGame.status).in_(["won", "lost"]))
+        .where(
+            SpinAssignment.played_champion_id == champion.id,
+            col(ChallengeGame.status).in_(["won", "lost"]),
+            col(ChallengeGame.run_id).in_(group_run_ids(session, group_id)),
+        )
     ).all()
     rep.all_runs_played = len(played)
     rep.all_runs_wins = sum(g.status == "won" for _, g in played)
@@ -261,13 +286,16 @@ def champion_report(session: Session, champion: Champion, run_id: int | None) ->
         ).all()
         rep.times_offered = sum(champion.id in opts for opts in offers)
 
-    settings = session.get(AppSettings, 1) or AppSettings()
+    settings = group_settings(session, group_id)
     riot = [
         pms
         for pms, match in session.exec(
             select(PlayerMatchStats, RiotMatch)
             .join(RiotMatch, col(RiotMatch.match_id) == col(PlayerMatchStats.match_id))
-            .where(PlayerMatchStats.champion_key == champion.key)
+            .where(
+                PlayerMatchStats.champion_key == champion.key,
+                col(PlayerMatchStats.player_id).in_(group_player_ids(session, group_id)),
+            )
         ).all()
         if not _is_remake(match, settings.remake_threshold_seconds)
     ]
@@ -346,12 +374,19 @@ def option_facts(session: Session, game: ChallengeGame) -> dict[int, dict[str, O
     key_of = {c.id: c.key for c in session.exec(select(Champion).where(col(Champion.id).in_(champ_ids))).all()}
     id_of = {k: c for c, k in key_of.items()}
 
+    from app.models import Run
+
+    group_id = session.get(Run, game.run_id).group_id
     played = session.exec(
         select(SpinAssignment.player_id, SpinAssignment.played_champion_id, ChallengeGame.status)
         .join(ChallengeGame, col(ChallengeGame.id) == col(SpinAssignment.game_id))
-        .where(col(SpinAssignment.played_champion_id).in_(champ_ids), col(ChallengeGame.status).in_(["won", "lost"]))
+        .where(
+            col(SpinAssignment.played_champion_id).in_(champ_ids),
+            col(ChallengeGame.status).in_(["won", "lost"]),
+            col(ChallengeGame.run_id).in_(group_run_ids(session, group_id)),
+        )
     ).all()
-    settings = session.get(AppSettings, 1) or AppSettings()
+    settings = group_settings(session, group_id)
     riot = [
         pms
         for pms, match in session.exec(

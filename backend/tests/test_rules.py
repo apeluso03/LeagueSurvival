@@ -12,7 +12,7 @@ PLAYERS = [1, 2, 3]
 
 @pytest.fixture
 def run(session):
-    r = rules.create_run(session, "Test run", 3)
+    r = rules.create_run(session, "Test run", 3, group_id=1)
     session.commit()
     return r
 
@@ -176,7 +176,7 @@ def test_spin_draws_only_alive(session, run):
 
 
 def test_spin_blocked_when_pool_too_small(session):
-    r = rules.create_run(session, "Tiny", 3, ["Champ000", "Champ001"])
+    r = rules.create_run(session, "Tiny", 3, ["Champ000", "Champ001"], group_id=1)
     with pytest.raises(RuleError) as e:
         rules.create_spin(session, r, PLAYERS)
     assert e.value.status == 409
@@ -316,7 +316,7 @@ def test_manual_eliminate_and_revive_are_logged(session, run):
 
 
 def test_custom_subset_run(session):
-    r = rules.create_run(session, "Subset", 4, ["Champ001", "Champ002", "Champ003"])
+    r = rules.create_run(session, "Subset", 4, ["Champ001", "Champ002", "Champ003"], group_id=1)
     assert rules.alive_champion_ids(session, r.id) == ["Champ001", "Champ002", "Champ003"]
 
 

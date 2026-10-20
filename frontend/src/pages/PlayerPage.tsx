@@ -126,7 +126,7 @@ function TitlePicker({ playerId }: { playerId: number }) {
   const report = useAchievements()
   const players = usePlayerMap()
   const update = useAction((title: string | null) => api.updatePlayer(playerId, { title }))
-  const { isAdmin, myPlayerId } = useAccess()
+  const { isOwner, myPlayerId } = useAccess()
   const current = players.get(playerId)?.title ?? null
   const unlocked = (report.data?.players[String(playerId)] ?? [])
     .map((u) => report.data!.catalog.find((a) => a.id === u.id))
@@ -134,7 +134,7 @@ function TitlePicker({ playerId }: { playerId: number }) {
   const shown = unlocked.find((a) => a.id === current)
   if (!unlocked.length) return null
   // Only the player (or the site owner) picks their title; everyone else just sees it.
-  const canEdit = isAdmin || myPlayerId === playerId
+  const canEdit = isOwner || myPlayerId === playerId
   return (
     <div className="flex flex-wrap items-center gap-2">
       {shown && <span className="font-display text-lg tracking-wide text-gold-300 italic">“{shown.title}”</span>}

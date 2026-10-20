@@ -781,7 +781,7 @@ function AutoStatus({ game }: { game: Game }) {
   const { settings } = useActiveRun()
   const playerMap = usePlayerMap()
   const sync = useAction(api.sync)
-  const { isAdmin } = useAccess()
+  const { isOwner } = useAccess()
   const unlinked = game.assignments
     .map((a) => playerMap.get(a.player_id))
     .filter((p) => p && !p.puuid)
@@ -820,7 +820,7 @@ function AutoStatus({ game }: { game: Game }) {
       <div className="flex flex-wrap items-center gap-2">
         {watching && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
         <span className="text-slate-300">{text}</span>
-        {watching && isAdmin && (
+        {watching && isOwner && (
           <button className="text-xs underline" disabled={sync.isPending} onClick={() => sync.mutate(undefined)}>
             {sync.isPending ? 'Checking...' : 'Check now'}
           </button>

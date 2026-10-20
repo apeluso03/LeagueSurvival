@@ -20,7 +20,7 @@ def game(session) -> ChallengeGame:
         p = session.get(Player, pid)
         p.riot_game_name, p.riot_tag_line, p.puuid = name, tag, PUUIDS[pid]
         session.add(p)
-    run = rules.create_run(session, "Live run", 3)
+    run = rules.create_run(session, "Live run", 3, group_id=1)
     g = rules.create_spin(session, run, [1, 2], random.Random(3))
     session.commit()
     return g

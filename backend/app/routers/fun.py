@@ -9,37 +9,36 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import Champion, Run, User
-from app.routers.access import require_admin
-from app.routers.common import get_or_404
+from app.models import Champion, User
+from app.routers.access import Ctx, get_run, group_ctx, require_admin
 from app.services import achievements, meta, shame
 
 router = APIRouter(prefix="/api", tags=["fun"])
 
 
 @router.get("/achievements")
-def get_achievements(session: Session = Depends(get_session)):
-    return achievements.report(session)
+def get_achievements(ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
+    return achievements.report(session, ctx.group_id)
 
 
 @router.get("/shame")
-def get_shame(run_id: int | None = None, session: Session = Depends(get_session)):
+def get_shame(run_id: int | None = None, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
     if run_id is not None:
-        get_or_404(session, Run, run_id, "Run")
-    return shame.hall_of_shame(session, run_id)
+        get_run(session, ctx, run_id)
+    return shame.hall_of_shame(session, ctx.group_id, run_id)
 
 
 @router.get("/wrapped")
-def get_wrapped(month: str | None = None, session: Session = Depends(get_session)):
+def get_wrapped(month: str | None = None, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
     """A month's Wrapped ("2026-10"). Defaults to the latest month with games."""
     if month is None:
-        months = shame.available_months(session)
+        months = shame.available_months(session, ctx.group_id)
         month = months[0] if months else datetime.now(UTC).strftime("%Y-%m")
     try:
         shame.month_bounds(month)
     except (ValueError, TypeError) as e:
         raise HTTPException(400, "Month must look like 2026-10") from e
-    return shame.wrapped(session, month)
+    return shame.wrapped(session, month, ctx.group_id)
 
 
 # --- meta ---

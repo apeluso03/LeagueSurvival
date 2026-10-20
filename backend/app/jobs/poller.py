@@ -20,8 +20,14 @@ log = logging.getLogger("uvicorn.error")
 MIN_INTERVAL = 30
 
 
+def _live_groups(session: Session) -> list[int]:
+    """Groups whose challenge mode is on."""
+    return list(session.exec(select(AppSettings.group_id).where(AppSettings.challenge_mode == True)).all())  # noqa: E712
+
+
 def pending_player_ids(session: Session) -> list[int]:
-    active_runs = select(Run.id).where(Run.status == "active")
+    """Players in a pending game of a group whose challenge mode is on."""
+    active_runs = select(Run.id).where(Run.status == "active", col(Run.group_id).in_(_live_groups(session)))
     pending = select(ChallengeGame.id).where(
         ChallengeGame.status == "pending",
         col(ChallengeGame.needs_review).is_(False),
@@ -33,8 +39,7 @@ def pending_player_ids(session: Session) -> list[int]:
 async def poll_once(engine: Engine, client_factory=RiotClient) -> list[matcher.Outcome] | None:
     """One poll. Returns the matcher outcomes, or None when there was nothing to do."""
     with Session(engine) as session:
-        settings = session.get(AppSettings, 1)
-        if settings is None or not settings.challenge_mode or not get_settings().riot_api_key:
+        if not get_settings().riot_api_key:
             return None
         player_ids = pending_player_ids(session)
         if not player_ids:
@@ -56,6 +61,8 @@ async def run_forever(engine: Engine) -> None:
         except Exception:  # noqa: BLE001 - keep polling after unexpected errors
             log.exception("Match poll failed")
         with Session(engine) as session:
-            settings = session.get(AppSettings, 1)
-            interval = max(MIN_INTERVAL, settings.poll_interval_seconds if settings else 90)
+            intervals = session.exec(
+                select(AppSettings.poll_interval_seconds).where(AppSettings.challenge_mode == True)  # noqa: E712
+            ).all()
+            interval = max(MIN_INTERVAL, min(intervals, default=90))
         await asyncio.sleep(interval)

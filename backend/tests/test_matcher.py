@@ -18,7 +18,7 @@ def ctx(session):
         p = session.get(Player, pid)
         p.puuid = puuid
         session.add(p)
-    run = rules.create_run(session, "R", 3)
+    run = rules.create_run(session, "R", 3, group_id=1)
     session.commit()
     return run
 

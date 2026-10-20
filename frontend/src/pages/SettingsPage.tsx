@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
 import { useAction, useActiveRun, useChampions, usePlayers, useRiotStatus, useRuns, useSettings, useShop } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
-import { AccountSection, AccountsAdminSection } from './SettingsAccounts'
+import { AccountSection, AccountsAdminSection, SiteSection } from './SettingsAccounts'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { allTags, filterChampions } from '../lib/champions'
 import { QUEUES } from '../lib/queues'
@@ -13,7 +13,7 @@ import { TEAM_COLORS, teamColor } from '../lib/teams'
 import type { AppSettings, Player, Run, ShopConfig } from '../types'
 
 export function SettingsPage() {
-  const { isAdmin, canManage, myPlayerId } = useAccess()
+  const { isOwner, isSiteAdmin, canManage, myPlayerId } = useAccess()
   const me = usePlayers().data?.find((p) => p.id === myPlayerId)
   const { hash } = useLocation()
   useEffect(() => {
@@ -23,18 +23,19 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <AccountSection colorPicker={me && <TeamColorPicker player={me} />} />
-      {isAdmin && <AccountsAdminSection />}
-      {isAdmin && <PlayersSection />}
-      {isAdmin && <RunsSection />}
+      {isOwner && <AccountsAdminSection />}
+      {isOwner && <PlayersSection />}
+      {isOwner && <RunsSection />}
       {canManage && <ShopSettingsSection />}
       {canManage && <GoldAdjustSection />}
-      {isAdmin && <ChallengeSection />}
-      {isAdmin && <MetaSection />}
-      {isAdmin && <OverlaySection />}
-      {isAdmin && <ChampionsSection />}
-      {isAdmin && <PrivacySection />}
-      {!isAdmin && !canManage && (
-        <p className="text-sm text-slate-400">Players, runs and the rest of the settings are managed by the site owner.</p>
+      {isOwner && <ChallengeSection />}
+      {isSiteAdmin && <MetaSection />}
+      {isOwner && <OverlaySection />}
+      {isSiteAdmin && <ChampionsSection />}
+      {isSiteAdmin && <PrivacySection />}
+      {isSiteAdmin && <SiteSection />}
+      {!isOwner && !canManage && (
+        <p className="text-sm text-slate-400">Players, runs and the rest of the settings are managed by the group's owner.</p>
       )}
     </div>
   )

@@ -102,7 +102,7 @@ def _validate_players(session: Session, player_ids: list[int]) -> None:
 
 
 def create_run(
-    session: Session, name: str, options_per_player: int, champion_ids: Iterable[str] | None = None
+    session: Session, name: str, options_per_player: int, champion_ids: Iterable[str] | None = None, *, group_id: int
 ) -> Run:
     if options_per_player not in spin_logic.ALLOWED_OPTIONS:
         raise RuleError("options_per_player must be 3 or 4")
@@ -119,7 +119,7 @@ def create_run(
         if not chosen:
             raise RuleError("A run needs at least one champion")
 
-    run = Run(name=name, options_per_player=options_per_player, lobby_code=secrets.token_hex(3).upper())
+    run = Run(group_id=group_id, name=name, options_per_player=options_per_player, lobby_code=secrets.token_hex(3).upper())
     session.add(run)
     session.flush()
     for cid in sorted(chosen):
@@ -155,10 +155,10 @@ def delete_run(session: Session, run: Run) -> None:
     session.exec(delete(LiveGame).where(col(LiveGame.game_id).in_(game_ids)))
     session.exec(delete(ChallengeGame).where(col(ChallengeGame.run_id) == run.id))
 
-    settings = session.get(AppSettings, 1)
+    settings = session.exec(select(AppSettings).where(AppSettings.group_id == run.group_id)).first()
     if settings and settings.active_run_id == run.id:
         settings.active_run_id = session.exec(
-            select(Run.id).where(Run.id != run.id).order_by(col(Run.id).desc())
+            select(Run.id).where(Run.id != run.id, Run.group_id == run.group_id).order_by(col(Run.id).desc())
         ).first()
         session.add(settings)
     session.flush()

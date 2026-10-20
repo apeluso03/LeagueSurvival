@@ -30,14 +30,19 @@ from app.schemas import (
 from app.services import contracts, economy, rules, shop
 
 
-def get_app_settings(session: Session) -> AppSettings:
-    settings = session.get(AppSettings, 1)
+def get_app_settings(session: Session, group_id: int) -> AppSettings:
+    """A group's settings (made on first use)."""
+    settings = session.exec(select(AppSettings).where(AppSettings.group_id == group_id)).first()
     if settings is None:
-        settings = AppSettings(id=1)
+        settings = AppSettings(group_id=group_id)
         session.add(settings)
         session.commit()
         session.refresh(settings)
     return settings
+
+
+def group_settings_for_run(session: Session, run: Run) -> AppSettings:
+    return get_app_settings(session, run.group_id)
 
 
 def get_or_404(session: Session, model, key, label: str):

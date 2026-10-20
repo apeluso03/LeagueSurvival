@@ -11,7 +11,8 @@ def make_engine(url: str) -> Engine:
     # SQLite: wait up to 15s for another writer (the background crawler, the match poller) to
     # finish instead of failing right away with "database is locked".
     connect_args = {"check_same_thread": False, "timeout": 15} if url.startswith("sqlite") else {}
-    eng = create_engine(url, connect_args=connect_args)
+    # Postgres: check pooled connections before use (hosts drop idle ones).
+    eng = create_engine(url, connect_args=connect_args, pool_pre_ping=not url.startswith("sqlite"))
     if url.startswith("sqlite"):
 
         @event.listens_for(eng, "connect")
