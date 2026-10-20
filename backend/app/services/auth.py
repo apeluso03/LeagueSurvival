@@ -16,12 +16,25 @@ from datetime import UTC, datetime, timedelta
 
 from sqlmodel import Session, col, delete, func, select
 
-from app.models import AuthSession, Invite, Player, Run, User, utcnow
+from app.models import (
+    AppSettings,
+    AuthSession,
+    Group,
+    GroupMember,
+    Invite,
+    Player,
+    Run,
+    SiteInvite,
+    SiteSettings,
+    User,
+    utcnow,
+)
 from app.services.rules import RuleError
 
 SESSION_COOKIE = "lst_session"
 SESSION_DAYS = 30
 INVITE_DAYS = 7
+SITE_INVITE_DAYS = 30
 
 USERNAME_RE = re.compile(r"^[a-z0-9_.-]{3,24}$")
 MIN_PASSWORD = 8
@@ -93,30 +106,88 @@ def find_user(session: Session, username: str) -> User | None:
     return session.exec(select(User).where(User.username == username.strip().lower())).first()
 
 
-def create_user(session: Session, username: str, password: str, player_id: int | None, is_admin: bool = False) -> User:
+def create_user(session: Session, username: str, password: str, is_admin: bool = False) -> User:
     name = clean_username(username)
     check_password(password)
     if find_user(session, name):
         raise RuleError("That username is taken", 409)
-    if player_id is not None:
-        if session.get(Player, player_id) is None:
-            raise RuleError("That player doesn't exist", 404)
-        if session.exec(select(User.id).where(User.player_id == player_id)).first():
-            raise RuleError("Someone already plays as that player", 409)
-    user = User(username=name, password_hash=hash_password(password), player_id=player_id, is_admin=is_admin)
+    user = User(username=name, password_hash=hash_password(password), is_admin=is_admin)
     session.add(user)
     session.flush()
     return user
 
 
+def membership(session: Session, group_id: int, user_id: int) -> GroupMember | None:
+    return session.get(GroupMember, (group_id, user_id))
+
+
+def memberships(session: Session, user_id: int) -> list[GroupMember]:
+    return list(session.exec(select(GroupMember).where(GroupMember.user_id == user_id).order_by(col(GroupMember.joined_at))).all())
+
+
+def player_claimed(session: Session, player_id: int) -> bool:
+    return session.exec(select(GroupMember.user_id).where(GroupMember.player_id == player_id)).first() is not None
+
+
+def join_group(session: Session, user: User, group: Group, role: str = "member", player_id: int | None = None) -> GroupMember:
+    """Add an account to a group, optionally as one of its players."""
+    if membership(session, group.id, user.id):
+        raise RuleError("You're already in this group", 409)
+    if player_id is not None:
+        player = session.get(Player, player_id)
+        if player is None or player.group_id != group.id:
+            raise RuleError("That player isn't in this group", 404)
+        if player_claimed(session, player_id):
+            raise RuleError("Someone already plays as that player", 409)
+    m = GroupMember(group_id=group.id, user_id=user.id, role=role, player_id=player_id)
+    session.add(m)
+    session.flush()
+    return m
+
+
+def clean_group_name(name: str) -> str:
+    name = " ".join((name or "").split())
+    if not 2 <= len(name) <= 40:
+        raise RuleError("Group names are 2-40 characters")
+    return name
+
+
+def create_group(session: Session, owner: User, name: str) -> Group:
+    """A new group owned by `owner`, with its own settings."""
+    group = Group(name=clean_group_name(name), owner_user_id=owner.id)
+    session.add(group)
+    session.flush()
+    session.add(AppSettings(group_id=group.id))
+    join_group(session, owner, group, role="owner")
+    return group
+
+
 def set_up_owner(session: Session, username: str, password: str, player_id: int | None) -> User:
-    """The very first account: the site owner. It takes over every run made before logins existed."""
+    """The very first account: the site admin. It takes over the group that already exists (data
+    from before accounts), or starts one."""
     if user_count(session):
         raise RuleError("This site is already set up. Sign in instead.", 409)
-    user = create_user(session, username, password, player_id, is_admin=True)
-    for run in session.exec(select(Run).where(col(Run.owner_user_id).is_(None))).all():
+    user = create_user(session, username, password, is_admin=True)
+    group = session.exec(select(Group).order_by(col(Group.id))).first()
+    if group is None:
+        group = create_group(session, user, f"{user.username}'s group")
+    else:
+        group.owner_user_id = user.id
+        session.add(group)
+        if session.exec(select(AppSettings).where(AppSettings.group_id == group.id)).first() is None:
+            session.add(AppSettings(group_id=group.id))
+        join_group(session, user, group, role="owner")
+    if player_id is not None:
+        m = membership(session, group.id, user.id)
+        player = session.get(Player, player_id)
+        if player is None or player.group_id != group.id:
+            raise RuleError("That player doesn't exist", 404)
+        m.player_id = player_id
+        session.add(m)
+    for run in session.exec(select(Run).where(Run.group_id == group.id, col(Run.owner_user_id).is_(None))).all():
         run.owner_user_id = user.id
         session.add(run)
+    session.flush()
     return user
 
 
@@ -138,28 +209,62 @@ def change_password(session: Session, user: User, current: str, new: str) -> Non
     session.exec(delete(AuthSession).where(col(AuthSession.user_id) == user.id))
 
 
-def delete_user(session: Session, user: User) -> None:
-    """Remove an account. Their player, games, gold and items stay; the player can be invited again."""
-    session.exec(delete(AuthSession).where(col(AuthSession.user_id) == user.id))
-    for run in session.exec(select(Run).where(Run.owner_user_id == user.id)).all():
-        run.owner_user_id = None  # site owners still manage it
+def remove_member(session: Session, group: Group, user: User) -> None:
+    """Take an account out of a group. Their player, games, gold and items stay with the group (the
+    player can be invited again). An account left in no group is deleted, so its username is free."""
+    m = membership(session, group.id, user.id)
+    if m is None:
+        raise RuleError("They aren't in this group", 404)
+    if m.role == "owner":
+        raise RuleError("The group's owner can't be removed", 409)
+    for run in session.exec(select(Run).where(Run.group_id == group.id, Run.owner_user_id == user.id)).all():
+        run.owner_user_id = None  # the group owner still manages it
         session.add(run)
-    for invite in session.exec(select(Invite).where(Invite.created_by_user_id == user.id)).all():
-        session.delete(invite)
-    for invite in session.exec(select(Invite).where(Invite.used_by_user_id == user.id)).all():
-        invite.used_by_user_id = None
-        session.add(invite)
+    for row in session.exec(select(AuthSession).where(AuthSession.user_id == user.id, AuthSession.group_id == group.id)).all():
+        row.group_id = None
+        session.add(row)
+    session.delete(m)
+    session.flush()
+    if not memberships(session, user.id) and not user.is_admin:
+        delete_user(session, user)
+
+
+def delete_user(session: Session, user: User) -> None:
+    """Remove an account entirely. It can't own a group (hand the group over or delete it first)."""
+    if session.exec(select(Group.id).where(Group.owner_user_id == user.id)).first():
+        raise RuleError("This account owns a group", 409)
+    session.exec(delete(AuthSession).where(col(AuthSession.user_id) == user.id))
+    session.exec(delete(GroupMember).where(col(GroupMember.user_id) == user.id))
+    for run in session.exec(select(Run).where(Run.owner_user_id == user.id)).all():
+        run.owner_user_id = None
+        session.add(run)
+    for model in (Invite, SiteInvite):
+        for inv in session.exec(select(model).where(model.created_by_user_id == user.id)).all():
+            session.delete(inv)
+        for inv in session.exec(select(model).where(model.used_by_user_id == user.id)).all():
+            inv.used_by_user_id = None
+            session.add(inv)
+    session.flush()
     session.delete(user)
+    session.flush()
 
 
 # --- sessions ------------------------------------------------------------------------------
 
 
 def start_session(session: Session, user: User) -> str:
-    """Sign a browser in. Returns the raw token for the cookie."""
+    """Sign a browser in. Returns the raw token for the cookie. It starts in the user's first group."""
     token = secrets.token_urlsafe(32)
     now = utcnow()
-    session.add(AuthSession(token_hash=_token_hash(token), user_id=user.id, expires_at=now + timedelta(days=SESSION_DAYS)))
+    first = next(iter(memberships(session, user.id)), None)
+    session.add(
+        AuthSession(
+            token_hash=_token_hash(token),
+            user_id=user.id,
+            expires_at=now + timedelta(days=SESSION_DAYS),
+            group_id=first.group_id if first else None,
+        )
+    )
     user.last_login_at = now
     session.add(user)
     # Tidy up: drop this account's expired sessions.
@@ -169,7 +274,7 @@ def start_session(session: Session, user: User) -> str:
     return token
 
 
-def user_for_token(session: Session, token: str | None) -> User | None:
+def session_for_token(session: Session, token: str | None) -> AuthSession | None:
     if not token:
         return None
     row = session.get(AuthSession, _token_hash(token))
@@ -179,7 +284,12 @@ def user_for_token(session: Session, token: str | None) -> User | None:
         session.delete(row)
         session.commit()
         return None
-    return session.get(User, row.user_id)
+    return row
+
+
+def user_for_token(session: Session, token: str | None) -> User | None:
+    row = session_for_token(session, token)
+    return session.get(User, row.user_id) if row else None
 
 
 def end_session(session: Session, token: str | None) -> None:
@@ -189,21 +299,32 @@ def end_session(session: Session, token: str | None) -> None:
             session.delete(row)
 
 
-# --- invites -------------------------------------------------------------------------------
+def switch_group(session: Session, token: str | None, user: User, group_id: int) -> None:
+    if membership(session, group_id, user.id) is None:
+        raise RuleError("You aren't in that group", 404)
+    row = session_for_token(session, token)
+    if row is not None:
+        row.group_id = group_id
+        session.add(row)
 
 
-def create_invite(session: Session, player_id: int, by: User) -> tuple[Invite, str]:
-    """A one-time sign-up link for a player who doesn't have an account yet. Replaces older links."""
-    if session.get(Player, player_id) is None:
+# --- player invites (join a group as one of its players) -------------------------------------
+
+
+def create_invite(session: Session, group: Group, player_id: int, by: User) -> tuple[Invite, str]:
+    """A one-time link for one of the group's players. Replaces older links for that player."""
+    player = session.get(Player, player_id)
+    if player is None or player.group_id != group.id:
         raise RuleError("That player doesn't exist", 404)
-    if session.exec(select(User.id).where(User.player_id == player_id)).first():
+    if player_claimed(session, player_id):
         raise RuleError("That player already has an account. Remove it first to invite someone new.", 409)
-    for old in open_invites(session, player_id):
+    for old in open_invites(session, group.id, player_id):
         old.revoked = True
         session.add(old)
     token = secrets.token_urlsafe(24)
     invite = Invite(
         token_hash=_token_hash(token),
+        group_id=group.id,
         player_id=player_id,
         created_by_user_id=by.id,
         expires_at=utcnow() + timedelta(days=INVITE_DAYS),
@@ -213,9 +334,12 @@ def create_invite(session: Session, player_id: int, by: User) -> tuple[Invite, s
     return invite, token
 
 
-def open_invites(session: Session, player_id: int | None = None) -> list[Invite]:
+def open_invites(session: Session, group_id: int, player_id: int | None = None) -> list[Invite]:
     query = select(Invite).where(
-        col(Invite.used_at).is_(None), Invite.revoked == False, col(Invite.expires_at) > utcnow()  # noqa: E712
+        Invite.group_id == group_id,
+        col(Invite.used_at).is_(None),
+        Invite.revoked == False,  # noqa: E712
+        col(Invite.expires_at) > utcnow(),
     )
     if player_id is not None:
         query = query.where(Invite.player_id == player_id)
@@ -225,20 +349,111 @@ def open_invites(session: Session, player_id: int | None = None) -> list[Invite]
 def invite_for_token(session: Session, token: str) -> Invite:
     invite = session.exec(select(Invite).where(Invite.token_hash == _token_hash(token))).first()
     if invite is None or invite.revoked:
-        raise RuleError("This invite link isn't valid. Ask the owner for a new one.", 404)
+        raise RuleError("This invite link isn't valid. Ask the group's owner for a new one.", 404)
     if invite.used_at is not None:
         raise RuleError("This invite link has already been used. Sign in instead.", 410)
     if invite.expires_at < datetime.now(UTC):
-        raise RuleError("This invite link has expired. Ask the owner for a new one.", 410)
+        raise RuleError("This invite link has expired. Ask the group's owner for a new one.", 410)
     return invite
 
 
-def accept_invite(session: Session, token: str, username: str, password: str) -> User:
-    invite = invite_for_token(session, token)
-    user = create_user(session, username, password, invite.player_id)
+def _use_invite(session: Session, invite: Invite, user: User) -> None:
+    join_group(session, user, session.get(Group, invite.group_id), player_id=invite.player_id)
     invite.used_at = utcnow()
     invite.used_by_user_id = user.id
     session.add(invite)
+
+
+def accept_invite(session: Session, token: str, username: str, password: str) -> User:
+    """Sign up from an invite link: a new account in that group, as that player."""
+    invite = invite_for_token(session, token)
+    user = create_user(session, username, password)
+    _use_invite(session, invite, user)
+    return user
+
+
+def accept_invite_signed_in(session: Session, token: str, user: User) -> GroupMember:
+    """Join another group with the account you already have."""
+    invite = invite_for_token(session, token)
+    _use_invite(session, invite, user)
+    return membership(session, invite.group_id, user.id)
+
+
+# --- site invites (start a new group) ---------------------------------------------------------
+
+
+def site_settings(session: Session) -> SiteSettings:
+    row = session.get(SiteSettings, 1)
+    if row is None:
+        row = SiteSettings(id=1)
+        session.add(row)
+        session.flush()
+    return row
+
+
+def create_site_invite(session: Session, by: User, note: str = "") -> tuple[SiteInvite, str]:
+    token = secrets.token_urlsafe(18)
+    inv = SiteInvite(
+        token_hash=_token_hash(token),
+        note=note.strip()[:80],
+        created_by_user_id=by.id,
+        expires_at=utcnow() + timedelta(days=SITE_INVITE_DAYS),
+    )
+    session.add(inv)
+    session.flush()
+    return inv, token
+
+
+def open_site_invites(session: Session) -> list[SiteInvite]:
+    return list(
+        session.exec(
+            select(SiteInvite).where(
+                col(SiteInvite.used_at).is_(None), SiteInvite.revoked == False, col(SiteInvite.expires_at) > utcnow()  # noqa: E712
+            )
+        ).all()
+    )
+
+
+def site_invite_for_token(session: Session, token: str) -> SiteInvite:
+    inv = session.exec(select(SiteInvite).where(SiteInvite.token_hash == _token_hash(token.strip()))).first()
+    if inv is None or inv.revoked:
+        raise RuleError("That invite code isn't valid.", 404)
+    if inv.used_at is not None:
+        raise RuleError("That invite code has already been used.", 410)
+    if inv.expires_at < datetime.now(UTC):
+        raise RuleError("That invite code has expired.", 410)
+    return inv
+
+
+def can_start_group(session: Session, user: User | None, code: str | None) -> SiteInvite | None:
+    """Starting a group needs open sign-up, a site invite code, or being the site admin.
+    Returns the invite to mark used (None when no code was needed). Raises when not allowed."""
+    if code:
+        return site_invite_for_token(session, code)
+    if site_settings(session).open_signup or (user is not None and user.is_admin):
+        return None
+    raise RuleError("Starting a group needs an invite code for now.", 403)
+
+
+def start_group(session: Session, user: User, name: str, code: str | None) -> Group:
+    inv = can_start_group(session, user, code)
+    group = create_group(session, user, name)
+    if inv is not None:
+        inv.used_at = utcnow()
+        inv.used_by_user_id = user.id
+        session.add(inv)
+    return group
+
+
+def sign_up(session: Session, username: str, password: str, group_name: str, code: str | None) -> User:
+    """A new account that starts its own group (with a site invite code, or while sign-up is open)."""
+    inv = can_start_group(session, None, code)
+    user = create_user(session, username, password)
+    create_group(session, user, group_name)
+    if inv is not None:
+        inv.used_at = utcnow()
+        inv.used_by_user_id = user.id
+        session.add(inv)
     return user
 
 
@@ -275,3 +490,4 @@ class LoginThrottle:
 
 pair_throttle = LoginThrottle(limit=5)
 address_throttle = LoginThrottle(limit=20)
+signup_throttle = LoginThrottle(limit=5, window=60 * 60)  # new accounts per address per hour

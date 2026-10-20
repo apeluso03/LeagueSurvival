@@ -5,6 +5,7 @@ import { usePageTitle } from '../hooks/usePageTitle'
 import { setMuted, useMuted } from '../lib/sound'
 import { ErrorBoundary } from './ErrorBoundary'
 import { LogoMark, SoundOffIcon, SoundOnIcon } from './icons'
+import { LegalNotice } from './LegalNotice'
 import { ModeToggle } from './ModeToggle'
 import { UserMenu } from './UserMenu'
 import { BackendDownBanner, ResultWatcher, NoChampionsBanner } from './StatusBanners'
@@ -95,7 +96,7 @@ export function Layout() {
             <Link to="/" className="flex items-center gap-2 rounded-full pr-1" title="Home">
               <LogoMark className="h-8 w-8" />
               <span className="font-display hidden text-lg tracking-[0.12em] whitespace-nowrap uppercase sm:inline">
-                <span className="text-white">LoL</span> <span className="blue-text">Survival</span>
+                <span className="text-white">Hardcore</span> <span className="blue-text">Draft</span>
               </span>
             </Link>
             <ModeToggle />
@@ -126,6 +127,9 @@ export function Layout() {
           </div>
         </ErrorBoundary>
       </main>
+      <footer className="mx-auto w-full max-w-7xl px-4 pt-2 pb-4">
+        <LegalNotice />
+      </footer>
       <ResultWatcher />
     </div>
   )

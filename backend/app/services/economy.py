@@ -121,6 +121,29 @@ def reverse_game(session: Session, game: ChallengeGame) -> None:
     session.flush()
 
 
+def game_gold_breakdown(session: Session, game_id: int) -> dict[int, dict]:
+    """Where each player's gold from a game came from (History tab): the per-source amounts from
+    their stats, the counts behind them, and any contract payout."""
+    out: dict[int, dict] = {}
+    for row in session.exec(
+        select(GoldLedger).where(
+            GoldLedger.game_id == game_id,
+            col(GoldLedger.reason).in_(["game", "contract_payout"]),
+            col(GoldLedger.undone).is_(False),
+        )
+    ).all():
+        b = out.setdefault(row.player_id, {"total": 0, "contract": 0, "contract_goal": None})
+        b["total"] += row.amount
+        if row.reason == "contract_payout":
+            b["contract"] += row.amount
+            b["contract_goal"] = (row.breakdown or {}).get("goal")
+        else:
+            for k in ("kills", "assists", "damage", "vision", "multikills", "support_bonus", "damage_counted", "multikill_counts", "stats"):
+                if k in (row.breakdown or {}):
+                    b[k] = row.breakdown[k]
+    return out
+
+
 def game_gold(session: Session, game_id: int) -> dict[int, int]:
     """Gold each player earned from a game (game gold plus contract payouts)."""
     out: dict[int, int] = {}

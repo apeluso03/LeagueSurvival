@@ -239,15 +239,28 @@ def link_manual_game(session: Session, game: ChallengeGame, settings: AppSetting
     return Outcome(game.id, "linked", "", cand.match.match_id)
 
 
-def run_matcher(session: Session, recent_manual_days: int = 7) -> list[Outcome]:
-    """Match every pending game in active runs, then link recent hand-recorded games for stats."""
-    settings = session.get(AppSettings, 1) or AppSettings()
+def settings_for_game(session: Session, game: ChallengeGame) -> AppSettings:
+    group_id = session.get(Run, game.run_id).group_id
+    return session.exec(select(AppSettings).where(AppSettings.group_id == group_id)).first() or AppSettings(group_id=group_id)
+
+
+def run_matcher(session: Session, recent_manual_days: int = 7, group_id: int | None = None) -> list[Outcome]:
+    """Match every pending game in active runs (of one group, or all groups whose challenge mode is
+    on), then link recent hand-recorded games for stats."""
     outcomes: list[Outcome] = []
     active_runs = select(Run.id).where(Run.status == "active")
+    group_runs = select(Run.id) if group_id is None else select(Run.id).where(Run.group_id == group_id)
     pending = session.exec(
-        select(ChallengeGame).where(ChallengeGame.status == "pending", col(ChallengeGame.run_id).in_(active_runs))
+        select(ChallengeGame).where(
+            ChallengeGame.status == "pending",
+            col(ChallengeGame.run_id).in_(active_runs),
+            col(ChallengeGame.run_id).in_(group_runs),
+        )
     ).all()
     for game in pending:
+        settings = settings_for_game(session, game)
+        if group_id is None and not settings.challenge_mode:
+            continue
         outcomes.append(match_pending(session, game, settings))
 
     since = rules.utcnow() - timedelta(days=recent_manual_days)
@@ -256,6 +269,7 @@ def run_matcher(session: Session, recent_manual_days: int = 7) -> list[Outcome]:
             col(ChallengeGame.status).in_(["won", "lost"]),
             col(ChallengeGame.riot_match_id).is_(None),
             col(ChallengeGame.created_at) >= since,
+            col(ChallengeGame.run_id).in_(group_runs),
         )
     ).all()
     for game in manual:
@@ -263,7 +277,7 @@ def run_matcher(session: Session, recent_manual_days: int = 7) -> list[Outcome]:
             SpinAssignment.game_id == game.id, col(Player.puuid).is_(None)
         )).first():
             continue
-        outcome = link_manual_game(session, game, settings)
+        outcome = link_manual_game(session, game, settings_for_game(session, game))
         if outcome.status == "linked":
             outcomes.append(outcome)
     return outcomes

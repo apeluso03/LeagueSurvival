@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 from sqlmodel import Session, col, select
 
-from app.models import AppSettings, Player, PlayerMatchStats, RiotMatch, utcnow
-from app.services import rating
+from app.models import Player, PlayerMatchStats, RiotMatch, utcnow
+from app.services import privacy, rating
 from app.services.riot_client import RiotClient, RiotError
 
 RECENT_MATCH_COUNT = 20
@@ -83,12 +83,15 @@ def participant_stats(
 
 
 def store_match(session: Session, raw: dict) -> RiotMatch:
-    """Save a match and a PlayerMatchStats row for every registered player who was in it."""
-    match = parse_match(raw)
-    session.merge(match)
+    """Save a match and a PlayerMatchStats row for every registered player who was in it.
+
+    The saved copy is scrubbed: only registered players stay identifiable (services/privacy.py).
+    """
     by_puuid = {
         p.puuid: p.id for p in session.exec(select(Player).where(col(Player.puuid).is_not(None))).all()
     }
+    match = parse_match(privacy.scrub_match(raw, set(by_puuid)))
+    session.merge(match)
     kills_by_team = team_kills(raw)
     grades = rating.grades_for_match(raw)
     for p in raw["info"]["participants"]:
@@ -123,10 +126,16 @@ async def import_player_matches(
     ids = await client.match_ids(player.region, player.puuid, count=count)
     new = 0
     for match_id in ids:
-        if session.get(RiotMatch, match_id):
-            # Already cached; make sure this player's row exists (they may have been linked later).
+        cached = session.get(RiotMatch, match_id)
+        if cached:
+            # Already saved; make sure this player's row exists (they may have been linked later).
             if not session.get(PlayerMatchStats, (match_id, player.id)):
-                store_match(session, session.get(RiotMatch, match_id).raw_json)
+                parts = cached.raw_json.get("info", {}).get("participants", [])
+                if any(p.get("puuid") == player.puuid for p in parts):
+                    store_match(session, cached.raw_json)
+                else:
+                    # The saved copy doesn't identify them (it was scrubbed before they joined).
+                    store_match(session, await client.match(player.region, match_id))
             continue
         store_match(session, await client.match(player.region, match_id))
         new += 1
@@ -151,7 +160,9 @@ async def sync_all(session: Session, client: RiotClient, player_ids: list[int] |
             if e.status in (0, 401, 403):  # key problem: every other call will fail too
                 break
 
-    settings = session.get(AppSettings, 1) or AppSettings(id=1)
+    from app.models import SiteSettings  # noqa: PLC0415
+
+    settings = session.get(SiteSettings, 1) or SiteSettings(id=1)
     settings.last_sync_at = utcnow()
     settings.last_sync_error = "; ".join(result.errors) or None
     session.add(settings)

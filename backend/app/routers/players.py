@@ -3,9 +3,9 @@ from sqlmodel import Session, col, delete, select
 
 from app.config import get_settings
 from app.db import get_session
-from app.models import Player, PlayerMatchStats, ReviveToken, Run, SpinAssignment, User
-from app.routers.access import can_act_for, current_user, require_admin
-from app.routers.common import get_app_settings, get_or_404
+from app.models import GroupMember, Player, PlayerMatchStats, ReviveToken, SpinAssignment, User
+from app.routers.access import Ctx, can_act_for, get_player, get_run, group_ctx, require_owner
+from app.routers.common import get_app_settings
 from app.schemas import PlayerIn, PlayerOut, PlayerPatch
 from app.services import achievements, recap, sync
 from app.services.riot_client import REGIONS, RiotClient, RiotError
@@ -38,26 +38,35 @@ async def _try_link(session: Session, player: Player) -> str | None:
     return None
 
 
-# What a player may change about themselves; everything else (name, Riot ID) is the site owner's.
+# What a player may change about themselves; everything else (name, Riot ID) is the group owner's.
 SELF_FIELDS = {"color", "title"}
 
 
+def _usernames(session: Session, group_id: int) -> dict[int, str]:
+    """player id -> the username of the account that plays as them, in this group."""
+    rows = session.exec(
+        select(GroupMember.player_id, User.username)
+        .join(User, col(User.id) == col(GroupMember.user_id))
+        .where(GroupMember.group_id == group_id, col(GroupMember.player_id).is_not(None))
+    ).all()
+    return {pid: name for pid, name in rows}
+
+
 def player_out(session: Session, player: Player, link_error: str | None = None) -> PlayerOut:
-    username = session.exec(select(User.username).where(User.player_id == player.id)).first()
-    return PlayerOut(**player.model_dump(), link_error=link_error, username=username)
+    return PlayerOut(**player.model_dump(), link_error=link_error, username=_usernames(session, player.group_id).get(player.id))
 
 
 @router.get("", response_model=list[PlayerOut])
-def list_players(session: Session = Depends(get_session)):
-    usernames = {pid: name for pid, name in session.exec(select(User.player_id, User.username)).all() if pid is not None}
-    players = session.exec(select(Player).order_by(col(Player.display_name))).all()
+def list_players(ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
+    usernames = _usernames(session, ctx.group_id)
+    players = session.exec(select(Player).where(Player.group_id == ctx.group_id).order_by(col(Player.display_name))).all()
     return [PlayerOut(**p.model_dump(), username=usernames.get(p.id)) for p in players]
 
 
 @router.post("", response_model=PlayerOut, status_code=201)
-async def create_player(body: PlayerIn, _: User = Depends(require_admin), session: Session = Depends(get_session)):
+async def create_player(body: PlayerIn, ctx: Ctx = Depends(require_owner), session: Session = Depends(get_session)):
     _check_region(body.region)
-    player = Player(**body.model_dump())
+    player = Player(**body.model_dump(), group_id=ctx.group_id)
     link_error = await _try_link(session, player)
     session.add(player)
     session.commit()
@@ -67,15 +76,15 @@ async def create_player(body: PlayerIn, _: User = Depends(require_admin), sessio
 
 @router.patch("/{player_id}", response_model=PlayerOut)
 async def update_player(
-    player_id: int, body: PlayerPatch, user: User = Depends(current_user), session: Session = Depends(get_session)
+    player_id: int, body: PlayerPatch, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)
 ):
-    player = get_or_404(session, Player, player_id, "Player")
+    player = get_player(session, ctx, player_id)
     changes = body.model_dump(exclude_unset=True)
-    if not user.is_admin:
-        if user.player_id != player_id:
+    if not ctx.is_owner:
+        if ctx.player_id != player_id:
             raise HTTPException(403, "You can only edit your own player")
         if set(changes) - SELF_FIELDS:
-            raise HTTPException(403, "Only the site owner can change names and Riot IDs")
+            raise HTTPException(403, "Only the group's owner can change names and Riot IDs")
     _check_region(changes.get("region"))
     if changes.get("title") is not None:
         earned = achievements.evaluate(session).get(player_id, {})
@@ -97,9 +106,9 @@ async def update_player(
 
 
 @router.post("/{player_id}/link", response_model=PlayerOut)
-async def link_player(player_id: int, _: User = Depends(require_admin), session: Session = Depends(get_session)):
+async def link_player(player_id: int, ctx: Ctx = Depends(require_owner), session: Session = Depends(get_session)):
     """Retry the Riot ID lookup. Errors are returned as HTTP errors so the UI can show them."""
-    player = get_or_404(session, Player, player_id, "Player")
+    player = get_player(session, ctx, player_id)
     try:
         async with RiotClient() as client:
             await sync.link_player(session, client, player)
@@ -113,15 +122,15 @@ async def link_player(player_id: int, _: User = Depends(require_admin), session:
 
 
 @router.delete("/{player_id}", status_code=204)
-def delete_player(player_id: int, _: User = Depends(require_admin), session: Session = Depends(get_session)):
-    player = get_or_404(session, Player, player_id, "Player")
-    if session.exec(select(User.id).where(User.player_id == player_id)).first():
+def delete_player(player_id: int, ctx: Ctx = Depends(require_owner), session: Session = Depends(get_session)):
+    player = get_player(session, ctx, player_id)
+    if session.exec(select(GroupMember.user_id).where(GroupMember.player_id == player_id)).first():
         raise HTTPException(409, "Someone plays as this player. Remove their account first.")
     in_games = session.exec(select(SpinAssignment.id).where(SpinAssignment.player_id == player_id)).first()
     has_tokens = session.exec(select(ReviveToken.id).where(ReviveToken.player_id == player_id)).first()
     if in_games or has_tokens:
         raise HTTPException(409, "This player has challenge history and can't be deleted")
-    s = get_app_settings(session)
+    s = get_app_settings(session, ctx.group_id)
     if player_id in s.last_used_player_ids:
         s.last_used_player_ids = [p for p in s.last_used_player_ids if p != player_id]
         session.add(s)
@@ -132,14 +141,14 @@ def delete_player(player_id: int, _: User = Depends(require_admin), session: Ses
 
 @router.get("/{player_id}/profile")
 def player_profile(
-    player_id: int, run_id: int | None = None, user: User = Depends(current_user), session: Session = Depends(get_session)
+    player_id: int, run_id: int | None = None, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)
 ):
     """A player's page: stats, champions, recent games, runs, items and (for one run) gold over time.
-    Items and the gold timeline are private: only the player and the run's owner see them."""
-    player = get_or_404(session, Player, player_id, "Player")
-    run = get_or_404(session, Run, run_id, "Run") if run_id is not None else None
+    Items and the gold timeline are private: only the player and the group or run owner see them."""
+    player = get_player(session, ctx, player_id)
+    run = get_run(session, ctx, run_id) if run_id is not None else None
     profile = recap.player_profile(session, player, run_id)
-    mine = user.is_admin or user.player_id == player_id or (run is not None and can_act_for(user, run, player_id))
+    mine = ctx.is_owner or ctx.player_id == player_id or (run is not None and can_act_for(ctx, run, player_id))
     if not mine:
         profile["items"] = None
         profile["gold_timeline"] = None

@@ -1,0 +1,18 @@
+# Never send secrets, databases or local environments into the image.
+.env
+**/.env
+*.db
+*.db-journal
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/*.egg-info
+frontend/node_modules
+frontend/dist
+**/*.tsbuildinfo
+.git
+.vscode
+.idea
+backend/tests
+scripts

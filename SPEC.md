@@ -1,4 +1,6 @@
-# League of Legends Survival Tracker: Project Spec
+# Hardcore Draft: Project Spec
+
+Formerly "LoL Survival Tracker": renamed so the name and domain don't use Riot trademarks (12.6b).
 
 Version 0.3 (MVP, Gold and Shop, accounts; plan for a public site with many groups). Owner: Alex Peluso.
 Repo: github.com/apeluso03/LeagueSurvival
@@ -468,6 +470,7 @@ After a spin, the app suggests a role for each rolled champion and a high-elo bu
 - It waits 2.5 seconds between calls so it never crowds out the match poller, and commits before every Riot call (SQLite allows one writer). It can be turned off in Settings (`meta_crawl`).
 - **Roles:** with 20+ high-elo games, a champion's role scores are 80% its high-elo role share and 20% Meraki's position list; with fewer, Meraki alone. The best assignment for the whole team is picked over all permutations. A role played in under 5% of a champion's high-elo games is marked off-role, and its build then comes from the champion's usual role.
 - **Builds:** the most played rune page, the 3 most built core items plus boots, and the most taken summoner spell pair (Flash shown second) for that champion and role, with pick and win rates.
+- **Mobalytics widgets:** each build strip has an "M" button that opens Mobalytics' full build for that champion and role (skill order, tier, full runes) in a pop-up, and the Pool tab's champion card has a "Mobalytics build" section (compact widget). Their script (github.com/mobalyticshq/mobalytics-widgets, MIT) is served from our own copy, `frontend/public/vendor/mobalytics-widgets.js`, made by `scripts/update_mobalytics.py`: their bundle loads only the first 400 items of Mobalytics' item catalog (now about 950, mostly mode-specific copies), so it drew no item icons; the copy loads 8 pages and renames "Mythic & Core Items" to "Core Items". Re-run the script when they update the widget. The frame sends no Referer (`<meta name="referrer" content="no-referrer">`): Mobalytics' image CDN answers 403 to any Referer except its own site, which blanked every icon. It runs in a sandboxed iframe (`allow-scripts`, no `allow-same-origin`), so it can't reach the app's page, cookies or API; the frame reports its height by `postMessage`. The slug is the Data Dragon id in lower case; roles map TOP/JUNGLE/MID/ADC/SUPPORT. It loads only when opened, so nothing goes to Mobalytics otherwise (stated on `/legal`). Their tooltip widget isn't used: it has to run in the app's own page.
 - **Suggested bans (5):** enemy champions the rolled champions do worst against. For each rolled champion, its win rate against an enemy is pulled toward its overall win rate by 10 games (so a 0-2 record doesn't outrank 40-60), and an enemy's threat is how far it drags those rates down, added up over the rolled champions. Champions on anyone's option list are never suggested. Team-wide matchups (any role), not lane matchups, since that data fills in much faster.
 
 ### 9.6 Live game tracking
@@ -506,6 +509,8 @@ Built since (v0.3):
 ### 10.1b Live tab (`/live`)
 - Shown in the nav with a red dot while a game is live. Before a game starts it explains what will happen; once found through Riot only, it lists both teams' champions, spells, keystones and bans.
 - With live stats, a broadcast layout: score bug (kills per side, game clock, item-gold lead, towers, dragons by type, grubs, herald, baron); bans; lane-by-lane rows pairing each player with their opponent (portrait with level and respawn timer, spells, keystone, KDA, CS, all 7 item slots, lane gold and CS difference); our players marked with their team colour, which spin option they're on, and a shield icon if their champion is shielded; a gold-lead graph; contract progress for kills and assists goals; a play-by-play feed.
+- **Preview** (`/live?preview=1`, or "Preview with sample data" when no game is tracked): the whole tab with a made-up game (`lib/liveDemo.ts`), built in the browser from the current spin's players and champions (or the roster), real art and real build suggestions. The clock runs (pause, 1×, 10×, restart). Nothing is saved and nothing calls Riot.
+- **Your builds** under the lanes: each of our players' high-elo build (runes, spells, core items, boots, the Mobalytics button), with items they already hold checked and the rest dimmed ("core 2/3"), so nobody has to switch back to the Wheels tab mid-game. Shown from Spectator data too (without the checks).
 - The Wheels tab's result bar says "In game · 12:34 · picks filled in from the live game" with a Watch live link. The stream overlay swaps the picks for a live score bar during the game (`?live=0` hides it).
 
 ### 10.2 Stats tab
@@ -541,6 +546,7 @@ Built since (v0.3):
 - Buying a Contract reveals its goal right away with a short animation.
 
 ### 10.5 History tab
+- Each game with gold has a "Gold breakdown" table: per player, gold from kills, assists, damage (with healing and shielding for supports), vision, multikills and contract payouts, each with the counts behind it, and the total (`GameOut.gold_breakdown`, from the gold ledger).
 - List of Challenge Games: date, players, champions played, result, auto or manual, items used, gold earned, rating grades, link to match details.
 - "Link match" on manual games to pull Riot stats and award gold.
 - Undo button on the most recent result.
@@ -675,7 +681,7 @@ Every endpoint except `/api/health` and the signed-out `/api/auth/*` ones needs 
 ## 12. Accounts, Groups and Going Public
 
 ### 12.1 Accounts (built, v0.3)
-- **Sign-up is invite-only today.** The first person to open a new site makes the owner account on `/setup`; it takes over every run made before accounts existed. Everyone else joins through an invite link the site owner makes for their player in Settings.
+- **First account:** the first person to open a new site makes the site admin account on `/setup`; it takes over the group that existed before accounts. Since 12.4, new groups start with a site invite code (or open sign-up), and members join through player invite links.
 - **Invites:** one-time, tied to one Player, expire after 7 days. A new link for the same player cancels the old one. Only a SHA-256 of the token is stored, so a link is shown once.
 - **Passwords:** scrypt (Python's standard library), 8 to 200 characters. Usernames are 3 to 24 letters, numbers, dots, dashes or underscores, case-insensitive.
 - **Sessions:** a random token in an HttpOnly, SameSite=Lax cookie (secure on https), valid for 30 days. Only its SHA-256 is stored. Signing out deletes it on the server; changing your password signs out every other browser.
@@ -703,7 +709,16 @@ Players now sit on their own devices, so changes must show up everywhere at once
 - The client keeps TanStack Query as the source of truth: an event invalidates or patches the matching queries. The 10-second polling on the Wheels tab goes away.
 - Ready check before a spin (optional): players tap "Ready" and the owner sees who is set.
 
-### 12.4 Groups: anyone can start their own (planned)
+### 12.4 Groups: anyone can start their own (built, v0.4)
+
+Built as designed below, with these specifics:
+- Tables `group`, `groupmember` (role owner | member, player_id unique), `siteinvite` (one-time codes to start a group, 30 days), `sitesettings` (open_signup, Riot sync status, build crawler); `group_id` on player, run, invite and appsettings; `authsession.group_id` is the group a browser is viewing. Migration `b7d3e1f05a92` moved everything into one group owned by the first account.
+- Starting a group needs a site invite code, open sign-up, or being the site admin. Sign-up: `/signup?code=...` (new account + group); signed in: `/groups/new`. Player invites (`/invite/<token>`) work for new accounts and for signed-in accounts joining another group. Members switch groups from the user menu.
+- Access (`routers/access.py`): a `Ctx` (user, group, membership) on every group route; `get_run` / `get_player` / `get_game` answer 404 outside the group. Trophies, Hall of Shame, Wrapped, champion stats and option facts only count the group's games and players. The poller, matcher and live tracker work across all groups (each with its own settings).
+- Removing a member keeps their player and history; an account left in no group is deleted (its username is free again). Group owners can't be removed.
+- Sign-up throttle: 5 new accounts per address per hour (in memory).
+
+The original plan:
 Goal: anyone can open the site, make an account, start a group, and invite their own friends. Each group runs its own challenge with its own settings, and the creator owns it.
 
 - **New table `Group`:** id, name, owner_user_id, created_at. Players, runs, invites and settings (`AppSettings` becomes one row per group) all get a `group_id`. The active run becomes per group.
@@ -715,7 +730,15 @@ Goal: anyone can open the site, make an account, start a group, and invite their
 - **Existing data:** a migration puts every current player, run, invite and setting into one group owned by the current site owner.
 - **Limits:** caps on groups per account, players per group and runs per group, so one account can't fill the database.
 
-### 12.5 Hosting (planned)
+### 12.5 Hosting (built for Railway, v0.4)
+
+- `Dockerfile`: builds the frontend, then a Python 3.12 image running uvicorn with `--proxy-headers` (HTTPS behind Railway's proxy, so cookies are secure) and one worker. `FRONTEND_DIST` makes the backend serve the built app with an `index.html` fallback for app routes; `/api/*` stays the API. Security headers on every response (nosniff, referrer policy, frame options, HSTS on https).
+- `railway.json`: Dockerfile build, one replica (the background jobs run in-process), `/api/health` check.
+- Postgres via `psycopg`; `postgres://` URLs are accepted. Every migration and the whole test suite (`TEST_DATABASE_URL=...`) run on Postgres 16. `livegame.riot_game_id` is BIGINT (migration `d4a8c2e61f07`): Riot game ids don't fit 32 bits.
+- `scripts/sqlite_to_postgres.py` moves a local SQLite database into an empty Postgres one and checks the counts.
+- Step-by-step in the README ("Hosting on Railway").
+
+The original plan:
 - **Postgres** instead of SQLite (one writer at a time won't hold up with many groups). Migrations must also run on Postgres; the current ones are written to be safe to re-run on SQLite.
 - **Host:** a container on Fly.io, Railway or Render, with the frontend built and served from the same domain (so the session cookie stays first-party) or from a CDN with the API on a subdomain.
 - **HTTPS everywhere.** Cookies switch to secure automatically on https.
@@ -730,12 +753,22 @@ Goal: anyone can open the site, make an account, start a group, and invite their
 - **Crawler:** stays one global job; its data is shared by every group.
 - **Policies:** follow Riot's developer policies (no features that give an in-game advantage beyond what's allowed; show "Not affiliated with Riot Games"; a privacy policy describing what Riot data is stored).
 
+### 12.6b Riot terms compliance (built, v0.3)
+Checked against Riot's API Terms and the "Legal Jibber Jabber" fan-content policy:
+- **Required notice** on every page (footer, sign-in pages, landing): "Hardcore Draft was created under Riot Games' "Legal Jibber Jabber" policy using assets owned by Riot Games. Riot Games does not endorse or sponsor this project." Plus a public `/legal` page (privacy policy and terms of use).
+- **Data minimisation** (`services/privacy.py`): saved matches keep game numbers for every participant but the identity (PUUID) only of registered players; names, PUUIDs, summoner ids and icons of everyone else are removed before saving, and existing data was scrubbed by migration `9a1f6b3c7e52`. A player linked later has their matches fetched again rather than kept in full. Live games store no in-game names: opponents are their champion, ours their player id. The crawler keeps only totals; its PUUID queue is temporary.
+- **Deletion:** remove one player's Riot data (Settings, player row), forget a list of PUUIDs from a Riot GDPR deletion request (Settings, Privacy), and delete all Riot data if API access ends (Settings, or `python -m app.privacy_cli purge-all`). The challenge's own records (runs, results, gold, items) stay.
+- **Not commercial:** no paywall; shop gold has no real value. No contests or prizes (stated in the terms).
+- **Game integrity:** nothing interferes with the game; no cooldown tracking.
+- **Name:** renamed to **Hardcore Draft** (no Riot trademarks). The domain must not use them either, e.g. `hardcoredraft.gg`. "League of Legends" may still be named in descriptions, as a plain reference.
+- **Still to do before launch:** register a domain; the production key application; delete database backups made before scrubbing.
+
 ### 12.7 Safety, privacy and abuse (planned, before public launch)
 - Sign-up rate limits per address, plus a CAPTCHA or email check if sign-up spam shows up.
 - Optional email on accounts for password reset (today resets go through the group owner).
 - Delete my account and export my data; a group owner can delete their group and everything in it.
 - Group and player names are user content: length limits, and a way for the site admin to remove abusive ones.
-- Terms of use and a privacy policy pages.
+- Terms of use and a privacy policy pages (built: `/legal`; extend for accounts by email once that exists).
 - Sign-in throttle moves to a shared store (Redis or the database) once there's more than one server.
 
 ### 12.8 Discord (later)

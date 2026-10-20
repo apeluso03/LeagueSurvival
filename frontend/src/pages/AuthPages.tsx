@@ -1,8 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, isUnreachable } from '../api/client'
 import { LogoMark } from '../components/icons'
+import { LegalNotice } from '../components/LegalNotice'
 import { ErrorText, LoadingState } from '../components/ui'
 import { useMe, useSession } from '../hooks/useAuth'
 import { usePageTitle } from '../hooks/usePageTitle'
@@ -30,6 +31,7 @@ export function RequireAuth() {
   if (!me.data.user) {
     return <Navigate to={me.data.setup_needed ? '/setup' : '/login'} state={{ from: location.pathname }} replace />
   }
+  if (!me.data.group) return <StartGroupPage firstGroup />
   return <Outlet />
 }
 
@@ -43,13 +45,14 @@ function AuthShell({ title, subtitle, children }: { title: string; subtitle?: Re
       <div className="page-in relative z-10 flex w-full max-w-sm flex-col items-center">
         <LogoMark className="h-16 w-16" />
         <div className="font-display mt-3 text-sm tracking-[0.2em] uppercase">
-          <span className="text-white">LoL</span> <span className="blue-text">Survival</span>
+          <span className="text-white">Hardcore</span> <span className="blue-text">Draft</span>
         </div>
         <div className="card mt-6 w-full bg-slate-900/80">
           <h1 className="text-xl font-bold text-gold-100">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
           <div className="mt-5">{children}</div>
         </div>
+        <LegalNotice className="mt-6" />
       </div>
     </div>
   )
@@ -183,7 +186,12 @@ export function LoginPage() {
           {login.isPending ? 'Signing in...' : 'Sign in'}
         </button>
         <p className="text-center text-xs text-slate-500">
-          New here? Ask the owner for an invite link. Forgot your password? The owner can send you a new one.
+          Joining friends? Use the invite link they sent you. Starting your own group?{' '}
+          <Link to="/signup" className="text-hex-200 hover:underline">
+            Sign up
+          </Link>
+          {me.data?.open_signup ? '.' : ' with an invite code.'} Forgot your password? Your group's owner can send you a
+          new link.
         </p>
       </form>
     </AuthShell>
@@ -271,17 +279,7 @@ export function InvitePage() {
     )
   }
   if (me.data?.user) {
-    return (
-      <AuthShell title="You're already signed in" subtitle={`as ${me.data.user.username}`}>
-        <p className="text-sm text-slate-300">
-          This link is for whoever plays as <b className="text-gold-100">{invite.data.display_name}</b>. Sign out first
-          if that's a new account, or pass the link on.
-        </p>
-        <Link to="/" className="btn-secondary mt-4 w-full">
-          Back to the app
-        </Link>
-      </AuthShell>
-    )
+    return <JoinSignedIn token={token} groupName={invite.data.group_name} playerName={invite.data.display_name} username={me.data.user.username} />
   }
 
   const submit = (e: FormEvent) => {
@@ -292,7 +290,7 @@ export function InvitePage() {
   return (
     <AuthShell
       title={`Join as ${invite.data.display_name}`}
-      subtitle="Make your account to handle your own gold, shop and items."
+      subtitle={`in ${invite.data.group_name}. Make your account to handle your own gold, shop and items.`}
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
         <NewAccountFields {...{ username, setUsername, password, setPassword, confirm, setConfirm }} />
@@ -304,6 +302,159 @@ export function InvitePage() {
         <p className="text-center text-xs text-slate-500">
           Already have an account? <Link to="/login" className="text-hex-200 hover:underline">Sign in</Link>
         </p>
+      </form>
+    </AuthShell>
+  )
+}
+
+/** An invite link opened while signed in: join that group with the account you have. */
+function JoinSignedIn({ token, groupName, playerName, username }: { token: string; groupName: string; playerName: string; username: string }) {
+  const { signedIn, logout } = useSession()
+  const navigate = useNavigate()
+  const join = useMutation({
+    mutationFn: () => api.acceptInvite(token),
+    onSuccess: (me) => {
+      navigate('/', { replace: true })
+      signedIn(me)
+    },
+  })
+  return (
+    <AuthShell title={`Join ${groupName}`} subtitle={`as ${playerName}, with your account ${username}`}>
+      <p className="text-sm text-slate-300">
+        You'll be in this group too, and can switch between your groups from the menu in the top right.
+      </p>
+      <ErrorText error={join.error} />
+      <button className="btn-primary mt-4 w-full py-2.5" disabled={join.isPending} onClick={() => join.mutate()}>
+        {join.isPending ? 'Joining...' : `Join as ${playerName}`}
+      </button>
+      <button
+        className="btn-secondary mt-2 w-full"
+        disabled={logout.isPending}
+        onClick={() => logout.mutate(undefined, { onSettled: () => navigate(`/invite/${token}`, { replace: true }) })}
+      >
+        Use a different account
+      </button>
+    </AuthShell>
+  )
+}
+
+/** Sign up and start your own group (with an invite code, or while sign-up is open). */
+export function SignupPage() {
+  usePageTitle('Start a group')
+  const me = useMe()
+  const [params] = useSearchParams()
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [groupName, setGroupName] = useState('')
+  const [code, setCode] = useState(params.get('code') ?? '')
+  const [mismatch, setMismatch] = useState(false)
+  const signUp = useSignIn(api.signUp)
+
+  if (me.data?.user) return <Navigate to="/groups/new" replace />
+  if (me.data?.setup_needed) return <Navigate to="/setup" replace />
+  const open = !!me.data?.open_signup
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    setMismatch(password !== confirm)
+    if (password === confirm) signUp.mutate({ username, password, group_name: groupName, code: code.trim() || null })
+  }
+  return (
+    <AuthShell
+      title="Start your group"
+      subtitle="Make an account, name your group, then add your friends and invite them from Settings."
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Field label="Group name" hint="Your friend group or stream name">
+          <input
+            className="input"
+            required
+            minLength={2}
+            maxLength={40}
+            value={groupName}
+            onChange={(e) => setGroupName(e.target.value)}
+          />
+        </Field>
+        <NewAccountFields {...{ username, setUsername, password, setPassword, confirm, setConfirm }} />
+        {(!open || code) && (
+          <Field label="Invite code" hint={open ? undefined : 'Starting a group needs an invite code for now.'}>
+            <input className="input font-mono" required={!open} value={code} onChange={(e) => setCode(e.target.value)} />
+          </Field>
+        )}
+        {mismatch && <ErrorText error="The passwords don't match" />}
+        <ErrorText error={signUp.error} />
+        <button type="submit" className="btn-primary w-full py-2.5" disabled={signUp.isPending}>
+          {signUp.isPending ? 'Starting...' : 'Start my group'}
+        </button>
+        <p className="text-center text-xs text-slate-500">
+          Joining friends instead? Use the invite link they sent you. Have an account?{' '}
+          <Link to="/login" className="text-hex-200 hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </form>
+    </AuthShell>
+  )
+}
+
+/** Start another group with the account you're signed in with (or your first one). */
+export function StartGroupPage({ firstGroup = false }: { firstGroup?: boolean }) {
+  usePageTitle('Start a group')
+  const me = useMe()
+  const { signedIn, logout } = useSession()
+  const navigate = useNavigate()
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const start = useMutation({
+    mutationFn: () => api.startGroup({ name, code: code.trim() || null }),
+    onSuccess: (data) => {
+      navigate('/settings', { replace: true })
+      signedIn(data)
+    },
+  })
+  const needsCode = !me.data?.open_signup && !me.data?.user?.is_admin
+  return (
+    <AuthShell
+      title={firstGroup ? "You're not in a group yet" : 'Start a group'}
+      subtitle={
+        firstGroup
+          ? 'Open the invite link a friend sent you to join their group, or start your own.'
+          : 'A new group with its own players, runs and settings. You can switch groups from the top-right menu.'
+      }
+    >
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(e) => {
+          e.preventDefault()
+          start.mutate()
+        }}
+      >
+        <Field label="Group name">
+          <input className="input" required minLength={2} maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        {needsCode && (
+          <Field label="Invite code" hint="Starting a group needs an invite code for now.">
+            <input className="input font-mono" required value={code} onChange={(e) => setCode(e.target.value)} />
+          </Field>
+        )}
+        <ErrorText error={start.error} />
+        <button type="submit" className="btn-primary w-full py-2.5" disabled={start.isPending}>
+          {start.isPending ? 'Starting...' : 'Start the group'}
+        </button>
+        {firstGroup ? (
+          <button
+            type="button"
+            className="btn-secondary w-full"
+            onClick={() => logout.mutate(undefined, { onSettled: () => navigate('/login', { replace: true }) })}
+          >
+            Sign out
+          </button>
+        ) : (
+          <Link to="/" className="btn-secondary w-full">
+            Cancel
+          </Link>
+        )}
       </form>
     </AuthShell>
   )

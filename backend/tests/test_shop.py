@@ -13,7 +13,7 @@ from app.services.rules import Pick, RuleError
 
 @pytest.fixture
 def run(session):
-    r = rules.create_run(session, "R", 3)
+    r = rules.create_run(session, "R", 3, group_id=1)
     session.commit()
     return r
 
@@ -264,7 +264,7 @@ def test_items_belong_to_one_run(session, run):
     rich(session, run, 1)
     item = buy(session, run, 1, "reroll")
     rules.end_run(session, run)
-    other = rules.create_run(session, "Next", 3)
+    other = rules.create_run(session, "Next", 3, group_id=1)
     session.commit()
     assert economy.balance(session, other.id, 1) == 0
     g = spin(session, other)

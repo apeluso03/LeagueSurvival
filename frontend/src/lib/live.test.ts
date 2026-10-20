@@ -3,8 +3,7 @@ import type { LivePlayer } from '../types'
 import { clock, contractProgress, goldShort, pairLanes } from './live'
 
 const p = (name: string, team: 100 | 200, position = ''): LivePlayer => ({
-  name,
-  champion_id: null,
+  champion_id: name,
   team,
   position,
   level: 1,
@@ -35,7 +34,7 @@ describe('live helpers', () => {
 
   it('pairs lanes by position, then by order', () => {
     const rows = pairLanes([p('a', 100, 'MIDDLE'), p('b', 100, 'TOP'), p('c', 200, 'TOP'), p('d', 200, 'MIDDLE'), p('e', 100), p('f', 200)])
-    expect(rows.map((r) => [r.lane, r.blue?.name, r.red?.name])).toEqual([
+    expect(rows.map((r) => [r.lane, r.blue?.champion_id, r.red?.champion_id])).toEqual([
       ['TOP', 'b', 'c'],
       ['MIDDLE', 'a', 'd'],
       ['', 'e', 'f'],

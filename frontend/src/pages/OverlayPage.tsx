@@ -29,7 +29,7 @@ export function OverlayPage() {
   // Transparent page while the overlay is open.
   useEffect(() => {
     document.documentElement.classList.add('overlay-mode')
-    document.title = 'LoL Survival overlay'
+    document.title = 'Hardcore Draft overlay'
     return () => document.documentElement.classList.remove('overlay-mode')
   }, [])
 

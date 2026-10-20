@@ -115,7 +115,7 @@ export function RecapPage() {
         <Awards awards={r.awards} players={r.players} />
         <PlayerTable players={r.players} />
         <p className="font-display text-center text-xs tracking-[0.3em] text-slate-600 uppercase">
-          LoL <span className="text-hex-400">Survival</span> · Post-game
+          Hardcore <span className="text-hex-400">Draft</span> · Post-game
         </p>
       </div>
     </div>

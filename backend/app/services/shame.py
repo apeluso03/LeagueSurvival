@@ -20,11 +20,19 @@ from app.services.stats import kda
 TOP = 8
 
 
-def _challenge_rows(session: Session, run_id: int | None = None, since: datetime | None = None, until: datetime | None = None):
+def _group_runs(group_id: int):
+    from app.models import Run
+
+    return select(Run.id).where(Run.group_id == group_id)
+
+
+def _challenge_rows(
+    session: Session, group_id: int, run_id: int | None = None, since: datetime | None = None, until: datetime | None = None
+):
     q = (
         select(SpinAssignment, ChallengeGame)
         .join(ChallengeGame, col(ChallengeGame.id) == col(SpinAssignment.game_id))
-        .where(col(ChallengeGame.status).in_(["won", "lost"]))
+        .where(col(ChallengeGame.status).in_(["won", "lost"]), col(ChallengeGame.run_id).in_(_group_runs(group_id)))
         .order_by(col(ChallengeGame.id))
     )
     if run_id is not None:
@@ -53,9 +61,9 @@ def _game_line(a: SpinAssignment, g: ChallengeGame, pms: PlayerMatchStats | None
     }
 
 
-def hall_of_shame(session: Session, run_id: int | None = None) -> dict:
+def hall_of_shame(session: Session, group_id: int, run_id: int | None = None) -> dict:
     champ_by_key = {c.key: c.id for c in session.exec(select(Champion)).all()}
-    rows = _challenge_rows(session, run_id)
+    rows = _challenge_rows(session, group_id, run_id)
     lines = []
     for a, g in rows:
         pms = session.get(PlayerMatchStats, (g.riot_match_id, a.player_id)) if g.riot_match_id else None
@@ -83,7 +91,9 @@ def hall_of_shame(session: Session, run_id: int | None = None) -> dict:
         key=lambda f: -f["avg_deaths"],
     )
 
-    elim_q = select(PoolEvent).where(PoolEvent.type == "eliminate", col(PoolEvent.undone).is_(False))
+    elim_q = select(PoolEvent).where(
+        PoolEvent.type == "eliminate", col(PoolEvent.undone).is_(False), col(PoolEvent.run_id).in_(_group_runs(group_id))
+    )
     if run_id is not None:
         elim_q = elim_q.where(PoolEvent.run_id == run_id)
     reapers = Counter(e.player_id for e in session.exec(elim_q).all() if e.player_id is not None)
@@ -91,7 +101,11 @@ def hall_of_shame(session: Session, run_id: int | None = None) -> dict:
     # Rerolls (and other spin items) used in games that were lost anyway.
     item_q = select(InventoryItem, ChallengeGame).join(
         ChallengeGame, col(ChallengeGame.id) == col(InventoryItem.used_in_game_id)
-    ).where(col(InventoryItem.type).in_(["reroll", "swap", "choose"]), ChallengeGame.status == "lost")
+    ).where(
+        col(InventoryItem.type).in_(["reroll", "swap", "choose"]),
+        ChallengeGame.status == "lost",
+        col(ChallengeGame.run_id).in_(_group_runs(group_id)),
+    )
     if run_id is not None:
         item_q = item_q.where(ChallengeGame.run_id == run_id)
     wasted: dict[int, dict] = {}
@@ -122,15 +136,19 @@ def month_bounds(month: str) -> tuple[datetime, datetime]:
     return start, end
 
 
-def available_months(session: Session) -> list[str]:
-    dates = session.exec(select(ChallengeGame.created_at).where(col(ChallengeGame.status).in_(["won", "lost"]))).all()
+def available_months(session: Session, group_id: int) -> list[str]:
+    dates = session.exec(
+        select(ChallengeGame.created_at).where(
+            col(ChallengeGame.status).in_(["won", "lost"]), col(ChallengeGame.run_id).in_(_group_runs(group_id))
+        )
+    ).all()
     return sorted({d.strftime("%Y-%m") for d in dates if d}, reverse=True)
 
 
-def wrapped(session: Session, month: str) -> dict:
+def wrapped(session: Session, month: str, group_id: int) -> dict:
     start, end = month_bounds(month)
     champ_by_key = {c.key: c.id for c in session.exec(select(Champion)).all()}
-    rows = _challenge_rows(session, since=start, until=end)
+    rows = _challenge_rows(session, group_id, since=start, until=end)
     games: dict[int, ChallengeGame] = {}
     players: dict[int, dict] = {}
     champs: Counter = Counter()
@@ -177,13 +195,23 @@ def wrapped(session: Session, month: str) -> dict:
 
     elims = session.exec(
         select(PoolEvent).where(
-            PoolEvent.type == "eliminate", col(PoolEvent.undone).is_(False), PoolEvent.created_at >= start, PoolEvent.created_at < end
+            PoolEvent.type == "eliminate",
+            col(PoolEvent.undone).is_(False),
+            PoolEvent.created_at >= start,
+            PoolEvent.created_at < end,
+            col(PoolEvent.run_id).in_(_group_runs(group_id)),
         )
     ).all()
     spend = session.exec(
         select(GoldLedger, InventoryItem)
         .join(InventoryItem, col(InventoryItem.id) == col(GoldLedger.item_id))
-        .where(GoldLedger.reason == "purchase", col(GoldLedger.undone).is_(False), GoldLedger.created_at >= start, GoldLedger.created_at < end)
+        .where(
+            GoldLedger.reason == "purchase",
+            col(GoldLedger.undone).is_(False),
+            GoldLedger.created_at >= start,
+            GoldLedger.created_at < end,
+            col(GoldLedger.run_id).in_(_group_runs(group_id)),
+        )
     ).all()
     spent_by: dict[int, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for row, item in spend:
@@ -215,7 +243,7 @@ def wrapped(session: Session, month: str) -> dict:
     most_played = champs.most_common(1)
     return {
         "month": month,
-        "months": available_months(session),
+        "months": available_months(session, group_id),
         "games": len(games),
         "wins": sum(g.status == "won" for g in games.values()),
         "best_streak": best_streak,

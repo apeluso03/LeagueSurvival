@@ -208,7 +208,7 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {run.status === 'ended' && (
         <p className="rounded-2xl bg-red-950/50 px-4 py-2.5 text-sm text-red-200 ring-1 ring-red-800/60 ring-inset">
           This run has ended with <b>{run.win_count}</b> wins. Start a new one in Settings.
@@ -781,7 +781,7 @@ function AutoStatus({ game }: { game: Game }) {
   const { settings } = useActiveRun()
   const playerMap = usePlayerMap()
   const sync = useAction(api.sync)
-  const { isAdmin } = useAccess()
+  const { isOwner } = useAccess()
   const unlinked = game.assignments
     .map((a) => playerMap.get(a.player_id))
     .filter((p) => p && !p.puuid)
@@ -820,7 +820,7 @@ function AutoStatus({ game }: { game: Game }) {
       <div className="flex flex-wrap items-center gap-2">
         {watching && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />}
         <span className="text-slate-300">{text}</span>
-        {watching && isAdmin && (
+        {watching && isOwner && (
           <button className="text-xs underline" disabled={sync.isPending} onClick={() => sync.mutate(undefined)}>
             {sync.isPending ? 'Checking...' : 'Check now'}
           </button>

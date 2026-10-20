@@ -36,7 +36,7 @@ export function BackendDownBanner() {
 /** Shown when the champion list is empty, e.g. Data Dragon couldn't be reached on first start. */
 export function NoChampionsBanner() {
   const champions = useChampions()
-  const { isAdmin } = useAccess()
+  const { isSiteAdmin } = useAccess()
   const qc = useQueryClient()
   const refresh = useMutation({
     mutationFn: api.refreshChampions,
@@ -48,7 +48,7 @@ export function NoChampionsBanner() {
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1">
         <b>The champion list didn't load.</b>
         <span>Check your internet connection and try again.</span>
-        {isAdmin && <button className="ml-auto underline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+        {isSiteAdmin && <button className="ml-auto underline" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
           {refresh.isPending ? 'Loading...' : 'Try again'}
         </button>}
         {refresh.error && <span className="w-full text-red-200">{refresh.error.message}</span>}

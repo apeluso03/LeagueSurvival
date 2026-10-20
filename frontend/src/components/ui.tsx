@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { Champion } from '../types'
 
 const SIZES = { xs: 'h-7 w-7', sm: 'h-10 w-10', md: 'h-14 w-14', lg: 'h-20 w-20', mdlg: 'h-14 w-14 sm:h-20 sm:w-20' }
@@ -24,14 +25,26 @@ export function ChampionPortrait({
   return <img src={champion.image_url} alt={champion.name} title={champion.name} loading={eager ? 'eager' : 'lazy'} className={base} />
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  wide = false,
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  wide?: boolean
+}) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
+  // Rendered at the top of the page, so a transformed or clipped ancestor (an animated card) can't
+  // trap the "fixed" overlay inside itself.
+  return createPortal(
     <div
       className="fade-in fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 sm:items-center sm:p-4"
       onClick={onClose}
@@ -39,7 +52,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
       <div
         role="dialog"
         aria-label={title}
-        className="card sheet-in max-h-[88dvh] w-full max-w-lg overflow-y-auto bg-slate-900/90"
+        className={`card sheet-in max-h-[88dvh] w-full overflow-y-auto bg-slate-900/90 ${wide ? 'max-w-4xl' : 'max-w-lg'}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto -mt-2 mb-3 h-1 w-10 rounded-full bg-slate-600 sm:hidden" aria-hidden />
@@ -55,7 +68,8 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

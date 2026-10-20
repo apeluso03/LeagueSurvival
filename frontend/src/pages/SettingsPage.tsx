@@ -5,7 +5,7 @@ import { api } from '../api/client'
 import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
 import { useAction, useActiveRun, useChampions, usePlayers, useRiotStatus, useRuns, useSettings, useShop } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
-import { AccountSection, AccountsAdminSection } from './SettingsAccounts'
+import { AccountSection, AccountsAdminSection, SiteSection } from './SettingsAccounts'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { allTags, filterChampions } from '../lib/champions'
 import { QUEUES } from '../lib/queues'
@@ -13,7 +13,7 @@ import { TEAM_COLORS, teamColor } from '../lib/teams'
 import type { AppSettings, Player, Run, ShopConfig } from '../types'
 
 export function SettingsPage() {
-  const { isAdmin, canManage, myPlayerId } = useAccess()
+  const { isOwner, isSiteAdmin, canManage, myPlayerId } = useAccess()
   const me = usePlayers().data?.find((p) => p.id === myPlayerId)
   const { hash } = useLocation()
   useEffect(() => {
@@ -23,17 +23,19 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <AccountSection colorPicker={me && <TeamColorPicker player={me} />} />
-      {isAdmin && <AccountsAdminSection />}
-      {isAdmin && <PlayersSection />}
-      {isAdmin && <RunsSection />}
+      {isOwner && <AccountsAdminSection />}
+      {isOwner && <PlayersSection />}
+      {isOwner && <RunsSection />}
       {canManage && <ShopSettingsSection />}
       {canManage && <GoldAdjustSection />}
-      {isAdmin && <ChallengeSection />}
-      {isAdmin && <MetaSection />}
-      {isAdmin && <OverlaySection />}
-      {isAdmin && <ChampionsSection />}
-      {!isAdmin && !canManage && (
-        <p className="text-sm text-slate-400">Players, runs and the rest of the settings are managed by the site owner.</p>
+      {isOwner && <ChallengeSection />}
+      {isSiteAdmin && <MetaSection />}
+      {isOwner && <OverlaySection />}
+      {isSiteAdmin && <ChampionsSection />}
+      {isSiteAdmin && <PrivacySection />}
+      {isSiteAdmin && <SiteSection />}
+      {!isOwner && !canManage && (
+        <p className="text-sm text-slate-400">Players, runs and the rest of the settings are managed by the group's owner.</p>
       )}
     </div>
   )
@@ -153,6 +155,7 @@ function PlayerRow({ player }: { player: Player }) {
   const [region, setRegion] = useState(player.region)
   const update = useAction((body: Partial<Player>) => api.updatePlayer(player.id, body))
   const remove = useAction(() => api.deletePlayer(player.id))
+  const forget = useAction(() => api.forgetPlayer(player.id))
 
   if (editing) {
     return (
@@ -191,6 +194,20 @@ function PlayerRow({ player }: { player: Player }) {
         <button className="btn-secondary" onClick={() => setEditing(true)}>
           Edit
         </button>
+        {(player.puuid || player.riot_game_name) && (
+          <button
+            className="btn-secondary"
+            title="Delete their Riot ID, account ID and match stats (their challenge history stays)"
+            disabled={forget.isPending}
+            onClick={() =>
+              confirm(
+                `Delete ${player.display_name}'s Riot data? Their Riot ID, account ID and match stats (KDA, grades) are removed. Their challenge history stays.`,
+              ) && forget.mutate(undefined)
+            }
+          >
+            Remove Riot data
+          </button>
+        )}
         <button
           className="btn-secondary"
           onClick={() => confirm(`Remove ${player.display_name}?`) && remove.mutate(undefined)}
@@ -198,7 +215,7 @@ function PlayerRow({ player }: { player: Player }) {
           Remove
         </button>
       </div>
-      <ErrorText error={remove.error} />
+      <ErrorText error={remove.error ?? forget.error} />
     </li>
   )
 }
@@ -915,6 +932,73 @@ function OverlaySection() {
           Open
         </a>
       </div>
+    </Section>
+  )
+}
+
+// --- privacy -------------------------------------------------------------------------------
+
+/** Riot data deletion: Riot's GDPR deletion lists, and deleting everything if API access ends. */
+function PrivacySection() {
+  const [text, setText] = useState('')
+  const forget = useAction(api.forgetPuuids)
+  const purge = useAction(api.purgeRiotData)
+  const puuids = text.split(/[\s,]+/).filter(Boolean)
+  return (
+    <Section title="Privacy and Riot data">
+      <p className="text-sm text-slate-400">
+        The app only keeps registered players' identities: other players in a match are saved without names or IDs,
+        live games show opponents by champion, and the build data is totals only. See the{' '}
+        <Link to="/legal" className="text-hex-200 underline">
+          privacy page
+        </Link>
+        . To remove one player's Riot data, use "Remove Riot data" on their row above.
+      </p>
+      <div className="flex flex-col gap-2">
+        <span className="text-xs font-semibold tracking-[0.1em] text-slate-300 uppercase">Riot deletion request</span>
+        <p className="text-xs text-slate-500">
+          Riot sends developers lists of player IDs (PUUIDs) that asked to be forgotten. Paste them here (one per line or
+          comma-separated) to delete anything the app holds about them.
+        </p>
+        <textarea
+          className="input min-h-20 font-mono text-xs"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="PUUIDs from Riot's deletion request"
+        />
+        <button
+          className="btn-secondary self-start"
+          disabled={!puuids.length || forget.isPending}
+          onClick={() => forget.mutate(puuids, { onSuccess: () => setText('') })}
+        >
+          Forget {puuids.length || ''} {puuids.length === 1 ? 'player' : 'players'}
+        </button>
+        {forget.data && (
+          <p className="text-xs text-emerald-300">
+            Done: {forget.data.requested} IDs checked, {forget.data.players_forgotten} registered{' '}
+            {forget.data.players_forgotten === 1 ? 'player' : 'players'} cleared.
+          </p>
+        )}
+      </div>
+      <details className="text-sm">
+        <summary className="cursor-pointer text-slate-400">Delete all Riot data</summary>
+        <div className="mt-2 flex flex-col gap-2">
+          <p className="text-xs text-slate-500">
+            If your Riot API access ends, Riot's terms require deleting the data you got from it. This removes every
+            saved match, all match stats and grades, the high-elo build data and players' account IDs. Runs, the pool,
+            results, gold and items stay.
+          </p>
+          <button
+            className="btn-danger self-start"
+            disabled={purge.isPending}
+            onClick={() => confirm("Delete ALL Riot data? This can't be undone.") && purge.mutate(undefined)}
+          >
+            Delete all Riot data
+          </button>
+          {purge.data && <p className="text-xs text-emerald-300">Deleted {purge.data.matches} matches.</p>}
+        </div>
+      </details>
+      <ErrorText error={forget.error ?? purge.error} />
     </Section>
   )
 }

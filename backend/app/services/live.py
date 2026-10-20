@@ -39,9 +39,21 @@ OBJECTIVES = {
 # --- which game is ours ------------------------------------------------------------------
 
 
-def pending_game(session: Session) -> ChallengeGame | None:
-    """The newest pending challenge game in an active run."""
+def pending_games(session: Session) -> list[ChallengeGame]:
+    """Every pending challenge game in an active run, in any group (newest first)."""
     active = select(Run.id).where(Run.status == "active")
+    return list(
+        session.exec(
+            select(ChallengeGame)
+            .where(ChallengeGame.status == "pending", col(ChallengeGame.run_id).in_(active))
+            .order_by(col(ChallengeGame.id).desc())
+        ).all()
+    )
+
+
+def pending_game(session: Session, group_id: int) -> ChallengeGame | None:
+    """The newest pending challenge game in one group's active runs."""
+    active = select(Run.id).where(Run.status == "active", Run.group_id == group_id)
     return session.exec(
         select(ChallengeGame)
         .where(ChallengeGame.status == "pending", col(ChallengeGame.run_id).in_(active))
@@ -264,7 +276,9 @@ def summarize(session: Session, game: ChallengeGame, data: dict, previous: dict 
     options = {a.player_id: a for a in rules.assignments_for(session, game.id)}
     game_time = float((data.get("gameData") or {}).get("gameTime") or 0)
 
-    players, name_team = [], {}
+    # In-game names are only used to tie events to players; they're never stored. Opponents are
+    # labelled by champion, our players by their app name (services/privacy.py).
+    players, name_team, name_who = [], {}, {}
     for p in data.get("allPlayers", []):
         team = TEAM_OF.get(p.get("team"), BLUE)
         cid = _client_champion(p, by_id, by_name)
@@ -285,9 +299,9 @@ def summarize(session: Session, game: ChallengeGame, data: dict, previous: dict 
         for n in {rid, p.get("summonerName"), p.get("riotId")}:
             if n:
                 name_team[n] = team
+                name_who[n] = {"champion_id": cid, "player_id": pid}
         players.append(
             {
-                "name": rid,
                 "champion_id": cid,
                 "team": team,
                 "position": p.get("position") or "",
@@ -323,16 +337,21 @@ def summarize(session: Session, game: ChallengeGame, data: dict, previous: dict 
         teams[str(p["team"])]["gold"] += p["item_gold"]
 
     events, result = [], None
+
+    def who(name: str | None) -> dict | None:
+        """A champion (and our player, if it's one of ours) in place of an in-game name."""
+        return name_who.get(name) if name else None
+
     other = {BLUE: RED, RED: BLUE}
     for e in (data.get("events") or {}).get("Events", []):
         name, t = e.get("EventName"), round(e.get("EventTime", 0))
         if name == "ChampionKill":
             team = name_team.get(e.get("KillerName"))
-            events.append({"t": t, "type": "kill", "killer": e.get("KillerName"), "victim": e.get("VictimName"), "team": team or other.get(name_team.get(e.get("VictimName")))})
+            events.append({"t": t, "type": "kill", "killer": who(e.get("KillerName")), "victim": who(e.get("VictimName")), "team": team or other.get(name_team.get(e.get("VictimName")))})
         elif name == "Multikill":
-            events.append({"t": t, "type": "multikill", "killer": e.get("KillerName"), "streak": e.get("KillStreak"), "team": name_team.get(e.get("KillerName"))})
+            events.append({"t": t, "type": "multikill", "killer": who(e.get("KillerName")), "streak": e.get("KillStreak"), "team": name_team.get(e.get("KillerName"))})
         elif name == "FirstBlood":
-            events.append({"t": t, "type": "first_blood", "killer": e.get("Recipient"), "team": name_team.get(e.get("Recipient"))})
+            events.append({"t": t, "type": "first_blood", "killer": who(e.get("Recipient")), "team": name_team.get(e.get("Recipient"))})
         elif name == "Ace":
             events.append({"t": t, "type": "ace", "team": TEAM_OF.get(e.get("AcingTeam"))})
         elif name in OBJECTIVES:
@@ -344,7 +363,7 @@ def summarize(session: Session, game: ChallengeGame, data: dict, previous: dict 
                     bucket["dragons"].append(e.get("DragonType") or "Dragon")
                 else:
                     bucket[{"baron": "barons", "herald": "heralds"}.get(kind, kind)] += 1
-            events.append({"t": t, "type": kind, "detail": e.get("DragonType"), "stolen": e.get("Stolen") == "True", "killer": e.get("KillerName"), "team": team})
+            events.append({"t": t, "type": kind, "detail": e.get("DragonType"), "stolen": e.get("Stolen") == "True", "killer": who(e.get("KillerName")), "team": team})
         elif name in ("TurretKilled", "InhibKilled"):
             lost = _turret_team(e.get("TurretKilled") or e.get("InhibKilled") or "")
             if lost:

@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 from sqlmodel import Session
 
 from app.config import get_settings
-from app.models import AppSettings
+from app.models import SiteSettings
 from app.services import meta
 from app.services.riot_client import RiotClient, RiotError
 
@@ -23,7 +23,7 @@ IDLE_SECONDS = 60  # when switched off, or after an error
 async def crawl_once(engine: Engine, client_factory=RiotClient, pause=None) -> int | None:
     """One crawler step. Returns matches counted, or None when it's switched off."""
     with Session(engine) as session:
-        settings = session.get(AppSettings, 1)
+        settings = session.get(SiteSettings, 1)
         if settings is None or not settings.meta_crawl or not get_settings().riot_api_key:
             return None
         async with client_factory() as client:

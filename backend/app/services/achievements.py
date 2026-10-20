@@ -195,9 +195,11 @@ def evaluate(session: Session) -> dict[int, dict[str, Unlock]]:
     return out
 
 
-def report(session: Session) -> dict:
-    unlocked = evaluate(session)
-    players = session.exec(select(Player)).all()
+def report(session: Session, group_id: int) -> dict:
+    """The trophy board for one group (a player belongs to one group, so their unlocks are theirs)."""
+    players = session.exec(select(Player).where(Player.group_id == group_id)).all()
+    ids = {p.id for p in players}
+    unlocked = {pid: found for pid, found in evaluate(session).items() if pid in ids}
     active = [p.id for p in players if p.id in unlocked or session.exec(
         select(SpinAssignment.id).where(SpinAssignment.player_id == p.id).limit(1)
     ).first()]

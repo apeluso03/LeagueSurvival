@@ -35,7 +35,7 @@ def test_password_hashes_verify_and_are_salted():
 
 
 def test_first_account_sets_up_the_site_and_adopts_old_runs(anon_client, session):
-    session.add(Run(name="Before logins"))
+    session.add(Run(name="Before logins", group_id=1))
     session.commit()
     me = anon_client.get("/api/auth/me").json()
     assert me["user"] is None and me["setup_needed"] is True
@@ -43,14 +43,17 @@ def test_first_account_sets_up_the_site_and_adopts_old_runs(anon_client, session
 
     r = anon_client.post("/api/auth/setup", json={"username": "Alex", "password": PW, "player_id": 1})
     assert r.status_code == 200, r.text
-    assert r.json()["user"] == {"id": 1, "username": "alex", "player_id": 1, "is_admin": True}
+    assert r.json()["user"] == {"id": 1, "username": "alex", "is_admin": True}
+    assert r.json()["group"] == {"id": 1, "name": "Test group", "role": "owner", "player_id": 1}
     assert anon_client.get("/api/auth/me").json()["user"]["username"] == "alex"  # cookie set
     assert anon_client.get("/api/runs").json()[0]["owner_user_id"] == 1
 
     # Setup only works once, and the roster isn't shown to strangers after that.
     anon_client.cookies.clear()
     assert anon_client.post("/api/auth/setup", json={"username": "evil", "password": PW}).status_code == 409
-    assert anon_client.get("/api/auth/me").json() == {"user": None, "setup_needed": False, "players": []}
+    assert anon_client.get("/api/auth/me").json() == {
+        "user": None, "groups": [], "group": None, "setup_needed": False, "players": [], "open_signup": False,
+    }
 
 
 def test_everything_but_sign_in_needs_an_account(anon_client, owner):
@@ -142,7 +145,9 @@ def test_invite_link_signs_up_as_that_player(client, anon_client, session):
     assert taken.status_code == 409
     r = anon_client.post("/api/auth/register", json={"token": token, "username": "bea", "password": PW})
     assert r.status_code == 200
-    assert r.json()["user"] == {"id": 2, "username": "bea", "player_id": 2, "is_admin": False}
+    assert r.json()["user"] == {"id": 2, "username": "bea", "is_admin": False}
+    assert r.json()["group"] == {"id": 1, "name": "Test group", "role": "member", "player_id": 2}
+    assert info["group_name"] == "Test group"
 
     # One-time: the link is spent, and Bea now shows as having an account.
     anon_client.cookies.clear()

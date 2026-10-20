@@ -51,39 +51,48 @@ def _spectator_due(game_id: int, row: LiveGame | None) -> bool:
 
 
 async def tick(engine: Engine, client_factory=RiotClient, fetch=live.fetch_live_client) -> int | None:
-    """One pass. Returns the pending game's id, or None when there's nothing to track."""
+    """One pass over every pending game (any group). Returns the newest one's id, or None when
+    there's nothing to track."""
     with Session(engine) as session:
-        game = live.pending_game(session)
-        if game is None:
+        game_ids = [g.id for g in live.pending_games(session)]
+        if not game_ids:
             return None
-        game_id = game.id
         static = await _static(session)
 
+    # The game client on this PC is in at most one game: give it to whichever pending game it is.
     data = await fetch()
     if data:
-        with Session(engine) as session:
-            game = session.get(live.ChallengeGame, game_id)
-            if game is not None and game.status == "pending" and live.apply_client(session, game, data, static):
-                session.commit()
+        for game_id in game_ids:
+            with Session(engine) as session:
+                game = session.get(live.ChallengeGame, game_id)
+                if game is not None and game.status == "pending" and live.apply_client(session, game, data, static):
+                    session.commit()
+                    break
 
     if get_settings().riot_api_key:
-        with Session(engine) as session:
-            game = session.get(live.ChallengeGame, game_id)
-            if game is not None and game.status == "pending" and _spectator_due(game_id, session.get(LiveGame, game_id)):
-                _searched[game_id] = utcnow()
-                async with client_factory() as client:
-                    try:
-                        await live.check_spectator(session, client, game)
-                    except RiotError as e:
-                        session.rollback()
-                        log.warning("Live game check: %s", e)
-                        # Don't retry right away (a 403 or 429 would just repeat).
-                        row = session.get(LiveGame, game_id)
-                        if row is not None:
-                            row.checked_at = utcnow()
-                            session.add(row)
-                            session.commit()
-    return game_id
+        for game_id in game_ids:
+            await _check_spectator(engine, client_factory, game_id)
+    return game_ids[0]
+
+
+async def _check_spectator(engine: Engine, client_factory, game_id: int) -> None:
+    """Ask Riot (Spectator) about one pending game, when it's due."""
+    with Session(engine) as session:
+        game = session.get(live.ChallengeGame, game_id)
+        if game is not None and game.status == "pending" and _spectator_due(game_id, session.get(LiveGame, game_id)):
+            _searched[game_id] = utcnow()
+            async with client_factory() as client:
+                try:
+                    await live.check_spectator(session, client, game)
+                except RiotError as e:
+                    session.rollback()
+                    log.warning("Live game check: %s", e)
+                    # Don't retry right away (a 403 or 429 would just repeat).
+                    row = session.get(LiveGame, game_id)
+                    if row is not None:
+                        row.checked_at = utcnow()
+                        session.add(row)
+                        session.commit()
 
 
 async def run_forever(engine: Engine) -> None:

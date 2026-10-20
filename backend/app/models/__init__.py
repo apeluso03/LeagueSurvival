@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Column, DateTime, TypeDecorator
+from sqlalchemy import JSON, BigInteger, Column, DateTime, TypeDecorator
 from sqlmodel import Field, SQLModel
 
 
@@ -41,8 +41,28 @@ def json_field(default_factory=list) -> Any:
 # ---------------------------------------------------------------------------
 
 
+class Group(SQLModel, table=True):
+    """A group of friends running their own challenge: its own players, runs, settings and invites."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str
+    owner_user_id: int | None = Field(default=None, foreign_key="user.id")
+    created_at: datetime = dt_field(default_now=True)
+
+
+class GroupMember(SQLModel, table=True):
+    """An account in a group: its role there and which of the group's players it plays as."""
+
+    group_id: int = Field(foreign_key="group.id", primary_key=True)
+    user_id: int = Field(foreign_key="user.id", primary_key=True)
+    role: str = "member"  # "owner" | "member"
+    player_id: int | None = Field(default=None, foreign_key="player.id", unique=True)
+    joined_at: datetime = dt_field(default_now=True)
+
+
 class Player(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="group.id", index=True)
     display_name: str
     riot_game_name: str | None = None
     riot_tag_line: str | None = None
@@ -69,13 +89,13 @@ class Champion(SQLModel, table=True):
 
 
 class User(SQLModel, table=True):
-    """A login account. Each one plays as at most one roster Player (joined through an invite)."""
+    """A login account. It can be in several groups (GroupMember), as one player in each."""
 
     id: int | None = Field(default=None, primary_key=True)
     username: str = Field(unique=True, index=True)  # stored lowercase; login is case-insensitive
     password_hash: str
-    player_id: int | None = Field(default=None, foreign_key="player.id", unique=True)
-    # The site owner: the first account made. Manages players, settings, invites and every run.
+    # Site admin (the first account): site invites, open sign-up, the build crawler, Riot data
+    # deletion. Inside groups it has no special powers; group owners run their own groups.
     is_admin: bool = False
     created_at: datetime = dt_field(default_now=True)
     last_login_at: datetime | None = dt_field()
@@ -88,13 +108,15 @@ class AuthSession(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     created_at: datetime = dt_field(default_now=True)
     expires_at: datetime = dt_field(nullable=False)
+    group_id: int | None = Field(default=None, foreign_key="group.id")  # the group this browser is viewing
 
 
 class Invite(SQLModel, table=True):
-    """A one-time sign-up link for one roster player. Only the token's SHA-256 is stored."""
+    """A one-time link to join a group as one of its players. Only the token's SHA-256 is stored."""
 
     id: int | None = Field(default=None, primary_key=True)
     token_hash: str = Field(unique=True, index=True)
+    group_id: int = Field(foreign_key="group.id", index=True)
     player_id: int = Field(foreign_key="player.id", index=True)
     created_by_user_id: int = Field(foreign_key="user.id")
     created_at: datetime = dt_field(default_now=True)
@@ -106,6 +128,7 @@ class Invite(SQLModel, table=True):
 
 class Run(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="group.id", index=True)
     name: str
     status: str = "active"  # "active" | "ended"
     owner_player_id: int | None = None
@@ -169,7 +192,8 @@ class LiveGame(SQLModel, table=True):
     """
 
     game_id: int = Field(foreign_key="challengegame.id", primary_key=True)
-    riot_game_id: int | None = None  # the match will be "<PLATFORM>_<riot_game_id>"
+    # The match will be "<PLATFORM>_<riot_game_id>". Riot's game ids pass 2^31: a 64-bit column.
+    riot_game_id: int | None = Field(default=None, sa_type=BigInteger)
     platform: str | None = None
     queue_id: int | None = None
     started_at: datetime | None = dt_field()
@@ -290,19 +314,45 @@ DEFAULT_QUEUE_IDS = [400, 420, 440, 490]  # Normal Draft, Ranked Solo/Duo, Flex,
 
 
 class AppSettings(SQLModel, table=True):
-    id: int = Field(default=1, primary_key=True)
+    """One group's settings."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="group.id", unique=True)
     challenge_mode: bool = True
     active_run_id: int | None = Field(default=None, foreign_key="run.id")
     allowed_queue_ids: list[int] = json_field(lambda: list(DEFAULT_QUEUE_IDS))
     poll_interval_seconds: int = 90
     remake_threshold_seconds: int = 300
     last_used_player_ids: list[int] = json_field()
+
+
+class SiteSettings(SQLModel, table=True):
+    """Settings for the whole site (single row), managed by the site admin."""
+
+    id: int = Field(default=1, primary_key=True)
+    # Anyone can sign up and start a group. Off: starting a group needs a site invite.
+    open_signup: bool = False
+    # Riot match sync (the poller runs for every group)
     last_sync_at: datetime | None = dt_field()
     last_sync_error: str | None = None
     # High-elo match crawler for comp / rune / item suggestions (services/meta.py).
     meta_crawl: bool = True
     meta_platform: str = "na1"
     meta_region: str = "americas"
+
+
+class SiteInvite(SQLModel, table=True):
+    """A one-time code to start a new group (while sign-up isn't open). Only its SHA-256 is stored."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    token_hash: str = Field(unique=True, index=True)
+    note: str = ""  # who it's for, for the admin's list
+    created_by_user_id: int = Field(foreign_key="user.id")
+    created_at: datetime = dt_field(default_now=True)
+    expires_at: datetime = dt_field(nullable=False)
+    used_at: datetime | None = dt_field()
+    used_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    revoked: bool = False
 
 
 # --- high-elo meta (crawled from Riot match data; services/meta.py) ---------------------------

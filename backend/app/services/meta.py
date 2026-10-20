@@ -20,7 +20,7 @@ from sqlmodel import Session, col, delete, func, select
 
 from app.config import get_settings
 from app.models import (
-    AppSettings,
+    SiteSettings,
     Champion,
     MetaChampRole,
     MetaCrawlState,
@@ -185,7 +185,7 @@ async def crawl_step(session: Session, client, pause=None) -> int:
     every match: it never holds the database while it waits (on Riot, or on `pause`, which spaces
     the calls out so the match poller always has room).
     """
-    settings = session.get(AppSettings, 1) or AppSettings()
+    settings = session.get(SiteSettings, 1) or SiteSettings()
     platform, region = settings.meta_platform, settings.meta_region
     if await backfill_step(session, client, region, pause):
         return 0  # spent this step filling in older matches
@@ -263,7 +263,7 @@ async def backfill_step(session: Session, client, region: str, pause=None) -> in
 
 def status(session: Session) -> dict:
     state = session.get(MetaCrawlState, 1)
-    settings = session.get(AppSettings, 1) or AppSettings()
+    settings = session.get(SiteSettings, 1) or SiteSettings()
     patches = recent_patches(session)
     matches = session.exec(select(func.count()).select_from(MetaMatch)).one()
     champs = session.exec(

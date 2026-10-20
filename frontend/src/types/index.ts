@@ -120,6 +120,7 @@ export interface Game {
   review_reason: string | null
   match: MatchSummary | null
   gold: Record<string, number> // player id -> gold from this game
+  gold_breakdown: Record<string, GoldBreakdown> // player id -> where it came from
   grades: Record<string, string> // player id -> rating grade
   items_used: { player_id: number; type: ItemType; target: Record<string, unknown> }[]
   shields_saved: string[]
@@ -411,23 +412,48 @@ export interface PlayerProfile {
 export interface MeUser {
   id: number
   username: string
+  is_admin: boolean // site admin (site-wide settings), not a group owner
+}
+
+/** A group you're in: your role there and which of its players you are. */
+export interface MeGroup {
+  id: number
+  name: string
+  role: 'owner' | 'member'
   player_id: number | null
-  is_admin: boolean // the site owner
 }
 
 export interface Me {
   user: MeUser | null
+  groups: MeGroup[]
+  group: MeGroup | null // the group this browser is viewing
   setup_needed: boolean
   players: { id: number; display_name: string }[] // only while setting up
+  open_signup: boolean
 }
 
+/** A member of the current group (the group owner's Accounts list). */
 export interface Account {
   id: number
   username: string
+  role: 'owner' | 'member'
   player_id: number | null
-  is_admin: boolean
   created_at: string
   last_login_at: string | null
+}
+
+export interface SiteInvite {
+  id: number
+  note: string
+  created_at: string
+  expires_at: string
+}
+
+export interface SiteInfo {
+  open_signup: boolean
+  groups: number
+  users: number
+  invites: SiteInvite[]
 }
 
 export interface Invite {
@@ -440,6 +466,7 @@ export interface Invite {
 export interface InviteInfo {
   player_id: number
   display_name: string
+  group_name: string
   expires_at: string
 }
 
@@ -629,7 +656,6 @@ export interface LiveIcon {
 }
 
 export interface LivePlayer {
-  name: string
   champion_id: string | null
   team: TeamId
   position: string // "TOP" | "JUNGLE" | "MIDDLE" | "BOTTOM" | "UTILITY" | ""
@@ -665,8 +691,9 @@ export interface LiveEvent {
   t: number
   type: 'kill' | 'multikill' | 'first_blood' | 'ace' | 'dragon' | 'baron' | 'herald' | 'grubs' | 'atakhan' | 'tower' | 'inhibitor'
   team: TeamId | null
-  killer?: string | null
-  victim?: string | null
+  // Who: a champion, plus our player when it's one of ours (in-game names are never stored)
+  killer?: { champion_id: string | null; player_id: number | null } | null
+  victim?: { champion_id: string | null; player_id: number | null } | null
   streak?: number
   detail?: string | null
   stolen?: boolean
@@ -706,4 +733,20 @@ export interface LiveGame {
   bans: { champion_id: string; team: TeamId }[]
   state: LiveState | null
   streaming: boolean // live stats are coming in right now
+}
+
+/** One player's gold from one game, by source (economy.game_gold_breakdown). */
+export interface GoldBreakdown {
+  total: number
+  kills?: number
+  assists?: number
+  damage?: number
+  vision?: number
+  multikills?: number
+  contract: number
+  contract_goal: string | null
+  support_bonus?: boolean // damage includes healing and shielding on teammates
+  damage_counted?: number
+  multikill_counts?: Record<string, number> // "double" | "triple" | "quadra" | "penta" -> count
+  stats?: { kills: number; deaths: number; assists: number; vision: number }
 }

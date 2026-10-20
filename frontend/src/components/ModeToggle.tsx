@@ -9,11 +9,11 @@ export function ModeToggle() {
   const { settings, run } = useActiveRun()
   const [confirming, setConfirming] = useState(false)
   const update = useAction(api.updateSettings)
-  const { isAdmin } = useAccess()
+  const { isOwner } = useAccess()
   const on = settings.data?.challenge_mode ?? true
   if (!settings.data) return null
 
-  if (!isAdmin) {
+  if (!isOwner) {
     return (
       <span
         className="broadcast-tag py-1"
