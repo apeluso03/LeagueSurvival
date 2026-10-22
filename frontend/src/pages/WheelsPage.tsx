@@ -38,9 +38,10 @@ import { factLine } from '../lib/facts'
 import { teamColor } from '../lib/teams'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { preloadImages } from '../lib/preload'
+import { realRoles, rolesByChampion } from '../lib/roles'
 import { SPIN_MS, buildStrip, randomLandingOffset } from '../lib/reel'
 import { playLand, playReveal, playStart, unlock } from '../lib/sound'
-import type { Assignment, Champion, CompPick, ContractInfo, Game, ItemType, PlayerEconomy, Run } from '../types'
+import type { Assignment, Champion, CompPick, ContractInfo, Game, ItemType, PlayerEconomy, PlayerRole, Role, Run } from '../types'
 
 // Reels stop one after another: the first after 9.5s, then each next one this much later
 // (11.9s for a full five-player spin).
@@ -194,7 +195,25 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const compIds = useMemo(() => (shownAssignments ?? []).map((a) => a.played_champion_id ?? a.options[0]), [shownAssignments])
   // Bans skip every option on the board, so nobody's backup gets banned away.
   const allOptions = useMemo(() => [...new Set((shownAssignments ?? []).flatMap((a) => a.options))].sort(), [shownAssignments])
-  const comp = useComp(compIds, allOptions)
+  // The role each player is really in (set on their card, or seen in the live game): builds follow it.
+  const liveNow = useLive().data
+  const roles = useMemo(
+    () =>
+      realRoles(
+        pending ? pendingGame.data?.assignments : undefined,
+        pending && liveNow?.game_id === run.pending_game_id ? liveNow?.live : null,
+      ),
+    [pending, pendingGame.data, liveNow, run.pending_game_id],
+  )
+  const compRoles = useMemo(
+    () =>
+      rolesByChampion(
+        (shownAssignments ?? []).map((a) => ({ playerId: a.player_id, championId: a.played_champion_id ?? a.options[0] })),
+        roles,
+      ),
+    [shownAssignments, roles],
+  )
+  const comp = useComp(compIds, allOptions, compRoles)
   const builds = useMemo(() => new Map((comp.data?.picks ?? []).map((p) => [p.champion_id, p])), [comp.data])
 
   if (players.data && players.data.length < 2) {
@@ -340,6 +359,7 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
                     game={pending ? pendingGame.data! : null}
                     build={builds.get(a.played_champion_id ?? a.options[0])}
                     buildLoading={comp.isLoading}
+                    realRole={roles.get(a.player_id)}
                   />
                 </div>
               ))}
@@ -367,11 +387,13 @@ function PlayerCard({
   game,
   build,
   buildLoading,
+  realRole,
 }: {
   assignment: Assignment
   game: Game | null
   build: CompPick | undefined
   buildLoading: boolean
+  realRole: PlayerRole | undefined
 }) {
   const champs = useChampionMap()
   const playerMap = usePlayerMap()
@@ -399,8 +421,11 @@ function PlayerCard({
   const setPick = useAction((pick: { option_index?: number; champion_id?: string }) =>
     api.setPicks(game!.id, [{ player_id: assignment.player_id, ...pick }]),
   )
+  const setRole = useAction((role: Role | null) => api.setRole(game!.id, assignment.player_id, role))
   const { canManage, canActFor } = useAccess()
   const canPick = !!game && canManage
+  // Autofilled or swapped lanes: the player (or the owner) says which role, and the build follows.
+  const canSetRole = !!game && game.status === 'pending' && canActFor(assignment.player_id)
   const player = playerMap.get(assignment.player_id)
   const [first, ...backups] = assignment.options
   const isOther = assignment.played_champion_id != null && assignment.played_option_index == null
@@ -412,7 +437,12 @@ function PlayerCard({
           {/* Picked / picking shows in the pick bar and on the option itself, so the name gets the room. */}
           <LowerThird playerId={assignment.player_id} name={player?.display_name} size="sm" />
         </h3>
-        <RoleChip pick={build} />
+        <RoleChip
+          pick={build}
+          real={realRole}
+          onSet={canSetRole ? (role) => setRole.mutate(role) : undefined}
+          busy={setRole.isPending}
+        />
         {canPick && (
           <button className="ml-auto shrink-0 text-[11px] text-slate-400 underline hover:text-slate-200" onClick={() => setPickingOther(true)}>
             Other...
@@ -490,7 +520,7 @@ function PlayerCard({
       {game && game.status === 'pending' && !assignment.played_champion_id && !replay && canActFor(assignment.player_id) && (
         <SpinItems game={game} assignment={assignment} onRerolled={onRerolled} />
       )}
-      <ErrorText error={setPick.error} />
+      <ErrorText error={setPick.error ?? setRole.error} />
       {pickingOther && <OtherPicker onClose={() => setPickingOther(false)} onPick={(c) => setPick.mutate({ champion_id: c.id }, { onSuccess: () => setPickingOther(false) })} />}
     </div>
   )

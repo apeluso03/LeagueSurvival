@@ -182,6 +182,8 @@ class SpinAssignment(SQLModel, table=True):
     original_options: list[str] = json_field()  # the list as first spun, before items
     played_champion_id: str | None = Field(default=None, foreign_key="champion.id")
     played_option_index: int | None = None  # 0-based; None with a champion set means "other"
+    # The role they're actually in, set by hand (TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY); None: detect it.
+    played_role: str | None = None
 
 
 class LiveGame(SQLModel, table=True):

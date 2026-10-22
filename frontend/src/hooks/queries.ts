@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { api } from '../api/client'
 import { registerTeamColors } from '../lib/teams'
-import type { Champion, Player } from '../types'
+import type { Champion, Player, Role } from '../types'
 
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: api.settings })
 export const usePlayers = () => useQuery({ queryKey: ['players'], queryFn: api.players })
@@ -46,10 +46,12 @@ export const useOptionFacts = (gameId: number | null | undefined) =>
 export const useAchievements = () => useQuery({ queryKey: ['achievements'], queryFn: api.achievements })
 
 /** Suggested roles, runes and items for the rolled champions (high-elo data). */
-export const useComp = (championIds: string[], exclude: string[] = []) =>
+/** `roles`: champion id -> the role it's really being played in; its build follows that role. */
+export const useComp = (championIds: string[], exclude: string[] = [], roles: Record<string, Role> = {}) =>
   useQuery({
-    queryKey: ['comp', ...championIds, '|', ...exclude],
-    queryFn: () => api.comp(championIds, exclude),
+    queryKey: ['comp', ...championIds, '|', ...exclude, '|', ...Object.entries(roles).sort().flat()],
+    queryFn: () => api.comp(championIds, exclude, roles),
+    placeholderData: keepPreviousData, // a role change swaps the build in place, no flash of "loading"
     enabled: championIds.length > 0,
     staleTime: 5 * 60_000,
   })

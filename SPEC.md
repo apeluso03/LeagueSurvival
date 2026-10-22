@@ -293,13 +293,13 @@ Notes:
 Riot's post-game grade (S+, A+, and so on) is not included in Match-V5 match data. The app computes its own grade in `rating.py`:
 
 ```
-score = 0.30 * kda_vs_team_avg
+score = 0.30 * kda_vs_teammates
       + 0.25 * kill_participation
-      + 0.25 * damage_share        (healing/shielding included for supports)
-      + 0.20 * vision_vs_team_avg
+      + 0.25 * damage_vs_teammates  (healing/shielding included for supports)
+      + 0.20 * vision_vs_teammates
 ```
 
-Each part is normalized to 0..1 against the player's own team in that match, then the score maps to a grade scale (S+, S, S-, A+, A, A-, B+ ... D). Thresholds are tuned against real fixtures so the grade feels close to the in-client one. The grade is shown on the History tab and the Stats tab, so players learn what it takes to hit A+.
+Each part is 0..1 against the player's four teammates in that match (not counting themselves: a team average that includes the player pulls toward them, and made S grades nearly impossible). Matching the teammates' average scores 0.5 and twice it scores 1. The score maps to a grade scale (S+, S, S-, A+, A, A-, B+ ... D) with cutoffs calibrated on 990 real 5v5 player-games (2026-10): about the top 2% get S+, 6% S or better, 12% S- or better, 20% A+ or better, near how often the client hands out S grades. Migration `f8b2d4c6a9e1` regraded every stored game (and graded games imported before grades existed); settled contracts and gold were left as they were. The grade is shown on the History tab and the Stats tab, so players learn what it takes to hit A+.
 
 ## 8. Data Model
 
@@ -469,6 +469,7 @@ After a spin, the app suggests a role for each rolled champion and a high-elo bu
 - Matches counted before spells and matchups were tracked (`MetaMatch.extras = false`) are re-fetched first, 10 per crawler step, to fill those in without counting their roles, runes and items twice.
 - It waits 2.5 seconds between calls so it never crowds out the match poller, and commits before every Riot call (SQLite allows one writer). It can be turned off in Settings (`meta_crawl`).
 - **Roles:** with 20+ high-elo games, a champion's role scores are 80% its high-elo role share and 20% Meraki's position list; with fewer, Meraki alone. The best assignment for the whole team is picked over all permutations. A role played in under 5% of a champion's high-elo games is marked off-role, and its build then comes from the champion's usual role.
+- **Real roles:** `POST /api/comp` takes `roles` (champion id -> role) for champions whose real role is known. Those keep that role (`fixed: true`) and the rest are assigned around them. A fixed role gets its own build whenever high elo has any games of the champion there; with none, the build comes from its usual role (off-role).
 - **Builds:** the most played rune page, the 3 most built core items plus boots, and the most taken summoner spell pair (Flash shown second) for that champion and role, with pick and win rates.
 - **Mobalytics widgets:** each build strip has an "M" button that opens Mobalytics' full build for that champion and role (skill order, tier, full runes) in a pop-up, and the Pool tab's champion card has a "Mobalytics build" section (compact widget). Their script (github.com/mobalyticshq/mobalytics-widgets, MIT) is served from our own copy, `frontend/public/vendor/mobalytics-widgets.js`, made by `scripts/update_mobalytics.py`: their bundle loads only the first 400 items of Mobalytics' item catalog (now about 950, mostly mode-specific copies), so it drew no item icons; the copy loads 8 pages and renames "Mythic & Core Items" to "Core Items". Re-run the script when they update the widget. The frame sends no Referer (`<meta name="referrer" content="no-referrer">`): Mobalytics' image CDN answers 403 to any Referer except its own site, which blanked every icon. It runs in a sandboxed iframe (`allow-scripts`, no `allow-same-origin`), so it can't reach the app's page, cookies or API; the frame reports its height by `postMessage`. The slug is the Data Dragon id in lower case; roles map TOP/JUNGLE/MID/ADC/SUPPORT. It loads only when opened, so nothing goes to Mobalytics otherwise (stated on `/legal`). Their tooltip widget isn't used: it has to run in the app's own page.
 - **Suggested bans (5):** enemy champions the rolled champions do worst against. For each rolled champion, its win rate against an enemy is pulled toward its overall win rate by 10 games (so a 0-2 record doesn't outrank 40-60), and an enemy's threat is how far it drags those rates down, added up over the rolled champions. Champions on anyone's option list are never suggested. Team-wide matchups (any role), not lane matchups, since that data fills in much faster.
@@ -481,6 +482,7 @@ A background job (`jobs/live_tracker.py`, `services/live.py`) watches the pendin
 - **Live stats:** every 3 seconds it reads the game client's Live Client Data API on the PC running the backend (`LIVE_CLIENT_URL`, default `https://127.0.0.1:2999`, self-signed; `off` disables it). The game counts when every player with a Riot ID is in it on one team. This also fills in picks, so it works without a Riot key.
 - **What is stored** (`LiveGame`, one row per challenge game): Spectator's participants (champion, team, spells, keystone, which of ours) and bans, plus a summary of the latest client data: per player champion, level, KDA, CS, ward score, items and their value, spells, keystone, dead and respawn time; per team kills, item gold, towers, inhibitors, dragons by type, barons, heralds, grubs, Atakhan; the newest 40 events; the gold lead sampled every 30 game seconds; the result once the game ends. The raw client data is not kept.
 - **Gold:** the client only shares gold for its own player, so team and lane gold are the value of items held (Data Dragon prices), the usual broadcast estimate.
+- **Roles** (`live.player_roles`, `LiveGame` output `roles`: player id -> {role, source}): set by hand (`SpinAssignment.played_role`, `PUT /api/games/{id}/role`, players for themselves, the owner for anyone, pending games only; `null` goes back to detecting), else the game client's `position` (matchmade games with lanes), else Smite (spell 11) means JUNGLE. Spectator has no lanes, so it only finds junglers. The Wheels and Live tabs pass these roles to `/api/comp`, so builds follow the role each player is really in.
 - **Not tracked:** summoner spell or ultimate cooldowns. Neither API reports them, and Riot's game-integrity rules restrict tracking enemy cooldowns.
 - **Hosted version (12.5):** the backend won't be on a player's PC, so the client reader becomes a small companion app one player runs during games, posting the same data to the site.
 
@@ -510,7 +512,7 @@ Built since (v0.3):
 - Shown in the nav with a red dot while a game is live. Before a game starts it explains what will happen; once found through Riot only, it lists both teams' champions, spells, keystones and bans.
 - With live stats, a broadcast layout: score bug (kills per side, game clock, item-gold lead, towers, dragons by type, grubs, herald, baron); bans; lane-by-lane rows pairing each player with their opponent (portrait with level and respawn timer, spells, keystone, KDA, CS, all 7 item slots, lane gold and CS difference); our players marked with their team colour, which spin option they're on, and a shield icon if their champion is shielded; a gold-lead graph; contract progress for kills and assists goals; a play-by-play feed.
 - **Preview** (`/live?preview=1`, or "Preview with sample data" when no game is tracked): the whole tab with a made-up game (`lib/liveDemo.ts`), built in the browser from the current spin's players and champions (or the roster), real art and real build suggestions. The clock runs (pause, 1×, 10×, restart). Nothing is saved and nothing calls Riot.
-- **Your builds** under the lanes: each of our players' high-elo build (runes, spells, core items, boots, the Mobalytics button), with items they already hold checked and the rest dimmed ("core 2/3"), so nobody has to switch back to the Wheels tab mid-game. Shown from Spectator data too (without the checks).
+- **Your builds** under the lanes: each of our players' high-elo build (runes, spells, core items, boots, the Mobalytics button), with items they already hold checked and the rest dimmed ("core 2/3"), so nobody has to switch back to the Wheels tab mid-game. Shown from Spectator data too (without the checks). Each build's role chip turns blue when the role is the one they're really in (hover says where it came from), and is a picker for the player (or the owner): choose the role they ended up in, or Auto. The Wheels tab cards have the same picker.
 - The Wheels tab's result bar says "In game · 12:34 · picks filled in from the live game" with a Watch live link. The stream overlay swaps the picks for a live score bar during the game (`?live=0` hides it).
 
 ### 10.2 Stats tab
@@ -613,6 +615,7 @@ POST   /api/runs/{id}/spins                # body: player_ids, returns Challenge
 GET    /api/games?run_id=
 GET    /api/games/{id}
 PATCH  /api/games/{id}/assignments         # mark which option each player played
+PUT    /api/games/{id}/role                # body: player_id, role (or null): the role they're really in
 POST   /api/games/{id}/result              # manual: win | loss | void
 POST   /api/games/{id}/link-match          # body: riot_match_id, awards gold for a manual game
 POST   /api/games/{id}/undo
@@ -670,7 +673,7 @@ GET    /api/shame?run_id=
 GET    /api/wrapped?month=2026-10
 GET    /api/meta/status                    # high-elo crawler status
 POST   /api/meta/positions/refresh         # re-import champion roles (Meraki)
-POST   /api/comp                           # body: champion_ids, exclude; roles, builds, spells, bans
+POST   /api/comp                           # body: champion_ids, exclude, roles; roles, builds, spells, bans
 GET    /api/riot/status?check=
 GET    /api/live                           # the live game for the pending challenge game
 GET    /api/games/{id}/live

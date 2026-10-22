@@ -3,8 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { BuildStrip, RoleChip } from '../components/BuildStrip'
 import { GoldLeadChart } from '../components/GoldLeadChart'
 import { ShieldIcon } from '../components/icons'
-import { ChampionPortrait, EmptyState, LoadingState } from '../components/ui'
+import { api } from '../api/client'
+import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
 import {
+  useAction,
   useActiveRun,
   useChampionMap,
   useChampions,
@@ -16,6 +18,7 @@ import {
   usePlayers,
   usePool,
 } from '../hooks/queries'
+import { useAccess } from '../hooks/useAuth'
 import {
   BLUE,
   DRAGON_COLOR,
@@ -30,8 +33,9 @@ import {
 } from '../lib/live'
 import { makeDemoLive } from '../lib/liveDemo'
 import { queueName } from '../lib/queues'
+import { realRoles, rolesByChampion } from '../lib/roles'
 import { teamColor } from '../lib/teams'
-import type { LiveEvent, LiveGame, LiveIcon, LiveItem, LivePlayer, LiveState, LiveTeam, TeamId } from '../types'
+import type { LiveEvent, LiveGame, LiveIcon, LiveItem, LivePlayer, LiveState, LiveTeam, Role, TeamId } from '../types'
 
 /** Live game tracker: a broadcast-style view of the game a pending spin is being played in. */
 export function LivePage() {
@@ -112,7 +116,7 @@ function Live({ live, preview }: { live: LiveGame; preview?: ReactNode }) {
           {n}
         </p>
       ))}
-      {st ? <Scoreboard live={live} st={st} /> : <SpectatorOnly live={live} />}
+      {st ? <Scoreboard live={live} st={st} preview={!!preview} /> : <SpectatorOnly live={live} />}
     </div>
   )
 }
@@ -184,7 +188,7 @@ function Objectives({ data, right }: { data: LiveTeam; right: boolean }) {
   )
 }
 
-function Scoreboard({ live, st }: { live: LiveGame; st: LiveState }) {
+function Scoreboard({ live, st, preview }: { live: LiveGame; st: LiveState; preview: boolean }) {
   const blue = st.teams['100']
   const red = st.teams['200']
   const lead = blue.gold - red.gold
@@ -207,6 +211,8 @@ function Scoreboard({ live, st }: { live: LiveGame; st: LiveState }) {
         <div className="flex min-w-0 flex-col gap-4">
           <Lanes st={st} gameId={live.game_id} />
           <Builds
+            live={live}
+            preview={preview}
             players={st.players
               .filter((p) => p.player_id != null && p.champion_id)
               .map((p) => ({ playerId: p.player_id!, championId: p.champion_id!, items: p.items.map((i) => i.id) }))}
@@ -527,6 +533,7 @@ function SpectatorOnly({ live }: { live: LiveGame }) {
     <>
       <Bans live={live} />
       <Builds
+        live={live}
         players={live.participants
           .filter((p) => p.player_id != null && p.champion_id)
           .map((p) => ({ playerId: p.player_id!, championId: p.champion_id! }))}
@@ -579,10 +586,28 @@ function SpectatorOnly({ live }: { live: LiveGame }) {
 
 // --- builds for our players (so nobody has to flip back to the Wheels tab mid-game) ---------------
 
-function Builds({ players }: { players: { playerId: number; championId: string; items?: number[] }[] }) {
+function Builds({
+  live,
+  players,
+  preview = false,
+}: {
+  live: LiveGame
+  players: { playerId: number; championId: string; items?: number[] }[]
+  preview?: boolean
+}) {
   const champs = useChampionMap()
   const names = usePlayerMap()
-  const comp = useComp(players.map((p) => p.championId))
+  const { canActFor } = useAccess()
+  // Builds follow the role each player is really in: set by hand, their lane in the game, or Smite.
+  const roles = realRoles(undefined, live)
+  const comp = useComp(
+    players.map((p) => p.championId),
+    [],
+    rolesByChampion(players, roles),
+  )
+  const setRole = useAction(({ playerId, role }: { playerId: number; role: Role | null }) =>
+    api.setRole(live.game_id, playerId, role),
+  )
   const picks = new Map((comp.data?.picks ?? []).map((p) => [p.champion_id, p]))
   if (!players.length) return null
   return (
@@ -590,7 +615,8 @@ function Builds({ players }: { players: { playerId: number; championId: string; 
       <div className="flex items-center gap-2">
         <h2 className="text-sm font-semibold text-white">Your builds</h2>
         <span className="text-[11px] text-slate-500">
-          High-elo runes, spells and core items · ✓ already built · M opens the full Mobalytics build
+          High-elo runes, spells and core items for the role they're in · ✓ already built · M opens the full
+          Mobalytics build
         </span>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
@@ -611,7 +637,12 @@ function Builds({ players }: { players: { playerId: number; championId: string; 
                   {names.get(p.playerId)?.display_name}
                 </span>
                 <span className="truncate text-xs text-slate-400">{champs.get(p.championId)?.name}</span>
-                <RoleChip pick={pick} />
+                <RoleChip
+                  pick={pick}
+                  real={roles.get(p.playerId)}
+                  onSet={!preview && canActFor(p.playerId) ? (role) => setRole.mutate({ playerId: p.playerId, role }) : undefined}
+                  busy={setRole.isPending}
+                />
                 {built != null && core.length > 0 && (
                   <span className="ml-auto shrink-0 text-[10px] text-slate-400 tabular-nums" title="Core items built so far">
                     core {built}/{core.length}
@@ -623,6 +654,7 @@ function Builds({ players }: { players: { playerId: number; championId: string; 
           )
         })}
       </div>
+      <ErrorText error={setRole.error} />
     </section>
   )
 }

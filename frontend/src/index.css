@@ -856,6 +856,43 @@ h2 {
 .role-chip.is-off {
   background: linear-gradient(180deg, #f0b232, #b8730c);
 }
+/* The role they're really in (live game or set by hand): the build follows it. */
+.role-chip.is-real {
+  color: #fff;
+  background: linear-gradient(180deg, var(--color-hex-300), var(--color-hex-500));
+}
+.role-chip:has(.role-caret) {
+  grid-auto-flow: column;
+  gap: 0.25rem;
+}
+.role-caret {
+  width: 0;
+  height: 0;
+  border-inline: 3px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.7;
+}
+/* Picker: a native select laid over the chip, so it works with touch, keyboard and screen readers. */
+.role-pick {
+  position: relative;
+  display: inline-grid;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.role-pick select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.role-pick select:disabled {
+  cursor: progress;
+}
+.role-pick:focus-within .role-chip {
+  outline: 2px solid var(--color-hex-200);
+  outline-offset: 2px;
+}
 .odds-panel {
   border-radius: 2px;
   background: rgb(255 255 255 / 0.03);

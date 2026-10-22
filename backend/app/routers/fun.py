@@ -2,6 +2,7 @@
 
 from dataclasses import asdict
 from datetime import UTC, datetime
+from typing import Literal
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -48,6 +49,8 @@ class CompIn(BaseModel):
     champion_ids: list[str] = Field(min_length=1, max_length=5)
     # Never suggest banning these (everyone's options, so a backup isn't banned away).
     exclude: list[str] = Field(default_factory=list, max_length=30)
+    # Champion id -> the role it's really in (live game or set by hand); the build follows it.
+    roles: dict[str, Literal["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"]] = Field(default_factory=dict, max_length=5)
 
 
 @router.get("/meta/status")
@@ -75,5 +78,5 @@ async def suggest_comp(body: CompIn, session: Session = Depends(get_session)):
             static = await meta.load_static(version)
         except httpx.HTTPError:
             static = None  # names and icons are optional; ids still work
-    result = meta.suggest_comp(session, body.champion_ids, static, exclude=body.exclude)
+    result = meta.suggest_comp(session, body.champion_ids, static, exclude=body.exclude, roles=body.roles)
     return {**result, "picks": [asdict(p) for p in result["picks"]]}

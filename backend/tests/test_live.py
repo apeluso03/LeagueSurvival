@@ -242,6 +242,56 @@ def test_tick_does_nothing_without_a_pending_game(engine, session):
     assert asyncio.run(live_tracker.tick(engine, fetch=fetch)) is None
 
 
+# --- roles ---
+
+
+def test_roles_from_the_game_client(session, game):
+    row = live.apply_client(session, game, client_data(session, game))
+    assert live.player_roles(session, game.id, row) == {
+        1: {"role": "MIDDLE", "source": "game"},
+        2: {"role": "UTILITY", "source": "game"},
+    }
+
+
+def test_smite_means_jungle_and_hand_set_roles_win(session, game):
+    a, b = options(session, game, 1)[0], options(session, game, 2)[0]
+    data = spectator(session, game, {1: a, 2: b})
+    data["participants"][0]["spell2Id"] = live.SMITE  # Alex took Smite
+    row = live.apply_spectator(session, game, data)
+    assert live.player_roles(session, game.id, row) == {1: {"role": "JUNGLE", "source": "smite"}}
+    bea = next(x for x in rules.assignments_for(session, game.id) if x.player_id == 2)
+    bea.played_role = "BOTTOM"
+    alex = next(x for x in rules.assignments_for(session, game.id) if x.player_id == 1)
+    alex.played_role = "TOP"  # set by hand beats Smite
+    session.add_all([alex, bea])
+    session.flush()
+    assert live.player_roles(session, game.id, row) == {
+        1: {"role": "TOP", "source": "set"},
+        2: {"role": "BOTTOM", "source": "set"},
+    }
+    # Before the game is found, hand-set roles still count.
+    assert live.player_roles(session, game.id, None)[2] == {"role": "BOTTOM", "source": "set"}
+
+
+def test_set_role_endpoint(client, session, game, sign_in):
+    from tests.conftest import make_user
+
+    r = client.put(f"/api/games/{game.id}/role", json={"player_id": 2, "role": "JUNGLE"})
+    assert r.status_code == 200
+    assert next(a for a in r.json()["assignments"] if a["player_id"] == 2)["played_role"] == "JUNGLE"
+    assert client.put(f"/api/games/{game.id}/role", json={"player_id": 2, "role": "ADC"}).status_code == 422
+    assert client.put(f"/api/games/{game.id}/role", json={"player_id": 5, "role": "TOP"}).status_code == 404
+    # Members set their own role, not anyone else's.
+    bea = sign_in(make_user(session, "bea", player_id=2))
+    assert bea.put(f"/api/games/{game.id}/role", json={"player_id": 2, "role": None}).status_code == 200
+    assert bea.put(f"/api/games/{game.id}/role", json={"player_id": 1, "role": "TOP"}).status_code == 403
+    session.expire_all()
+    assert all(a.played_role is None for a in rules.assignments_for(session, game.id))
+    live.apply_client(session, game, client_data(session, game))
+    session.commit()
+    assert client.get("/api/live").json()["live"]["roles"]["1"] == {"role": "MIDDLE", "source": "game"}
+
+
 # --- API ---
 
 
