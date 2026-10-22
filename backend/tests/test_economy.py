@@ -100,6 +100,17 @@ def test_standout_player_grades_higher_than_teammates():
     assert not rating.at_least(grades["meh"], "B")
 
 
+def test_doubling_your_teammates_reaches_the_s_grades():
+    # Twice the teammates' KDA and damage, in most of the kills, average vision: an S-range game.
+    # (Scored against a team average that included the star, this only made A+.)
+    star = P("star", 1, kills=5, deaths=2, assists=3, damage=30000, vision=20)
+    grade = rating.grades_for_match(make_match("NA1_S", [star]))["star"]
+    assert rating.at_least(grade, "S"), grade
+    # The best possible game is S+.
+    best = P("best", 1, kills=12, deaths=0, assists=8, damage=50000, vision=60)
+    assert rating.grades_for_match(make_match("NA1_SP", [best]))["best"] == "S+"
+
+
 def test_average_teammate_lands_mid_scale():
     team = [P(f"p{i}", i, kills=5, deaths=5, assists=7, damage=15000, vision=20) for i in range(5)]
     grades = rating.grades_for_match(make_match("NA1_AVG", team))
