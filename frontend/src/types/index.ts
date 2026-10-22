@@ -100,6 +100,7 @@ export interface Assignment {
   original_options?: string[]
   played_champion_id: string | null
   played_option_index: number | null
+  played_role?: Role | null // the role they say they're really in (set by hand)
 }
 
 export type GameStatus = 'pending' | 'won' | 'lost' | 'void'
@@ -559,6 +560,14 @@ export interface Wrapped {
 
 export type Role = 'TOP' | 'JUNGLE' | 'MIDDLE' | 'BOTTOM' | 'UTILITY'
 
+/** Where a player's real role came from: set by hand, their lane in the game client, or Smite (jungle). */
+export type RoleSource = 'set' | 'game' | 'smite'
+
+export interface PlayerRole {
+  role: Role
+  source: RoleSource
+}
+
 export interface RuneRef {
   id: number
   name: string
@@ -594,6 +603,7 @@ export interface CompPick {
   role_win_rate: number | null
   off_role: boolean // rarely played in this role; the build comes from build_role
   build_role: Role | null
+  fixed: boolean // the role was given (the one they're really in), not suggested
   runes: RunePage | null
   items: MetaItemInfo[]
   boots: MetaItemInfo | null
@@ -733,6 +743,7 @@ export interface LiveGame {
   bans: { champion_id: string; team: TeamId }[]
   state: LiveState | null
   streaming: boolean // live stats are coming in right now
+  roles?: Record<string, PlayerRole> // player id -> the role they're really in, when known
 }
 
 /** One player's gold from one game, by source (economy.game_gold_breakdown). */

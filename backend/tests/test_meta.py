@@ -193,6 +193,33 @@ def test_off_role_pick_borrows_the_usual_build(session):
     assert not next(p for p in picks if p.role == "TOP").off_role
 
 
+def test_best_assignment_keeps_given_roles():
+    scores = [{r: (1.0 if r == "UTILITY" else 0.1) for r in meta.ROLES}, {r: (1.0 if r == "JUNGLE" else 0.2) for r in meta.ROLES}]
+    assert meta.best_assignment(scores) == ["UTILITY", "JUNGLE"]
+    # The first champ is really jungling: the second moves to its next best role instead.
+    assert meta.best_assignment(scores, ["JUNGLE", None])[0] == "JUNGLE"
+    assert meta.best_assignment(scores, ["JUNGLE", None])[1] != "JUNGLE"
+
+
+def test_given_role_gets_that_roles_build(session):
+    # Champ001 is mostly a support (keystone 8010) and sometimes a jungler (8437). Rolled as
+    # support but autofilled to jungle: the jungle build, not the support one.
+    for i in range(25):
+        meta.count_match(session, ranked_match(f"S{i}", [participant(1001, "UTILITY", True, keystone=8010)]))
+    for i in range(3):
+        meta.count_match(session, ranked_match(f"J{i}", [participant(1001, "JUNGLE", True, keystone=8437)]))
+    suggested = meta.suggest_comp(session, ["Champ001"])["picks"][0]
+    assert suggested.role == "UTILITY" and not suggested.fixed and suggested.runes["keystone"]["id"] == 8010
+    real = meta.suggest_comp(session, ["Champ001"], roles={"Champ001": "JUNGLE"})["picks"][0]
+    assert real.role == "JUNGLE" and real.fixed and real.build_role == "JUNGLE"
+    assert not real.off_role and real.runes["keystone"]["id"] == 8437
+    # A role high elo never plays it in: still that role, with the build from its usual one.
+    top = meta.suggest_comp(session, ["Champ001"], roles={"Champ001": "TOP"})["picks"][0]
+    assert top.role == "TOP" and top.off_role and top.build_role == "UTILITY"
+    # Unknown roles are ignored.
+    assert meta.suggest_comp(session, ["Champ001"], roles={"Champ001": "ADC"})["picks"][0].role == "UTILITY"
+
+
 def test_parse_positions():
     data = {"Sion": {"positions": ["TOP"]}, "MonkeyKing": {"positions": ["JUNGLE", "TOP"]}, "Odd": {}}
     assert meta.parse_positions(data) == {"Sion": ["TOP"], "MonkeyKing": ["JUNGLE", "TOP"], "Odd": []}
@@ -202,6 +229,9 @@ def test_comp_endpoint_and_status(client, session):
     r = client.post("/api/comp", json={"champion_ids": ["Champ001", "Champ002"]})
     assert r.status_code == 200 and len(r.json()["picks"]) == 2
     assert client.post("/api/comp", json={"champion_ids": []}).status_code == 422
+    r = client.post("/api/comp", json={"champion_ids": ["Champ001"], "roles": {"Champ001": "JUNGLE"}})
+    assert r.json()["picks"][0]["role"] == "JUNGLE" and r.json()["picks"][0]["fixed"] is True
+    assert client.post("/api/comp", json={"champion_ids": ["Champ001"], "roles": {"Champ001": "ADC"}}).status_code == 422
     s = client.get("/api/meta/status").json()
     assert s["enabled"] is True and s["key_set"] is False and s["matches"] == 0
 

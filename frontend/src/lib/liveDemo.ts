@@ -1,4 +1,4 @@
-import type { Champion, LiveEvent, LiveGame, LiveItem, LivePlayer, LiveState, TeamId } from '../types'
+import type { Champion, LiveEvent, LiveGame, LiveItem, LivePlayer, LiveState, Role, TeamId } from '../types'
 import { LANES } from './live'
 
 /**
@@ -191,6 +191,12 @@ export function makeDemoLive(opts: { ours: DemoPlayer[]; champions: Champion[]; 
     bans: [],
     state,
     streaming: true,
+    // As the game client reports them: our players' lanes.
+    roles: Object.fromEntries(
+      players
+        .filter((p) => p.player_id != null)
+        .map((p) => [String(p.player_id), { role: p.position as Role, source: 'game' as const }]),
+    ),
   }
 }
 

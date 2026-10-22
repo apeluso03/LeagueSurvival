@@ -34,6 +34,8 @@ OBJECTIVES = {
     "HordeKill": "grubs",
     "AtakhanKill": "atakhan",
 }
+ROLES = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")
+SMITE = 11  # summoner spell id
 
 
 # --- which game is ours ------------------------------------------------------------------
@@ -413,6 +415,37 @@ def apply_client(session: Session, game: ChallengeGame, data: dict, static: dict
     return row
 
 
+# --- who's in which role ------------------------------------------------------------------------
+
+
+def player_roles(session: Session, game_id: int, row: LiveGame | None) -> dict[int, dict]:
+    """player_id -> {"role", "source"} for our players, so builds follow the role they're really in.
+
+    In order: set by hand ("set"), the game client's lane ("game", matchmade games with positions),
+    or Smite means jungle ("smite", works from Spectator alone). Players with none of these are left
+    out, and the build suggester picks a role for them.
+    """
+    out: dict[int, dict] = {}
+    for a in rules.assignments_for(session, game_id):
+        if a.played_role in ROLES:
+            out[a.player_id] = {"role": a.played_role, "source": "set"}
+    if row is None:
+        return out
+    for p in (row.state or {}).get("players", []):
+        pid, pos = p.get("player_id"), p.get("position")
+        if pid is not None and pid not in out and pos in ROLES:
+            out[pid] = {"role": pos, "source": "game"}
+    smiters = {p.get("player_id") for p in row.participants if SMITE in (p.get("spells") or [])}
+    smiters |= {
+        p.get("player_id")
+        for p in (row.state or {}).get("players", [])
+        if any("smite" in ((s or {}).get("name") or "").lower() for s in p.get("spells") or [])
+    }
+    for pid in smiters - {None} - set(out):
+        out[pid] = {"role": "JUNGLE", "source": "smite"}
+    return out
+
+
 def live_out(session: Session, row: LiveGame | None, static: dict | None = None) -> dict | None:
     """What the Live tab and the overlay read."""
     if row is None:
@@ -441,6 +474,7 @@ def live_out(session: Session, row: LiveGame | None, static: dict | None = None)
         "participants": participants,
         "bans": row.bans,
         "state": row.state or None,
+        "roles": {str(pid): r for pid, r in player_roles(session, row.game_id, row).items()},
         # Live stats are flowing right now (not just "found through Spectator").
         "streaming": not stale and row.ended_at is None,
     }

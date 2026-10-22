@@ -1,27 +1,78 @@
 import { useState, type CSSProperties } from 'react'
 import { useChampionMap } from '../hooks/queries'
 import { pct } from '../lib/stats'
-import type { BanSuggestion, CompPick, MetaItemInfo, Role, RuneRef, SpellPair } from '../types'
+import type { BanSuggestion, CompPick, MetaItemInfo, PlayerRole, Role, RoleSource, RuneRef, SpellPair } from '../types'
 import { MobaWidget } from './MobaWidget'
 import { ChampionPortrait, Modal } from './ui'
 
 const ROLE_SHORT: Record<Role, string> = { TOP: 'TOP', JUNGLE: 'JG', MIDDLE: 'MID', BOTTOM: 'BOT', UTILITY: 'SUP' }
 const ROLE_NAME: Record<Role, string> = { TOP: 'Top', JUNGLE: 'Jungle', MIDDLE: 'Mid', BOTTOM: 'Bot', UTILITY: 'Support' }
+const ROLES = Object.keys(ROLE_NAME) as Role[]
+const SOURCE_TEXT: Record<RoleSource, string> = {
+  set: 'set by hand',
+  game: 'their lane in the game',
+  smite: 'they took Smite',
+}
 
-/** Suggested role as a small chip; hover for the high-elo numbers behind it. */
-export function RoleChip({ pick }: { pick: CompPick | undefined }) {
+/**
+ * The role chip: the suggested role, or the one they're really in once it's known (set by hand,
+ * or read from the live game), which their build follows. Hover for the numbers behind it.
+ * With `onSet`, it's also a picker: choose the role they ended up in, or Auto to go back.
+ */
+export function RoleChip({
+  pick,
+  real,
+  onSet,
+  busy = false,
+}: {
+  pick: CompPick | undefined
+  real?: PlayerRole
+  onSet?: (role: Role | null) => void
+  busy?: boolean
+}) {
   if (!pick) return null
-  const tip = pick.off_role
-    ? `Suggested: ${pick.role_name} (off-role, rarely played there)`
-    : pick.role_source === 'high-elo'
-      ? `Suggested: ${pick.role_name} · ${pick.role_games.toLocaleString()} high-elo games${
-          pick.role_win_rate != null ? `, ${pct(pick.role_win_rate)} win rate` : ''
-        }`
-      : `Suggested: ${pick.role_name} (from champion data)`
-  return (
-    <span className={`role-chip ${pick.off_role ? 'is-off' : ''}`} title={tip}>
+  const fixed = pick.fixed
+  const tip = fixed
+    ? `Playing ${pick.role_name} (${real ? SOURCE_TEXT[real.source] : 'their real role'})${
+        pick.off_role && pick.build_role ? ` · rarely played there, so the build is from ${ROLE_NAME[pick.build_role]}` : ''
+      }`
+    : pick.off_role
+      ? `Suggested: ${pick.role_name} (off-role, rarely played there)`
+      : pick.role_source === 'high-elo'
+        ? `Suggested: ${pick.role_name} · ${pick.role_games.toLocaleString()} high-elo games${
+            pick.role_win_rate != null ? `, ${pct(pick.role_win_rate)} win rate` : ''
+          }`
+        : `Suggested: ${pick.role_name} (from champion data)`
+  const chip = (
+    <span className={`role-chip ${pick.off_role ? 'is-off' : ''} ${fixed ? 'is-real' : ''}`} title={onSet ? undefined : tip}>
       {ROLE_SHORT[pick.role]}
+      {onSet && <span aria-hidden className="role-caret" />}
     </span>
+  )
+  if (!onSet) return chip
+  const handSet = real?.source === 'set'
+  const auto = handSet
+    ? 'Auto (detect it)'
+    : fixed
+      ? `Auto (${ROLE_NAME[pick.role]}, from the game)`
+      : `Auto (suggested ${ROLE_NAME[pick.role]})`
+  return (
+    <label className="role-pick" title={`${tip} · click to change`}>
+      {chip}
+      <select
+        aria-label="Role they're playing"
+        value={handSet ? real.role : ''}
+        disabled={busy}
+        onChange={(e) => onSet((e.target.value || null) as Role | null)}
+      >
+        <option value="">{auto}</option>
+        {ROLES.map((r) => (
+          <option key={r} value={r}>
+            {ROLE_NAME[r]}
+          </option>
+        ))}
+      </select>
+    </label>
   )
 }
 

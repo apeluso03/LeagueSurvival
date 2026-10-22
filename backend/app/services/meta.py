@@ -359,6 +359,7 @@ class Pick:
     role_win_rate: float | None = None
     off_role: bool = False  # the champ rarely plays this role; the build comes from build_role
     build_role: str | None = None
+    fixed: bool = False  # the role was given (the one they're really in), not suggested
     runes: dict | None = None
     items: list[dict] = field(default_factory=list)
     boots: dict | None = None
@@ -387,15 +388,24 @@ def role_scores(session: Session, champ: Champion, patches: list[str]) -> tuple[
     return listed, "positions", rows
 
 
-def best_assignment(scores: list[dict[str, float]]) -> list[str]:
-    """Give each champion a different role, maximising the total score (at most 5 champions)."""
-    n = min(len(scores), len(ROLES))
-    best, best_total = list(ROLES[:n]), -1.0
-    for roles in permutations(ROLES, n):
-        total = sum(scores[i][r] for i, r in enumerate(roles))
+def best_assignment(scores: list[dict[str, float]], fixed: list[str | None] | None = None) -> list[str]:
+    """Give each champion a different role, maximising the total score (at most 5 champions).
+
+    `fixed[i]`, when set, is champion i's role no matter what; the others share the roles left.
+    """
+    fixed = list(fixed or []) + [None] * (len(scores) - len(fixed or []))
+    free = [i for i in range(len(scores)) if not fixed[i]]
+    left = [r for r in ROLES if r not in fixed]
+    n = min(len(free), len(left))
+    out = [f or "" for f in fixed]
+    best, best_total = list(left[:n]), -1.0
+    for roles in permutations(left, n):
+        total = sum(scores[free[k]][r] for k, r in enumerate(roles))
         if total > best_total + 1e-9:
             best, best_total = list(roles), total
-    return best
+    for k, r in zip(free, best, strict=False):
+        out[k] = r
+    return [r or ROLES[0] for r in out]
 
 
 def _rate(wins: int, games: int) -> float | None:
@@ -560,19 +570,31 @@ def describe_page(page: str, games: int, wins: int, static: dict | None) -> dict
 
 
 def suggest_comp(
-    session: Session, champion_ids: list[str], static: dict | None = None, exclude: list[str] | None = None
+    session: Session,
+    champion_ids: list[str],
+    static: dict | None = None,
+    exclude: list[str] | None = None,
+    roles: dict[str, str] | None = None,
 ) -> dict:
+    """`roles`: champion id -> the role it's really being played in (from the live game, or set by
+    hand). Those champions keep that role and get its build; the rest are suggested around them."""
     champs = {c.id: c for c in session.exec(select(Champion).where(col(Champion.id).in_(champion_ids))).all()}
     order = [cid for cid in champion_ids if cid in champs][: len(ROLES)]
     patches = recent_patches(session)
+    given = {cid: r for cid, r in (roles or {}).items() if r in ROLES}
     scored = [role_scores(session, champs[cid], patches) for cid in order]
-    roles = best_assignment([s for s, _, _ in scored])
+    assigned = best_assignment([s for s, _, _ in scored], [given.get(cid) for cid in order])
     picks = []
-    for cid, role, (_, source, rows) in zip(order, roles, scored, strict=False):
+    for cid, role, (_, source, rows) in zip(order, assigned, scored, strict=False):
         champ = champs[cid]
         total = sum(r.games for r in rows.values())
         row = rows.get(role)
-        off_role = source == "high-elo" and (row.games if row else 0) < OFF_ROLE_SHARE * total
+        fixed = cid in given
+        if fixed:
+            # Their real role: its build whenever high elo has any games of it there.
+            off_role = bool(rows) and not (row and row.games)
+        else:
+            off_role = source == "high-elo" and (row.games if row else 0) < OFF_ROLE_SHARE * total
         # Off-role: show the build from the role the champ is usually played in.
         build_role = max(rows.values(), key=lambda r: r.games).role if off_role else role
         runes, items, boots = build_for(session, champ, build_role, patches, static)
@@ -587,6 +609,7 @@ def suggest_comp(
                 role_win_rate=_rate(row.wins, row.games) if row else None,
                 off_role=off_role,
                 build_role=build_role,
+                fixed=fixed,
                 runes=runes,
                 items=items,
                 boots=boots,

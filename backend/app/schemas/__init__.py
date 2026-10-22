@@ -116,6 +116,7 @@ class AssignmentOut(BaseModel):
     original_options: list[str] = []
     played_champion_id: str | None = None
     played_option_index: int | None = None
+    played_role: str | None = None
 
 
 class MatchPlayerOut(BaseModel):
@@ -188,6 +189,11 @@ class PickIn(BaseModel):
 
 class AssignmentsPatch(BaseModel):
     picks: list[PickIn]
+
+
+class RoleIn(BaseModel):
+    player_id: int
+    role: Literal["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] | None = None
 
 
 class ReviewIn(BaseModel):

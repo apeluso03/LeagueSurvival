@@ -31,7 +31,8 @@ Next come live updates, then groups so anyone can start their own, then hosting.
   - towers, dragons and other objectives;
   - each lane's matchup with items, spells, KDA and CS;
   - a gold-lead graph, contract progress and a play-by-play feed;
-  - your team's builds, with items already built checked off.
+  - your team's builds, with items already built checked off;
+  - builds for the role each player is really in. That comes from their lane in the game (when the backend runs on a PC in it) or Smite for jungle. Anyone can also set their own role from the role chip, on the spin card or the Live tab; the owner can set anyone's. Autofilled to jungle on a champ rolled as support? Pick Jungle and the build, spells and Mobalytics button switch to its jungle build.
 - **Pool:** card grid of the run's champions with sorts and filters, shields, revives and each champion's numbers.
 - **Shop:** gold from your in-game stats; Reroll, Blacklist, Swap, Shield, Choose a Champ and Contracts.
 - **Stats:** per-player stats and a sortable leaderboard. Each player has their own page with their title, champions and recent games.
@@ -189,6 +190,7 @@ After a spin, the backend looks for your game.
 - **Finding it:** with a Riot key, it asks Riot every 30 seconds whether your linked players are in a game together (Spectator API). This works for any of your players.
 - **Live stats:** items, KDA, CS, objectives and kills come from the League client's local Live Client Data API, so **they only work when the backend runs on a PC that's in the game.** Set `LIVE_CLIENT_URL=off` to turn that off.
 - **Your picks:** either source fills in each player's champion as soon as the game loads, so you don't have to click picks. Picks you set by hand are kept.
+- **Roles:** builds follow the role each player is really in, not just the suggested one: set by hand on the role chip first, then their lane from the game client, then Smite means jungle. Spectator data alone can't tell lanes apart, so outside the PC running the backend only junglers are detected; set the others by hand if they swapped.
 - **Gold numbers:** the game only shares gold for its own player, so team and lane gold are estimated from the value of items held, like a broadcast does.
 - **Preview:** to see the Live tab without being in a game, open it and click **Preview with sample data** (or go to `/live?preview=1`). It shows a made-up game built in your browser; nothing is saved.
 - **No cooldown timers:** summoner spells are shown, but not their cooldowns. Riot's rules restrict tracking those.

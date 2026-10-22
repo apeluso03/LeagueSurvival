@@ -32,6 +32,7 @@ import type {
   PoolEvent,
   ReviveToken,
   RiotStatus,
+  Role,
   Run,
   SpinResult,
   SyncResult,
@@ -91,6 +92,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 const get = <T>(path: string) => request<T>('GET', path)
 const post = <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {})
 const patch = <T>(path: string, body: unknown) => request<T>('PATCH', path, body)
+const put = <T>(path: string, body: unknown) => request<T>('PUT', path, body)
 
 function qs(params: Record<string, string | number | boolean | undefined>) {
   const entries = Object.entries(params).filter(([, v]) => v !== undefined) as [string, string][]
@@ -165,8 +167,8 @@ export const api = {
   wrapped: (month?: string) => get<Wrapped>(`/wrapped${qs({ month })}`),
   metaStatus: () => get<MetaStatus>('/meta/status'),
   refreshPositions: () => post<{ count: number }>('/meta/positions/refresh'),
-  comp: (championIds: string[], exclude: string[] = []) =>
-    post<CompSuggestion>('/comp', { champion_ids: championIds, exclude }),
+  comp: (championIds: string[], exclude: string[] = [], roles: Record<string, Role> = {}) =>
+    post<CompSuggestion>('/comp', { champion_ids: championIds, exclude, roles }),
   championLines: (runId: number) => get<Record<string, ChampionLine>>(`/runs/${runId}/champion-lines`),
   eliminate: (runId: number, championId: string) => post<Run>(`/runs/${runId}/pool/${championId}/eliminate`),
   revive: (runId: number, championId: string, tokenId?: number) =>
@@ -178,6 +180,8 @@ export const api = {
   games: (runId?: number) => get<Game[]>(`/games${qs({ run_id: runId })}`),
   game: (id: number) => get<Game>(`/games/${id}`),
   setPicks: (gameId: number, picks: Pick[]) => patch<Game>(`/games/${gameId}/assignments`, { picks }),
+  setRole: (gameId: number, playerId: number, role: Role | null) =>
+    put<Game>(`/games/${gameId}/role`, { player_id: playerId, role }),
   setResult: (gameId: number, result: 'win' | 'loss' | 'void', reason?: string) =>
     post<Game>(`/games/${gameId}/result`, { result, reason }),
   undo: (gameId: number) => post<Game>(`/games/${gameId}/undo`),

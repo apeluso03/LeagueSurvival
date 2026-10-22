@@ -5,9 +5,9 @@ from sqlmodel import Session, col, select
 
 from app.db import get_session
 from app.models import ChallengeGame, Player, RiotMatch, Run
-from app.routers.access import Ctx, get_game, get_run, group_ctx, require_manager
+from app.routers.access import Ctx, get_game, get_run, group_ctx, require_act_for, require_manager
 from app.routers.common import champion_keys, game_out, get_app_settings
-from app.schemas import AssignmentsPatch, GameOut, LinkMatchIn, ResultIn, ReviewIn
+from app.schemas import AssignmentsPatch, GameOut, LinkMatchIn, ResultIn, ReviewIn, RoleIn
 from app.services import matcher, rules, stats, sync
 from app.services.riot_client import RiotClient, RiotError
 
@@ -51,6 +51,23 @@ def option_facts(game_id: int, ctx: Ctx = Depends(group_ctx), session: Session =
 def set_assignments(game_id: int, body: AssignmentsPatch, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
     game = _managed_game(session, game_id, ctx)
     rules.set_played(session, game, [rules.Pick(**p.model_dump()) for p in body.picks])
+    session.commit()
+    return game_out(session, game)
+
+
+@router.put("/{game_id}/role", response_model=GameOut)
+def set_role(game_id: int, body: RoleIn, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
+    """The role a player is really in (autofilled, swapped lanes), so their build follows it.
+    None goes back to detecting it from the live game. Players set their own; the owner anyone's."""
+    game = get_game(session, ctx, game_id)
+    require_act_for(ctx, session.get(Run, game.run_id), body.player_id)
+    if game.status != "pending":
+        raise HTTPException(409, "That game is over")
+    a = next((a for a in rules.assignments_for(session, game.id) if a.player_id == body.player_id), None)
+    if a is None:
+        raise HTTPException(404, f"Player {body.player_id} is not in game {game_id}")
+    a.played_role = body.role
+    session.add(a)
     session.commit()
     return game_out(session, game)
 
