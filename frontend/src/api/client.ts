@@ -1,6 +1,9 @@
 import type {
   Account,
   AppSettings,
+  DiscordChannel,
+  DiscordKind,
+  DiscordStatus,
   Invite,
   InviteInfo,
   LiveGame,
@@ -198,6 +201,14 @@ export const api = {
     post<{ item: InventoryItem; balance: number }>(`/runs/${runId}/players/${playerId}/purchase`, { type }),
   useItem: (itemId: number, body: ItemUse) => post<InventoryItem>(`/items/${itemId}/use`, body),
   review: (gameId: number, action: 'accept' | 'reject') => post<Game>(`/games/${gameId}/review`, { action }),
+
+  discord: () => get<DiscordStatus>('/discord'),
+  discordAvailable: () => get<{ enabled: boolean }>('/discord/available'),
+  discordChannels: () => get<DiscordChannel[]>('/discord/channels'),
+  updateDiscordServer: (body: { channel_id?: string; muted?: DiscordKind[] }) => patch<DiscordStatus>('/discord/server', body),
+  discordTest: () => post<void>('/discord/test'),
+  removeDiscordServer: () => request<void>('DELETE', '/discord/server'),
+  unlinkDiscord: () => request<void>('DELETE', '/discord/account'),
 
   live: () => get<{ game_id: number | null; live: LiveGame | null }>('/live'),
   gameLive: (gameId: number) => get<{ game_id: number; live: LiveGame | null }>(`/games/${gameId}/live`),

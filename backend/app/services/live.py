@@ -21,7 +21,7 @@ from sqlmodel import Session, col, select
 
 from app.config import get_settings
 from app.models import ChallengeGame, Champion, LiveGame, Player, Run, utcnow
-from app.services import rules
+from app.services import events, rules
 
 BLUE, RED = 100, 200
 TEAM_OF = {"ORDER": BLUE, "CHAOS": RED}
@@ -103,6 +103,7 @@ def _live_row(session: Session, game: ChallengeGame) -> LiveGame:
     if row is None:
         row = LiveGame(game_id=game.id)
         session.add(row)
+        events.emit_for_game(session, game, "game_found")
     return row
 
 

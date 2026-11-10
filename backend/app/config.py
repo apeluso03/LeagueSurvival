@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     # The built frontend (frontend/dist) to serve from the same address as the API, when hosted.
     # Empty: don't serve it (local development uses the Vite dev server).
     frontend_dist: str = ""
+    # The site's own address (e.g. https://hardcoredraft.gg), for links in Discord posts and as the
+    # Discord sign-in return address. Empty: taken from each request; posts go without links.
+    public_url: str = ""
+    # The Discord bot (SPEC 19), from the Discord Developer Portal. All four, or the bot stays off.
+    discord_app_id: str = ""
+    discord_public_key: str = ""
+    discord_bot_token: str = ""
+    discord_client_secret: str = ""
 
     @field_validator("riot_api_key")
     @classmethod
@@ -41,6 +49,10 @@ class Settings(BaseSettings):
             if v.startswith(prefix):
                 return "postgresql+psycopg://" + v[len(prefix):]
         return v
+
+    @property
+    def discord_enabled(self) -> bool:
+        return all((self.discord_app_id, self.discord_public_key, self.discord_bot_token, self.discord_client_secret))
 
     @property
     def cors_origin_list(self) -> list[str]:

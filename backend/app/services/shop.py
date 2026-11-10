@@ -10,7 +10,7 @@ import random
 from sqlmodel import Session, col, select
 
 from app.models import ChallengeGame, Contract, InventoryItem, Player, PoolEntry, PoolEvent, Run, utcnow
-from app.services import contracts, economy, rules, shop_config
+from app.services import contracts, economy, events, rules, shop_config
 from app.services import spin as spin_logic
 from app.services.rules import RuleError
 
@@ -208,6 +208,8 @@ def use_item(session: Session, item: InventoryItem, payload: dict, rng: random.R
         raise RuleError("A contract starts as soon as it's bought; there's nothing to use", 409)
 
     session.flush()
+    if item.type in ("reroll", "swap", "choose"):
+        events.emit(session, run.group_id, "picks", game_id=item.used_in_game_id, run_id=run.id, item=item.type, player_id=item.player_id)
     return item
 
 

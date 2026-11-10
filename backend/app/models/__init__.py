@@ -99,6 +99,8 @@ class User(SQLModel, table=True):
     is_admin: bool = False
     created_at: datetime = dt_field(default_now=True)
     last_login_at: datetime | None = dt_field()
+    # The Discord account they linked (SPEC 19): the bot knows who's who, and "Sign in with Discord".
+    discord_id: str | None = Field(default=None, unique=True, index=True)
 
 
 class AuthSession(SQLModel, table=True):
@@ -423,3 +425,50 @@ class MetaCrawlState(SQLModel, table=True):
     last_run_at: datetime | None = dt_field()
     last_error: str | None = None
     matches_counted: int = 0
+
+
+# --- Discord bot (SPEC 19) ---------------------------------------------------------------------
+
+
+class DiscordLink(SQLModel, table=True):
+    """The Discord server a group added the bot to. One server per group, one group per server."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="group.id", unique=True)
+    guild_id: str = Field(unique=True, index=True)
+    guild_name: str = ""
+    channel_id: str | None = None  # where announcements go; None until the owner picks one
+    installed_by_user_id: int | None = Field(default=None, foreign_key="user.id")
+    muted: list[str] = json_field()  # announcement kinds switched off (services/discord_bot.KINDS)
+    announced: list[str] = json_field()  # "player_id:achievement_id" trophies already posted
+    state: dict = json_field(dict)  # e.g. {"wrapped": "2026-10"}: the last monthly Wrapped posted
+    last_error: str | None = None  # the last time Discord refused a post (no access, channel gone)
+    created_at: datetime = dt_field(default_now=True)
+
+
+class DiscordMessage(SQLModel, table=True):
+    """A message the bot posted that it may edit later (a spin's picks, a live scoreboard, a result)."""
+
+    group_id: int = Field(foreign_key="group.id", primary_key=True)
+    kind: str = Field(primary_key=True)  # "spin" | "live" | "result" | "ready" | "nudge"
+    ref_id: int = Field(primary_key=True)  # the game id (run id for "ready")
+    channel_id: str
+    message_id: str
+    data: dict = json_field(dict)  # e.g. who's ready, the last scoreboard posted
+    updated_at: datetime = dt_field(default_now=True)
+
+
+class EventOutbox(SQLModel, table=True):
+    """Things that happened in a group's run, written in the same transaction as the change and
+    sent to Discord by a background job (jobs/discord_bot.py), so nothing is lost or posted twice.
+    Live updates on the site (SPEC 12.3) can read the same stream."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="group.id", index=True)
+    type: str  # "spin" | "picks" | "result" | "undo" | "gold" | "game_found" | "revive" | "run_end"
+    payload: dict = json_field(dict)  # {"game_id": ...} / {"run_id": ...}
+    created_at: datetime = dt_field(default_now=True)
+    sent_at: datetime | None = dt_field()  # handled (posted, or nothing to post)
+    attempts: int = 0
+    error: str | None = None
+

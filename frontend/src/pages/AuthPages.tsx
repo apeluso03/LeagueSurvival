@@ -150,6 +150,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const login = useSignIn(api.login)
   const dest = useDestination()
+  const discord = useQuery({ queryKey: ['discord', 'available'], queryFn: api.discordAvailable, staleTime: 5 * 60_000 })
+  const [params] = useSearchParams()
+  const discordError = params.get('discord_error')
 
   if (me.data?.user) return <Navigate to={dest} replace />
   if (me.data?.setup_needed) return <Navigate to="/setup" replace />
@@ -185,6 +188,20 @@ export function LoginPage() {
         <button type="submit" className="btn-primary w-full py-2.5" disabled={login.isPending}>
           {login.isPending ? 'Signing in...' : 'Sign in'}
         </button>
+        {discord.data?.enabled && (
+          <>
+            <a className="btn-secondary w-full py-2.5 text-center" href="/api/discord/login">
+              Sign in with Discord
+            </a>
+            {discordError && (
+              <p className="text-sm text-red-300">
+                {discordError === 'not-linked'
+                  ? 'That Discord account isn’t linked yet. Sign in with your password, then link Discord in Settings.'
+                  : 'Signing in with Discord didn’t work. Try again.'}
+              </p>
+            )}
+          </>
+        )}
         <p className="text-center text-xs text-slate-500">
           Joining friends? Use the invite link they sent you. Starting your own group?{' '}
           <Link to="/signup" className="text-hex-200 hover:underline">

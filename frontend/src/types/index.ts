@@ -761,3 +761,25 @@ export interface GoldBreakdown {
   multikill_counts?: Record<string, number> // "double" | "triple" | "quadra" | "penta" -> count
   stats?: { kills: number; deaths: number; assists: number; vision: number }
 }
+
+// --- Discord bot (SPEC 19) ---------------------------------------------------------------------
+
+export type DiscordKind = 'spins' | 'live' | 'results' | 'moments' | 'recaps' | 'nudges'
+
+export interface DiscordStatus {
+  enabled: boolean // the bot is set up on this site
+  linked: boolean // you linked your Discord account
+  kinds: Record<DiscordKind, string> // announcement kinds and what each covers
+  server: {
+    guild_name: string
+    channel_id: string | null
+    muted: DiscordKind[]
+    last_error: string | null // the last time Discord refused a post
+  } | null
+}
+
+export interface DiscordChannel {
+  id: string
+  name: string
+  position: number
+}

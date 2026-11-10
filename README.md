@@ -74,6 +74,7 @@ The repo deploys as one container (`Dockerfile`, `railway.json`): the API and th
 |---|---|
 | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (Railway fills it in from the database) |
 | `RIOT_API_KEY` | your Riot key (a personal key; development keys expire every 24 hours) |
+| `PUBLIC_URL` and `DISCORD_*` | optional: the Discord bot (see "Discord bot") |
 
 Live stats from the game client are off in the hosted app (`LIVE_CLIENT_URL=off` is built in); finding games and filling in picks still work through Riot.
 
@@ -195,6 +196,40 @@ After a spin, the backend looks for your game.
 - **Preview:** to see the Live tab without being in a game, open it and click **Preview with sample data** (or go to `/live?preview=1`). It shows a made-up game built in your browser; nothing is saved.
 - **No cooldown timers:** summoner spells are shown, but not their cooldowns. Riot's rules restrict tracking those.
 
+## Discord bot
+
+Each group can add the Hardcore Draft bot to its own Discord server (SPEC.md section 19). It posts the run as it happens, and everyone can play from Discord with slash commands and buttons.
+
+**What it posts** (the group owner turns each on or off in Settings, Discord):
+- **Spins:** one message per spin with everyone's options, roles and builds, and suggested bans. It's edited as picks come in, then shows the result. Buttons on it: set your role, your items (Reroll, Swap), your build, and Win / Loss / Void for the run owner.
+- **The live game:** "In game" when the game is found, edited into a small scoreboard while live stats come in.
+- **Results:** eliminations, shield saves, revive tokens, gold and grades, pentakills, contracts hit, a low-pool warning, and an Undo button.
+- **Moments:** revives and trophies unlocked.
+- **Recaps:** the run recap when a run ends, and last month's Wrapped early each month.
+- **Reminders:** once, when a game has waited 3 hours for a result.
+
+**Commands:** `/run`, `/pool`, `/stats`, `/build`, `/live`, `/history` for anyone in the server; `/gold`, `/shop`, `/role` for players (for themselves; the run owner can name anyone); `/spin`, `/pick`, `/result`, `/undo` for the run owner; `/newrun` for the group owner; `/ready` for a ready check; `/link` to check your link. Permissions are the same as on the site: people act as the account that linked their Discord (Settings, Discord, **Link Discord**), and someone who hasn't linked can look but not act. Linked accounts can also **Sign in with Discord**.
+
+**Setting it up** (once per site, by whoever hosts it):
+1. Go to the [Discord Developer Portal](https://discord.com/developers/applications), **New Application**, and name it Hardcore Draft.
+2. **General Information:** copy the **Application ID** and **Public Key**. Set **Interactions Endpoint URL** to `https://<your site>/api/discord/interactions` (Discord checks it right away, so the site must be running with the variables below first).
+3. **OAuth2:** copy the **Client Secret** (Reset Secret), and add the redirect `https://<your site>/api/discord/callback`.
+4. **Bot:** **Reset Token** and copy it. Leave "Message Content Intent" off; the bot doesn't read messages.
+5. **Installation:** set the install link to **None**: groups add the bot from Settings, which ties the server to their group.
+6. Set the variables on the host (Railway: the app service, Variables) and redeploy:
+
+| Variable | Value |
+|---|---|
+| `PUBLIC_URL` | the site's address, e.g. `https://hardcoredraft.gg` |
+| `DISCORD_APP_ID` | the Application ID |
+| `DISCORD_PUBLIC_KEY` | the Public Key |
+| `DISCORD_BOT_TOKEN` | the bot token |
+| `DISCORD_CLIENT_SECRET` | the client secret |
+
+On start the app registers the slash commands (they can take a minute to show up in Discord). Then the group owner opens Settings, Discord, **Add the bot to Discord**, picks the server, and picks the channel for announcements.
+
+Locally, Discord can't reach `localhost`, so commands and buttons need a public address (a tunnel such as `cloudflared` or `ngrok`, with `PUBLIC_URL` set to it). Posting announcements works without one.
+
 ## High-elo builds (comp suggestions)
 
 When the Riot key is set, a background job slowly reads recent ranked solo games from the Challenger, Grandmaster and Master ladders. From those it learns which roles, rune pages, core items and summoner spells each champion uses, how often they win, and how each champion does against every other one (for suggested bans). Champion roles also come from [Meraki Analytics](https://www.merakianalytics.com/), so suggestions work before much data is in.
@@ -217,7 +252,7 @@ The goal is a public website: anyone can sign up, start their own group, and run
    - sign-up limits and spam protection;
    - account and data deletion;
    - terms and privacy pages.
-5. **Discord:** Discord login and a webhook per group.
+5. **Discord:** *(built, see "Discord bot")* a bot each group adds to its own server, and Discord login.
 
 The details are in SPEC.md section 12.
 

@@ -6,6 +6,7 @@ import { ChampionPortrait, ErrorText, Modal } from '../components/ui'
 import { useAction, useActiveRun, useChampions, usePlayers, useRiotStatus, useRuns, useSettings, useShop } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
 import { AccountSection, AccountsAdminSection, SiteSection } from './SettingsAccounts'
+import { DiscordSection } from './SettingsDiscord'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { allTags, filterChampions } from '../lib/champions'
 import { QUEUES } from '../lib/queues'
@@ -24,6 +25,7 @@ export function SettingsPage() {
     <div className="flex flex-col gap-6">
       <AccountSection colorPicker={me && <TeamColorPicker player={me} />} />
       {isOwner && <AccountsAdminSection />}
+      <DiscordSection />
       {isOwner && <PlayersSection />}
       {isOwner && <RunsSection />}
       {canManage && <ShopSettingsSection />}

@@ -69,6 +69,14 @@ export function LegalPage() {
           address like any website you visit. It runs in an isolated frame that can't see your account or this app.
           Nothing is loaded from Mobalytics until you open one.
         </p>
+        <p className="font-semibold text-slate-100">The Discord bot</p>
+        <p>
+          If your group adds the Hardcore Draft bot to its Discord server, the bot posts your group's spins, results and
+          recaps there, which Discord stores like any message. We keep the server, channel and message ids, and, if you
+          link your Discord account, your Discord user id (so the bot knows which player you are and you can sign in
+          with Discord). The bot doesn't read the server's messages. Unlink your Discord in Settings at any time; the
+          group owner can remove the bot from Settings or from Discord.
+        </p>
         <p>
           We don't sell or share your data. Riot data comes from the Riot Games API and is used only to show it in this
           app.
