@@ -126,3 +126,57 @@ class FakeRiotClient:
     async def platform_status(self, platform="na1"):
         self._maybe_fail()
         return {"id": platform.upper()}
+
+
+class FakeDiscord:
+    """Stands in for DiscordClient: records what would be posted or edited.
+
+    `fail` maps a method name ("post", "edit", ...) to the DiscordError it raises.
+    """
+
+    def __init__(self, channels=None, token=None, me=None):
+        self.app_id = "app-1"
+        self.posts: list[tuple[str, dict]] = []  # (channel_id, message)
+        self.edits: list[tuple[str, str, dict]] = []  # (channel_id, message_id, message)
+        self.replies: list[tuple[str, dict]] = []
+        self.commands: list[dict] | None = None
+        self.left: list[str] = []
+        self.fail: dict = {}
+        self._channels = channels if channels is not None else [{"id": "c1", "name": "general", "position": 0}]
+        self.token = token or {"access_token": "at", "scope": "identify"}
+        self.user = me or {"id": "d-owner"}
+        self._next = 100
+
+    def _maybe_fail(self, name):
+        if name in self.fail:
+            raise self.fail[name]
+
+    async def post(self, channel_id, message):
+        self._maybe_fail("post")
+        self._next += 1
+        self.posts.append((channel_id, message))
+        return f"m{self._next}"
+
+    async def edit(self, channel_id, message_id, message):
+        self._maybe_fail("edit")
+        self.edits.append((channel_id, message_id, message))
+
+    async def edit_reply(self, token, message):
+        self.replies.append((token, message))
+
+    async def channels(self, guild_id):
+        self._maybe_fail("channels")
+        return list(self._channels)
+
+    async def leave(self, guild_id):
+        self.left.append(guild_id)
+
+    async def set_commands(self, commands):
+        self.commands = commands
+
+    async def exchange(self, code, redirect_uri):
+        self._maybe_fail("exchange")
+        return dict(self.token)
+
+    async def me(self, access_token):
+        return dict(self.user)

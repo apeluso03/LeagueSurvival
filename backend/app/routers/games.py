@@ -63,11 +63,7 @@ def set_role(game_id: int, body: RoleIn, ctx: Ctx = Depends(group_ctx), session:
     require_act_for(ctx, session.get(Run, game.run_id), body.player_id)
     if game.status != "pending":
         raise HTTPException(409, "That game is over")
-    a = next((a for a in rules.assignments_for(session, game.id) if a.player_id == body.player_id), None)
-    if a is None:
-        raise HTTPException(404, f"Player {body.player_id} is not in game {game_id}")
-    a.played_role = body.role
-    session.add(a)
+    rules.set_role(session, game, body.player_id, body.role)
     session.commit()
     return game_out(session, game)
 

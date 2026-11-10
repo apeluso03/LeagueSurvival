@@ -774,9 +774,9 @@ Checked against Riot's API Terms and the "Legal Jibber Jabber" fan-content polic
 - Terms of use and a privacy policy pages (built: `/legal`; extend for accounts by email once that exists).
 - Sign-in throttle moves to a shared store (Redis or the database) once there's more than one server.
 
-### 12.8 Discord (later)
+### 12.8 Discord (built, see 19)
 - Discord login (OAuth) as a second way to sign in, linked to an existing account.
-- A Discord webhook per group posting spins, eliminations, shield saves, contract wins and run recaps.
+- A Discord bot each group adds to its own server: run announcements, slash commands and buttons for its run. Ideas and the development plan are in section 19.
 
 ## 13. Milestones
 
@@ -794,7 +794,7 @@ Checked against Riot's API Terms and the "Legal Jibber Jabber" fan-content polic
 | M9 | Groups | Open sign-up, anyone can start a group and own its runs, per-group players and settings (12.4) |
 | M10 | Hosting | Postgres, deployed with HTTPS, backups, jobs outside the web process (12.5) |
 | M11 | Public launch | Production Riot key, fair polling, abuse protection, privacy and terms pages (12.6, 12.7) |
-| M12 | Discord | Discord login and per-group webhooks (12.8) |
+| M12 | Discord | The Hardcore Draft bot: per-group server link, announcements, commands and buttons, Discord login (19) |
 
 Status note (v0.3): M0 to M7 are built, plus the extras in Section 18 (esports look, comp and build suggestions, trophies, hall of shame, wrapped, recaps, player pages, stream overlay). The online lobby code + PIN idea from earlier drafts was replaced by accounts and invite links. M8 is next.
 
@@ -830,7 +830,7 @@ Status note (v0.3): M0 to M7 are built, plus the extras in Section 18 (esports l
 
 ## 16. Ideas Backlog (post-MVP)
 - More shop items: Extra Options (2 more backups next spin), buyable Revive, Mystery Box, Gift gold, cosmetics (badges, wheel colours).
-- Discord bot or webhook posting spin results, eliminations, shield saves, and contract wins (12.8).
+- Discord bot: see section 19.
 - "Graveyard" page with stats on each eliminated champion.
 - Run comparison: compare runs over time.
 - Ready check before spins and spectator mode for friends not playing (with live updates).
@@ -907,3 +907,104 @@ Learned while making the reels smooth; keep to them.
 - Comp suggestions after each spin: roles and high-elo builds (9.5).
 - Champion quick facts under each option, item reminders before the spin, streak milestones, danger meter and survival odds (10.1).
 - Live game tracking: auto picks from the live game and a broadcast-style Live tab (9.6, 10.1b).
+
+## 19. Discord Bot (built, v0.5)
+
+Status: D0 to D5 are built (19.10 has what was built and where it differs from the plan below). D6 (the "later, maybe" ideas in 19.5, and Discord verification before 100 servers) is still to do. Setup steps are in the README ("Discord bot").
+
+### 19.1 Goal
+One Hardcore Draft bot that any group can add to its own Discord server. Once added, it's tied to that group: it posts that group's run as it happens and lets the group play from Discord. It never shows one group's data in another group's server. The site stays the main place to play; the bot is the group chat's window into the run, plus quick actions.
+
+### 19.2 How a server gets tied to a group
+- **Add to server:** in Settings, the group owner clicks **Add the bot to Discord**. This opens Discord's standard install page, with the group in the `state` so the site knows which group it's for. Discord returns the server (guild) id; the owner then picks the channel for announcements.
+- **One server per group, one group per server** to start. A server hosting two groups (two friend groups in one community) can come later, with a channel per group.
+- **Unlink:** from Settings, or by removing the bot from the server (Discord tells us, and the link is deleted).
+- **Who's who:** each player links their Discord account once (Settings, "Link Discord", Discord's OAuth `identify` scope), which fills `discord_id`. This also gives Discord login (12.8). The bot then knows a Discord user is, say, the run owner or James's player, and applies the same permissions as the site (12.2). Unlinked people in the server can look but not act.
+
+### 19.3 Ideas: what the bot posts
+Each can be switched on or off per group.
+- **Spin:** who rolled what, with champion portraits, each player's options, the suggested roles and bans. One message per spin, edited as picks come in, ending as the "locked in" lineup.
+- **Game found:** "In game · Normal Draft · Watch live", linking to the Live tab once the game is found. Optionally a single scoreboard message (kills, gold lead, objectives) edited every 30 to 60 seconds, never a stream of new messages.
+- **Results:** win or loss, with champions eliminated, shield saves, the streak, revive tokens earned, gold earned per player and grades.
+- **Big moments:** streak milestones, run records, a pentakill, a contract hit, a trophy unlocked, "last champions standing" warnings when the pool gets small.
+- **Run end:** the run recap as a post-game graphic, the final wins count, the Hall of Shame.
+- **Monthly Wrapped** on the 1st.
+- **Nudges (optional):** a game pending for hours with no result, or "the Riot key expired, results won't come in by themselves" for the owner.
+
+### 19.4 Ideas: commands and buttons
+Slash commands (Discord's `/` menu) and buttons on the bot's messages:
+- **Anyone:** `/run` (the score bug: wins, streak, alive, tokens), `/pool` (alive count and recent eliminations), `/stats @player`, `/build champion role` (the high-elo build and the Mobalytics link), `/live` (the current game), `/history`.
+- **Linked players, for themselves:** `/gold`, `/shop` (buy an item), and buttons on the spin message: pick my option, set my role (the role picker from 9.6), use Reroll or Swap, arm a Blacklist, buy a Contract.
+- **Run owner:** `/spin @a @b @c`, buttons for Win / Loss / Void / Undo on a pending game, `/run new`.
+- **Ready check** before a spin: "Ready" buttons, and the owner sees who's set (also planned on the site, 12.3).
+- Replies showing private things (your gold, your items) are visible only to you (Discord's "ephemeral" messages).
+
+### 19.5 Later, maybe
+- Server roles the bot manages: "On a streak", "Run owner", a role for whoever has the most eliminations.
+- The spin reels as a short animated image in the spin message.
+- Voice channel status: "In game · 23:10 · 4/2/7".
+- One thread per game, so a busy server's main channel stays tidy.
+
+### 19.6 How it would work (architecture)
+- **Interactions over HTTP, no always-on connection.** Discord can send slash commands and button clicks as HTTPS requests to our backend (an "Interactions Endpoint URL", e.g. `/api/discord/interactions`). The bot never has to stay logged in to Discord's live gateway, so it fits the current single Railway instance. Every request is checked against Discord's signature (Ed25519, with PyNaCl) and must be answered within 3 seconds; slower work answers "thinking..." first and edits the reply afterwards.
+- **Posting:** through Discord's REST API with the bot token (`httpx`, like the Riot client), respecting Discord's rate limits (wait and retry after a 429).
+- **One event stream for everything.** What the bot posts are the same events the site's live updates need (12.3): spin, pick, lock-in, result, undo, pool changes, gold, trophies. Build that stream once: the game rules record an event, and both the WebSocket push and the Discord sender read it. Events go into an outbox table, so a Discord outage or a restart never loses or double-posts a message; a background job sends them in order.
+- **Undo:** an undone result edits its message ("Undone by the owner") rather than deleting it.
+- **No message reading.** The bot doesn't need Discord's message-content access, so it never sees the server's chat.
+
+New tables (rough):
+```
+DiscordLink        group_id (unique), guild_id (unique), channel_id, installed_by_user_id,
+                   events (JSON: which announcements are on), created_at
+DiscordMessage     group_id, kind ("spin", "live", "result", ...), ref_id (game or run id),
+                   message_id (to edit the same message instead of posting new ones)
+EventOutbox        id, group_id, type, payload (JSON), created_at, sent_at, attempts
+User.discord_id    the linked Discord account (Player.discord_id from section 8 moves to the user)
+```
+
+Secrets (Railway variables, never in the repo): `DISCORD_APP_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_SECRET`.
+
+### 19.7 Rules to follow
+- **Discord:** its Developer Terms and Policy, a privacy note for the bot (on `/legal`) and in the bot's description. Store only server, channel and message ids, and the Discord user ids of people who linked themselves. Discord requires verification (an identity check and a review) before a bot can join more than 100 servers; it can be requested from 75. Plan for it before a public launch.
+- **Riot (12.6b):** the bot shows only what the site already shows, with the same "Legal Jibber Jabber" notice in its profile. Still no cooldown tracking, and no strangers' names (opponents are their champion).
+- **Permissions it asks for:** the fewest that work: send messages, embed links, attach files, use slash commands. Nothing like manage server or read message history.
+- **Abuse:** commands are checked per user and per group; a server can only ever act on the group it's linked to.
+
+### 19.8 Development plan
+Each step is usable on its own, so it can stop after any of them.
+
+| Step | What | Done when |
+|---|---|---|
+| D0 | Setup | Discord application made; Discord accepts our interactions endpoint; a `/ping` command answers; signature checks tested |
+| D1 | Link a server | "Add the bot to Discord" in Settings, channel picker, unlink and a test message; removing the bot cleans up |
+| D2 | Announcements | Event outbox and sender; spin, result, elimination, streak, token and run-end posts with per-event switches; undo edits the message. **Most of the value for the least risk; worth shipping on its own.** |
+| D3 | Link Discord accounts | "Link Discord" in Settings and Discord login on the sign-in page; read-only commands: `/run`, `/pool`, `/stats`, `/build`, `/live` |
+| D4 | Play from Discord | Buttons on the spin message (pick, role, items), the owner's Win / Loss / Void / Undo, `/spin`, ready check, `/gold` and `/shop` |
+| D5 | Live and recaps | The game-found post with an edited live scoreboard; run recap and monthly Wrapped posts; nudges |
+| D6 | Extras | Ideas from 19.5 as wanted; Discord verification before reaching 100 servers |
+
+**Order with the rest of the plan:** D2's event stream is the same one live updates need (M8, 12.3). Building it for both at once saves doing it twice: either D2 and M8 together, or M8 first.
+
+**Testing:** a fake Discord client (like the fake Riot client in `tests/factories.py`) that records what would be posted; signature checks (good, bad, replayed); the outbox never double-posts after a restart; a permission matrix for every command and button (member, owner, unlinked user, another group's server); undo edits the right message.
+
+### 19.9 Open questions
+1. Is announcements only (D2) enough for a first version, or is playing from Discord (D4) the main draw?
+2. A shortcut for D2: the owner pastes a Discord *webhook* URL into Settings instead of adding a bot. Much simpler, with no Discord application, but no commands, buttons or Discord login. Start there, or go straight to the bot?
+3. One channel for everything, or separate channels for spins, results and recaps?
+4. When a spin starts from Discord, should the reels still play on the site and the stream overlay, or just post the result?
+5. Can players without a site account do anything from Discord (for example, pick their option), or must everyone link first?
+6. How chatty is too chatty: one edited message per game, or a new message for each step?
+7. Discord login: only a second way to sign in, or also a way to sign up (an account made from Discord, with no password)?
+
+### 19.10 What was built (v0.5)
+Answers to 19.9, as built: the full bot (no webhook step); one announcements channel; one message per spin and one per game, edited rather than reposted; acting from Discord needs a linked account; Discord login only for accounts already linked (no sign-up through Discord).
+
+- **Files:** `services/events.py` (the outbox), `services/discord_api.py` (REST, OAuth, signature check with PyNaCl), `services/discord_render.py` (every message), `services/discord_bot.py` (commands, buttons, the sender), `routers/discord.py` (interactions endpoint, OAuth, Settings), `jobs/discord_bot.py` (the loop). Frontend: `pages/SettingsDiscord.tsx`, "Sign in with Discord" on `/login`. Migration `b5e0c3f19a72`.
+- **Events:** the game rules write an `EventOutbox` row in the same transaction as the change: `spin`, `picks` (picks, roles, Reroll/Swap/Choose), `result`, `undo`, `gold` (Riot stats paid out), `game_found`, `revive`, `run_end`. The job sends them every 3 seconds, in order, rendering from the current state (so a burst of events is one edit). A failed post is retried up to 5 times; "no access" errors show in Settings. Edits of a deleted message post it again. Old events are pruned after 14 days (2 with the bot off). Live updates (12.3) can read the same stream.
+- **Messages:** spin (edited through picks, lock-in and the result), live (edited at most every 45 s, only when it changed), result (edited when gold arrives and on undo), revive, trophies (new unlocks only; a newly linked server starts from what's already earned), run recap, monthly Wrapped (days 1 to 3, once), a reminder after 3 hours without a result.
+- **Commands:** `/run /pool /stats /build /live /history /gold /shop /spin /pick /role /result /undo /ready /newrun /link`, servers only, registered on start. `/build` answers "thinking..." and fills in when the rune and item names load. Private things (gold, items, confirmations, errors) are visible only to the person.
+- **Buttons on the spin:** a role menu, My items (Reroll, Swap; Choose a Champ stays on the site), My build, and Win / Loss / Void; Undo on the result; Ready / Not yet on a ready check.
+- **Differs from 19.4:** picks stay owner-only (`/pick`), as on the site (12.2); there are no "pick my option" buttons. Picks still fill in from the live game.
+- **Removing the bot** from inside Discord isn't reported to the bot (no gateway connection): the next failed post shows in Settings, and the owner removes it there.
+- **Tests:** `tests/test_discord.py` with a fake Discord client (`tests/factories.py`): signatures and replays, permissions for every command and button, the outbox (edits, muting, retries, giving up, deleted messages), trophies, nudges, Wrapped, the live scoreboard, OAuth state tied to the browser, linking servers and accounts, Discord sign-in.
+

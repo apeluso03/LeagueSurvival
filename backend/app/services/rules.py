@@ -23,6 +23,7 @@ from app.models import (
     SpinAssignment,
     utcnow,
 )
+from app.services.events import emit, emit_for_game
 from app.services import spin as spin_logic
 
 STREAK_TOKEN_INTERVAL = 3
@@ -177,6 +178,7 @@ def end_run(session: Session, run: Run) -> Run:
     run.status = "ended"
     run.ended_at = utcnow()
     session.add(run)
+    emit(session, run.group_id, "run_end", run_id=run.id)
     session.flush()
     return run
 
@@ -247,6 +249,7 @@ def create_spin(
         item.used_in_game_id = game.id
         session.add(item)
     session.flush()
+    emit_for_game(session, game, "spin")
     return game
 
 
@@ -285,7 +288,27 @@ def set_played(session: Session, game: ChallengeGame, picks: list[Pick]) -> list
     if len(played) != len(set(played)):
         raise RuleError("Two players can't play the same champion")
     session.flush()
+    emit_for_game(session, game, "picks")
     return list(by_player.values())
+
+
+ROLES = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")
+
+
+def set_role(session: Session, game: ChallengeGame, player_id: int, role: str | None) -> SpinAssignment:
+    """The role a player is really in (autofilled, swapped lanes), so their build follows it.
+    None goes back to detecting it from the live game."""
+    _require_pending(game)
+    if role is not None and role not in ROLES:
+        raise RuleError(f"Role must be one of {ROLES}")
+    a = next((a for a in assignments_for(session, game.id) if a.player_id == player_id), None)
+    if a is None:
+        raise RuleError(f"Player {player_id} is not in game {game.id}", 404)
+    a.played_role = role
+    session.add(a)
+    session.flush()
+    emit_for_game(session, game, "picks")
+    return a
 
 
 # --- results ---------------------------------------------------------------
@@ -387,6 +410,7 @@ def apply_result(
     session.add(run)
     session.add(game)
     session.flush()
+    emit_for_game(session, game, "result")
     return game
 
 
@@ -461,6 +485,7 @@ def undo_result(session: Session, game: ChallengeGame) -> ChallengeGame:
     game.prev_win_count = game.prev_current_streak = game.prev_best_streak = None
     session.add(game)
     session.flush()
+    emit_for_game(session, game, "undo")
     return game
 
 
@@ -498,6 +523,7 @@ def use_token(session: Session, token: ReviveToken, champion_id: str) -> ReviveT
             run_id=run.id, type="revive", champion_id=champion_id, player_id=token.player_id, token_id=token.id
         )
     )
+    emit(session, run.group_id, "revive", run_id=run.id, champion_id=champion_id, player_id=token.player_id)
     session.flush()
     return token
 

@@ -11,9 +11,10 @@ from sqlmodel import Session, select
 from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
-from app.routers import account, champions, fun, games, live, players, privacy, riot, runs, settings, shop, stats, tokens
+from app.routers import account, champions, discord, fun, games, live, players, privacy, riot, runs, settings, shop, stats, tokens
 from app.routers.access import current_user
 from app.jobs import crawler, live_tracker, poller
+from app.jobs import discord_bot as discord_job
 from app.services import ddragon, meta
 from app.services.rules import RuleError
 
@@ -64,6 +65,7 @@ async def lifespan(_app: FastAPI):
             asyncio.create_task(poller.run_forever(engine)),
             asyncio.create_task(crawler.run_forever(engine)),
             asyncio.create_task(live_tracker.run_forever(engine)),
+            asyncio.create_task(discord_job.run_forever(engine)),
             asyncio.create_task(import_positions_if_missing()),
         ]
     yield
@@ -102,8 +104,10 @@ def health():
     return {"ok": True}
 
 
-# Signing in and invite links work signed out; everything else needs an account.
+# Signing in and invite links work signed out; everything else needs an account. The Discord
+# routes check for themselves (Discord's own requests are signed, not signed in).
 app.include_router(account.router)
+app.include_router(discord.router)
 for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun, live, privacy):
     app.include_router(module.router, dependencies=[Depends(current_user)])
 

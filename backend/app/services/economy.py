@@ -6,7 +6,7 @@ A balance is always the sum of the player's non-undone ledger rows for the run.
 from sqlmodel import Session, col, func, select
 
 from app.models import ChallengeGame, GoldLedger, PlayerMatchStats, Run
-from app.services import shop_config
+from app.services import events, shop_config
 
 
 def multikill_counts(pms: PlayerMatchStats, mode: str) -> dict[str, int]:
@@ -104,6 +104,8 @@ def award_game(session: Session, game: ChallengeGame) -> list[GoldLedger]:
         breakdown = compute_gold(pms, cfg)
         rows.append(record(session, run.id, a.player_id, breakdown["total"], "game", game_id=game.id, breakdown=breakdown))
         contracts.resolve_for_player(session, game, a.player_id, pms, cfg)
+    if rows:
+        events.emit(session, run.group_id, "gold", game_id=game.id, run_id=run.id)
     return rows
 
 
