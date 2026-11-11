@@ -66,7 +66,7 @@ export function EliminationMoment({ game, onDone }: { game: Game; onDone: () => 
       role="dialog"
       aria-label={lost ? `${lost} champion${lost > 1 ? 's' : ''} eliminated` : 'Shield saved a champion'}
     >
-      <ReplayChrome tag={`Replay · Game ${game.id}`} />
+      <ReplayChrome tag={`Replay · Game ${game.number}`} />
       <BroadcastBanner color={lost ? '#c8102e' : 'var(--color-hex-400)'}>
         <h2 className="elim-title font-display text-3xl tracking-[0.2em] text-white uppercase sm:text-5xl">{lost ? 'Eliminated' : 'Saved!'}</h2>
       </BroadcastBanner>

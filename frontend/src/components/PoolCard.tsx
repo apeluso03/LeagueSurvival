@@ -1,3 +1,4 @@
+import { useGameNumber } from '../hooks/queries'
 import { memo } from 'react'
 import { loadingUrl } from '../lib/champions'
 import { classColor } from '../lib/reel'
@@ -27,10 +28,10 @@ function listsText(who: string[]) {
   return `On ${who.length} lists`
 }
 
-function statLine(e: PoolEntry, l: ChampionLine | undefined, players: Map<number, Player>) {
+function statLine(e: PoolEntry, l: ChampionLine | undefined, players: Map<number, Player>, gameNo: (id: number) => number | string) {
   if (e.status === 'eliminated') {
     const by = e.eliminated_by_player_id ? names([e.eliminated_by_player_id], players)[0] : null
-    const game = e.eliminated_in_game_id ? `game #${e.eliminated_in_game_id}` : null
+    const game = e.eliminated_in_game_id ? `game ${gameNo(e.eliminated_in_game_id)}` : null
     return [by ? `Lost by ${by}` : 'Eliminated', game].filter(Boolean).join(' · ')
   }
   if (l?.played) return `Played ${l.played} · ${l.wins}–${l.losses}`
@@ -43,6 +44,7 @@ function statLine(e: PoolEntry, l: ChampionLine | undefined, players: Map<number
  * Memoized, so typing in search only re-renders the cards that change.
  */
 export const PoolCard = memo(function PoolCard({ entry: e, line: l, players, compact, action, onOpen, onAction }: Props) {
+  const gameNo = useGameNumber()
   const dead = e.status === 'eliminated'
   const color = classColor(e.tags)
   const art = loadingUrl(e)
@@ -85,7 +87,7 @@ export const PoolCard = memo(function PoolCard({ entry: e, line: l, players, com
               {e.tags.join(' · ')}
             </span>
           )}
-          <span className={`truncate text-slate-300 ${compact ? 'text-[10px]' : 'mt-0.5 text-xs'}`}>{statLine(e, l, players)}</span>
+          <span className={`truncate text-slate-300 ${compact ? 'text-[10px]' : 'mt-0.5 text-xs'}`}>{statLine(e, l, players, gameNo)}</span>
           <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-white/10" aria-hidden>
             {rate !== null && (
               <span

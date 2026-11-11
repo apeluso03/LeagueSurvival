@@ -69,7 +69,7 @@ export function WinMoment({ game, streak, onDone }: { game: Game; streak: number
       aria-label={`Victory. Streak ${streak}`}
     >
       <div className="win-burst" aria-hidden />
-      <ReplayChrome tag={`Replay · Game ${game.id}`} />
+      <ReplayChrome tag={`Replay · Game ${game.number}`} />
       <BroadcastBanner color="var(--color-hex-400)">
         <h2 className="win-title font-display relative text-5xl tracking-[0.2em] text-white uppercase sm:text-7xl">Victory</h2>
       </BroadcastBanner>

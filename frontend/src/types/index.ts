@@ -106,6 +106,7 @@ export interface Assignment {
 export type GameStatus = 'pending' | 'won' | 'lost' | 'void'
 
 export interface Game {
+  number: number // its place in the run, as players see it (the id keeps counting across runs)
   id: number
   run_id: number
   created_at: string
@@ -848,6 +849,7 @@ export interface Headstone {
   image_url: string
   eliminated_at: string | null
   game_id: number | null // null: removed by hand
+  game_number: number | null // its number within the run
   player_id: number | null // who was on it when it fell
   manual: boolean
   last_game: { kills: number; deaths: number; assists: number; grade: string | null; duration: number; team_position: Role | null } | null

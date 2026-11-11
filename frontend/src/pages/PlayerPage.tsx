@@ -6,7 +6,7 @@ import { GoldBadge } from '../components/Gold'
 import { SkullIcon } from '../components/icons'
 import { ItemArt } from '../components/ItemArt'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Stat } from '../components/ui'
-import { useAchievements, useAction, useActiveRun, useChampionMap, usePlayerMap, useRuns } from '../hooks/queries'
+import { useAchievements, useAction, useActiveRun, useChampionMap, usePlayerMap, useRuns, useGameNumber } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { loadingUrl, splashUrl } from '../lib/champions'
@@ -197,6 +197,7 @@ function GoldChart({ points }: { points: number[] }) {
 }
 
 function RecentGames({ profile: p }: { profile: PlayerProfile }) {
+  const gameNo = useGameNumber()
   const champs = useChampionMap()
   return (
     <Section title={`Games (${p.games.length})`}>
@@ -224,7 +225,7 @@ function RecentGames({ profile: p }: { profile: PlayerProfile }) {
                     {g.token_earned && <span className="text-gold-300" title="Earned a revive token">✦</span>}
                   </span>
                   <span className="text-xs text-slate-500">
-                    #{g.game_id} · {new Date(g.created_at).toLocaleDateString()}
+                    Game {gameNo(g.game_id)} · {new Date(g.created_at).toLocaleDateString()}
                   </span>
                 </div>
                 {g.kda && <span className="hidden tabular-nums text-slate-300 sm:inline">{g.kda.join(' / ')}</span>}

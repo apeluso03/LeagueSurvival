@@ -56,7 +56,7 @@ export function LockInMoment({ game, onDone }: { game: Game; onDone: () => void 
           </div>
         ))}
       </div>
-      <ReplayChrome tag={`Draft complete · Game ${game.id}`} color="var(--color-hex-500)" />
+      <ReplayChrome tag={`Draft complete · Game ${game.number}`} color="var(--color-hex-500)" />
       <BroadcastBanner color="var(--color-hex-400)" className="lockin-title">
         <h2 className="font-display text-4xl tracking-[0.25em] text-white uppercase sm:text-5xl">Locked in</h2>
       </BroadcastBanner>
@@ -73,7 +73,7 @@ export function LoadingScreen({ game, onEdit, builds }: { game: Game; onEdit?: (
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-2 px-1">
-        <h2 className="text-xs font-semibold tracking-[0.16em] text-slate-400 uppercase">Loading into game {game.id}</h2>
+        <h2 className="text-xs font-semibold tracking-[0.16em] text-slate-400 uppercase">Loading into game {game.number}</h2>
         {onEdit && (
           <button className="text-xs text-slate-400 underline hover:text-slate-200" onClick={onEdit}>
           Change picks

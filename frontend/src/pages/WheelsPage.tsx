@@ -790,7 +790,7 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
     <section className="card flex flex-col gap-2 px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="broadcast-tag shrink-0" style={{ ['--tag' as string]: game.needs_review ? '#b8730c' : 'var(--color-hex-500)' }}>
-          Game {game.id} · {game.needs_review ? 'check this one' : 'in progress'}
+          Game {game.number} · {game.needs_review ? 'check this one' : 'in progress'}
         </span>
         {!game.needs_review && <AutoStatus game={game} />}
         {!canManage && (
@@ -822,7 +822,7 @@ function PendingGamePanel({ game, onResolved }: { game: Game; onResolved: (g: Ga
           <div className="h-16 sm:hidden" aria-hidden />
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-[#06080c]/97 px-4 py-3 sm:hidden">
             <div className="mx-auto flex max-w-7xl items-center gap-2">
-              <span className="mr-auto text-xs text-slate-400">Game #{game.id}</span>
+              <span className="mr-auto text-xs text-slate-400">Game {game.number}</span>
               {resultButtons}
             </div>
           </div>

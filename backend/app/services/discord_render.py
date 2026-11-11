@@ -129,7 +129,7 @@ def spin_intro(session: Session, game: ChallengeGame) -> dict:
     n = Names(session)
     names = [n.pname(a.player_id) for a in rules.assignments_for(session, game.id)]
     who = ", ".join(names[:-1]) + f" and {names[-1]}" if len(names) > 1 else "".join(names)
-    return {"content": f"🎰 **Game {game.id}**: spinning for {who}...", "allowed_mentions": {"parse": []}}
+    return {"content": f"🎰 **Game {rules.game_number(session, game)}**: spinning for {who}...", "allowed_mentions": {"parse": []}}
 
 
 def spin_message(session: Session, game: ChallengeGame) -> dict:
@@ -155,7 +155,7 @@ def spin_message(session: Session, game: ChallengeGame) -> dict:
         state = {"won": "Victory", "lost": "Defeat", "void": "Voided"}[game.status]
         color = {"won": GREEN, "lost": RED, "void": GREY}[game.status]
     header = {
-        "title": f"Game {game.id} · {state}",
+        "title": f"Game {rules.game_number(session, game)} · {state}",
         "description": run_line(session, run),
         "color": color,
         "footer": FOOTER,
@@ -224,7 +224,7 @@ def result_message(session: Session, game: ChallengeGame) -> dict:
         return reply(
             embeds=[
                 {
-                    "title": f"Game {game.id} · result undone",
+                    "title": f"Game {rules.game_number(session, game)} · result undone",
                     "description": "The owner undid this result; the game is waiting for a result again.",
                     "color": GREY,
                     "footer": FOOTER,
@@ -284,7 +284,7 @@ def result_message(session: Session, game: ChallengeGame) -> dict:
     if game.status in ("won", "lost") and not game.riot_match_id:
         fields.append({"name": "Gold", "value": "Comes in once the game is found in Riot's match history.", "inline": False})
 
-    embed = {"title": f"Game {game.id} · {title}", "description": "\n".join(desc), "color": color, "fields": fields, "footer": FOOTER}
+    embed = {"title": f"Game {rules.game_number(session, game)} · {title}", "description": "\n".join(desc), "color": color, "fields": fields, "footer": FOOTER}
     url = link("/history")
     if url:
         embed["url"] = url
@@ -302,10 +302,10 @@ def live_message(session: Session, game: ChallengeGame, static: dict | None = No
     row_ = session.get(LiveGame, game.id)
     out = live.live_out(session, row_, static)
     if out is None:
-        return reply(embeds=[{"title": f"Game {game.id} · looking for the game", "color": GREY}])
+        return reply(embeds=[{"title": f"Game {rules.game_number(session, game)} · looking for the game", "color": GREY}])
     st = out.get("state")
     over = out["ended_at"] is not None
-    title = f"{'Game over' if over else 'In game'} · Game {game.id}"
+    title = f"{'Game over' if over else 'In game'} · Game {rules.game_number(session, game)}"
     if out["queue_id"] is not None:
         title += f" · {QUEUES.get(out['queue_id'], 'Queue ' + str(out['queue_id']))}"
     lines = []
@@ -422,11 +422,11 @@ def wrapped_message(session: Session, group_id: int, month: str) -> dict | None:
     return reply(embeds=[embed])
 
 
-def nudge_message(game: ChallengeGame, hours: int) -> dict:
+def nudge_message(game: ChallengeGame, hours: int, number: int | None = None) -> dict:
     return reply(
         embeds=[
             {
-                "title": f"Game {game.id} is still waiting for a result",
+                "title": f"Game {number or game.id} is still waiting for a result",
                 "description": f"It's been about {hours} hours. If Riot can't find it, the run owner can record it with "
                 "the buttons on the spin, `/result`, or on the site.",
                 "color": GREY,
@@ -458,7 +458,7 @@ def run_status(session: Session, run: Run | None) -> dict:
     pending = rules.pending_game(session, run.id)
     desc = [run_line(session, run), f"Best streak **{run.best_streak}** · {run.options_per_player} options per player"]
     if pending:
-        desc.append(f"Game {pending.id} is waiting for a result.")
+        desc.append(f"Game {rules.game_number(session, pending)} is waiting for a result.")
     embed = {"title": run.name, "description": "\n".join(desc), "color": BLUE, "footer": FOOTER}
     url = link("/")
     if url:
@@ -526,10 +526,11 @@ def history(session: Session, group_id: int) -> dict:
     if not games:
         return reply("No games yet.", private=True)
     lines = []
+    nums = rules.game_numbers(session, {g.run_id for g in games})
     for g in games:
         mark = {"won": "🟢", "lost": "🔴", "void": "⚪"}[g.status]
         picks = ", ".join(n.cname(a.played_champion_id) for a in rules.assignments_for(session, g.id) if a.played_champion_id)
-        lines.append(f"{mark} Game {g.id} · {picks or '-'}")
+        lines.append(f"{mark} Game {nums.get(g.id, g.id)} · {picks or '-'}")
     embed = {"title": "Recent games", "description": "\n".join(lines), "color": BLUE, "footer": FOOTER}
     url = link("/history")
     if url:

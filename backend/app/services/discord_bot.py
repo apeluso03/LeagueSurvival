@@ -405,7 +405,7 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
         game = rules.create_spin(session, run, ids)
         if _announcing(who.link, "spins"):
             # The bot's spin post (the reels, then the draft) comes from the outbox like a site spin.
-            text = f"Spun for game {game.id}. The reels are spinning in <#{who.link.channel_id}>."
+            text = f"Spun for game {rules.game_number(session, game)}. The reels are spinning in <#{who.link.channel_id}>."
             return Answer({"type": MESSAGE, "data": render.reply(text, private=True)}, commit=True)
         return _spin_reply(session, game)
     if name == "pick":
@@ -422,14 +422,14 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
         _need_manager(ctx, run)
         game = _pending(session, run)
         rules.apply_result(session, game, str(opts["outcome"]), source="manual")
-        return Answer({"type": MESSAGE, "data": render.reply(f"Game {game.id}: {_RESULT_TEXT[game.status]}.", private=True)}, commit=True)
+        return Answer({"type": MESSAGE, "data": render.reply(f"Game {rules.game_number(session, game)}: {_RESULT_TEXT[game.status]}.", private=True)}, commit=True)
     if name == "undo":
         _need_manager(ctx, run)
         game = rules.latest_game(session, run.id)
         if game is None or game.status == "pending":
             raise Denied("There's no result to undo.")
         rules.undo_result(session, game)
-        return Answer({"type": MESSAGE, "data": render.reply(f"Undid game {game.id}'s result. It's waiting for a result again.", private=True)}, commit=True)
+        return Answer({"type": MESSAGE, "data": render.reply(f"Undid game {rules.game_number(session, game)}'s result. It's waiting for a result again.", private=True)}, commit=True)
     if name == "ready":
         settings = group_settings(session, group_id)
         players = list(settings.last_used_player_ids or []) or [
@@ -541,11 +541,11 @@ def _component(session: Session, who: Who, data: dict) -> Answer:
     if action == "result":
         _need_manager(ctx, run)
         rules.apply_result(session, game, args[1], source="manual")
-        return Answer({"type": MESSAGE, "data": render.reply(f"Game {game.id}: {_RESULT_TEXT[game.status]}.", private=True)}, commit=True)
+        return Answer({"type": MESSAGE, "data": render.reply(f"Game {rules.game_number(session, game)}: {_RESULT_TEXT[game.status]}.", private=True)}, commit=True)
     if action == "undo":
         _need_manager(ctx, run)
         rules.undo_result(session, game)
-        return Answer({"type": MESSAGE, "data": render.reply(f"Undid game {game.id}'s result.", private=True)}, commit=True)
+        return Answer({"type": MESSAGE, "data": render.reply(f"Undid game {rules.game_number(session, game)}'s result.", private=True)}, commit=True)
 
     if action in ("use", "swap"):
         item = session.get(InventoryItem, int(args[1]))
@@ -893,7 +893,7 @@ async def post_nudges(new_session: Callable[[], Session], client) -> int:
             if game is None or now - game.created_at < NUDGE_AFTER or session.get(DiscordMessage, (link.group_id, "nudge", game.id)):
                 continue
             hours = int((now - game.created_at).total_seconds() // 3600)
-            posts.append(_Post(link.group_id, link.channel_id, render.nudge_message(game, hours), kind="nudge", ref_id=game.id))
+            posts.append(_Post(link.group_id, link.channel_id, render.nudge_message(game, hours, rules.game_number(session, game)), kind="nudge", ref_id=game.id))
         session.commit()
     await _send(new_session, client, posts)
     return len(posts)

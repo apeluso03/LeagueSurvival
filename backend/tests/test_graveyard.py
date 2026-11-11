@@ -71,7 +71,7 @@ def test_revived_champions_rise_and_count_deaths(session):
 
 def test_epitaphs():
     base = dict(
-        champion_id="X", name="X", title="", tags=[], image_url="", eliminated_at=None, game_id=7, player_id=1, manual=False,
+        champion_id="X", name="X", title="", tags=[], image_url="", eliminated_at=None, game_id=7, game_number=3, player_id=1, manual=False,
         last_game=None, offered=2, played=3, wins=0, losses=1, games_survived=4, deaths=1, revived=0, shields_broken=0, epitaph="",
     )
     h = lambda **kw: graveyard.Headstone(**{**base, **kw})  # noqa: E731
@@ -82,7 +82,7 @@ def test_epitaphs():
     assert graveyard.epitaph(h(last_game=lg(deaths=11))).startswith("Died 11 times")
     assert graveyard.epitaph(h(revived=2)) == "Came back 2 times. Not this time."
     assert graveyard.epitaph(h(wins=4)) == "4 wins before the fall."
-    assert graveyard.epitaph(h()) == "Fell in game 7."
+    assert graveyard.epitaph(h()) == "Fell in game 3."
 
 
 def test_api(client, session):

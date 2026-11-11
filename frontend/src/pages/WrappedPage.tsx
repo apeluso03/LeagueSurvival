@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { LowerThird } from '../components/LowerThird'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
-import { useChampionMap, usePlayerMap } from '../hooks/queries'
+import { useChampionMap, usePlayerMap, useGameNumber } from '../hooks/queries'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { splashUrl } from '../lib/champions'
 import { num, pct } from '../lib/stats'
@@ -64,6 +64,7 @@ export function WrappedPage() {
 }
 
 function Story({ w }: { w: Wrapped }) {
+  const gameNo = useGameNumber()
   const champs = useChampionMap()
   const players = usePlayerMap()
   const name = useCallback((pid: number) => players.get(pid)?.display_name ?? `Player ${pid}`, [players])
@@ -223,7 +224,7 @@ function Story({ w }: { w: Wrapped }) {
             <span className="wrapped-kicker">The game we don't talk about</span>
             {big(`${g.kills}/${g.deaths}/${g.assists}`)}
             <p className="wrapped-line">
-              {name(g.player_id)} on {champName(g.champion_id)}, game {g.game_id}. {g.won ? 'Somehow they won.' : 'It went as you think.'}
+              {name(g.player_id)} on {champName(g.champion_id)}, game {gameNo(g.game_id)}. {g.won ? 'Somehow they won.' : 'It went as you think.'}
             </p>
           </>
         ),

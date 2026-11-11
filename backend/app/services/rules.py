@@ -8,6 +8,7 @@ import secrets
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from sqlalchemy.orm import object_session
 from sqlmodel import Session, col, select
 
 from app.models import (
@@ -76,6 +77,31 @@ def assignments_for(session: Session, game_id: int) -> list[SpinAssignment]:
     )
 
 
+def game_numbers(session: Session, run_ids: Iterable[int]) -> dict[int, int]:
+    """Each game's number within its run, as players see it: won and lost games count 1, 2, 3...
+    A pending game shows the next number; a voided one shares the number of the game after it.
+    (The database id keeps counting across every run and group, so it isn't shown.)"""
+    ids = list(run_ids)
+    if not ids:
+        return {}
+    out: dict[int, int] = {}
+    played: dict[int, int] = {}
+    for gid, rid, status in session.exec(
+        select(ChallengeGame.id, ChallengeGame.run_id, ChallengeGame.status)
+        .where(col(ChallengeGame.run_id).in_(ids))
+        .order_by(col(ChallengeGame.id))
+    ).all():
+        out[gid] = played.get(rid, 0) + 1
+        if status in ("won", "lost"):
+            played[rid] = out[gid]
+    return out
+
+
+def game_number(session: Session, game: ChallengeGame) -> int:
+    """This game's number within its run (see game_numbers)."""
+    return game_numbers(session, [game.run_id]).get(game.id, game.id)
+
+
 def _require_active(run: Run) -> None:
     if run.status != "active":
         raise RuleError("This run has ended", 409)
@@ -83,7 +109,8 @@ def _require_active(run: Run) -> None:
 
 def _require_pending(game: ChallengeGame) -> None:
     if game.status != "pending":
-        raise RuleError(f"Game {game.id} is already resolved ({game.status})", 409)
+        s = object_session(game)
+        raise RuleError(f"Game {game_number(s, game) if s else game.id} is already resolved ({game.status})", 409)
 
 
 def _validate_players(session: Session, player_ids: list[int]) -> None:
@@ -136,7 +163,7 @@ def delete_run(session: Session, run: Run) -> None:
     remaining run becomes selected."""
     from sqlmodel import delete
 
-    from app.models import AppSettings, Contract, GoldLedger, LiveGame
+    from app.models import AppSettings, Contract, DailyPlay, DailyPuzzle, DiscordMessage, GoldLedger, LiveGame
 
     game_ids = list(session.exec(select(ChallengeGame.id).where(ChallengeGame.run_id == run.id)).all())
     item_ids = list(session.exec(select(InventoryItem.id).where(InventoryItem.run_id == run.id)).all())
@@ -146,6 +173,11 @@ def delete_run(session: Session, run: Run) -> None:
         pms.challenge_game_id = None
         session.add(pms)
     # Children before parents (SQLite enforces the foreign keys).
+    puzzles = list(session.exec(select(DailyPuzzle.id).where(col(DailyPuzzle.game_id).in_(game_ids))).all())
+    session.exec(delete(DailyPlay).where(col(DailyPlay.puzzle_id).in_(puzzles)))
+    session.exec(delete(DailyPuzzle).where(col(DailyPuzzle.id).in_(puzzles)))
+    session.exec(delete(DiscordMessage).where(col(DiscordMessage.group_id) == run.group_id, col(DiscordMessage.ref_id).in_(game_ids), col(DiscordMessage.kind) != "ready"))
+    session.exec(delete(DiscordMessage).where(col(DiscordMessage.group_id) == run.group_id, col(DiscordMessage.ref_id) == run.id, col(DiscordMessage.kind) == "ready"))
     session.exec(delete(PoolEntry).where(col(PoolEntry.run_id) == run.id))
     session.exec(delete(PoolEvent).where(col(PoolEvent.run_id) == run.id))
     session.exec(delete(GoldLedger).where(col(GoldLedger.run_id) == run.id))
@@ -231,7 +263,7 @@ def create_spin(
     existing = pending_game(session, run.id)
     if existing:
         raise RuleError(
-            f"Game {existing.id} is still pending. Record its result or void it first.", 409
+            f"Game {game_number(session, existing)} is still pending. Record its result or void it first.", 409
         )
     from app.services import shop  # local: shop imports this module
 

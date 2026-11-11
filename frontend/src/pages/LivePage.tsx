@@ -17,6 +17,7 @@ import {
   usePlayerMap,
   usePlayers,
   usePool,
+  useGameNumber,
 } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
 import {
@@ -80,6 +81,7 @@ function NotLive({ pending }: { pending: boolean }) {
 }
 
 function Live({ live, preview }: { live: LiveGame; preview?: ReactNode }) {
+  const gameNo = useGameNumber()
   const st = live.state
   const ended = live.ended_at != null
   return (
@@ -98,7 +100,7 @@ function Live({ live, preview }: { live: LiveGame; preview?: ReactNode }) {
           {ended ? (st?.result ? `Game over · ${st.result === 'Win' ? 'Victory' : 'Defeat'}` : 'Game over') : 'Live'}
         </span>
         <h1 className="text-lg text-white">
-          {preview ? 'Sample game' : `Game ${live.game_id}`}
+          {preview ? 'Sample game' : `Game ${gameNo(live.game_id)}`}
           {live.queue_id != null && <span className="text-slate-400"> · {queueName(live.queue_id)}</span>}
         </h1>
         <span className="ml-auto text-xs text-slate-500">
