@@ -205,9 +205,10 @@ A daily guessing game built from your group's own games, playable on the **Daily
 - **The clue:** the champion, role, game length and queue.
 - **The questions,** in order:
   - win or loss? (1 try, 1 point);
-  - who was piloting? (2 tries, 2 or 1 points);
-  - the K/D/A (4 tries, 4 to 1 points; each number says higher or lower, and amber means within 2);
-  - the grade (3 tries, 3 to 1 points, higher or lower). Games without a grade skip this one.
+  - who was piloting? (2 points);
+  - the K/D/A (4 points; each number says higher or lower, and amber means within 2);
+  - the grade (3 points, higher or lower). Games without a grade skip this one.
+  - Apart from win or loss, you keep guessing until you're right, and each wrong guess costs a point (never below 0 for that question).
 - **After you finish:** the answer, your score out of 10, a spoiler-free emoji result to share, today's leaderboard and your streak.
 - **One go per person per day:** your guesses are the same on the site and in Discord.
 - **In Discord:** `/daily` plays it privately (buttons, menus and a form for the K/D/A), **Share my result** posts your emoji result, and if the group turns it on, the bot posts each new puzzle with yesterday's answer and scores.

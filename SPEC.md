@@ -1021,11 +1021,11 @@ A daily guessing game in the spirit of Bausdle, built from a group's own run his
 | # | Question | Tries | Points | Feedback |
 |---|---|---|---|---|
 | 1 | Win or loss? | 1 | 1 | right / wrong |
-| 2 | Who was piloting? (any player in the group) | 2 | 2, 1 | right / wrong |
-| 3 | K / D / A | 4 | 4, 3, 2, 1 | per number: right, or higher / lower; "close" within 2 |
-| 4 | Grade (S+ to D) | 3 | 3, 2, 1 | right, or higher / lower; "close" one grade off |
+| 2 | Who was piloting? (any player in the group) | until right | 2, -1 per wrong guess | right / wrong |
+| 3 | K / D / A | until right | 4, -1 per wrong guess | per number: right, or higher / lower; "close" within 2 |
+| 4 | Grade (S+ to D) | until right | 3, -1 per wrong guess | right, or higher / lower; "close" one grade off |
 
-- Questions go in order; each ends when it's right or out of tries. A game without a grade skips question 4 (out of 7).
+- Questions go in order; each ends when it's right (win or loss after its one try). A question never scores below 0. A game without a grade skips question 4 (out of 7).
 - One go per account per day. Only today's puzzle can be played.
 - **After finishing:** the answer, the score, a spoiler-free share text (🟩 right, 🟨 close, ⬛ off, 🟥 wrong), the day's leaderboard (best score first, then who finished first) and the streak (days in a row finished).
 

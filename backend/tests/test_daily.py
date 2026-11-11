@@ -118,14 +118,33 @@ def test_hints_tries_and_points(session, history, owner):
     hints = [(p["hint"], p["close"]) for p in kda["guesses"][0]["parts"]]
     assert hints == [("lower", True), ("exact", False), ("higher", False)]
     for guess in ([7, 2, 10], [7, 2, 12], [7, 2, 20]):
-        daily.guess(session, puzzle, owner, "kda", guess)  # out of tries: 0 points
+        daily.guess(session, puzzle, owner, "kda", guess)  # no limit on guesses, -1 point each
+    kda = next(q for q in daily.view(session, puzzle, owner)["questions"] if q["id"] == "kda")
+    assert (kda["tries"], kda["worth"], kda["finished"]) == (None, 0, False)
+    daily.guess(session, puzzle, owner, "kda", [7, 2, 11])  # right after 4 misses: 0 points
     daily.guess(session, puzzle, owner, "grade", "A+")
     grade = next(q for q in daily.view(session, puzzle, owner)["questions"] if q["id"] == "grade")
     assert (grade["guesses"][0]["hint"], grade["guesses"][0]["close"]) == ("higher", True)  # S- is one better
-    daily.guess(session, puzzle, owner, "grade", "S-")  # second try: 2 points
+    assert grade["worth"] == 2
+    daily.guess(session, puzzle, owner, "grade", "S-")  # one miss: 2 points
     v = daily.view(session, puzzle, owner)
     assert v["done"] and v["score"] == 0 + 1 + 0 + 2
-    assert v["share"].splitlines()[1:] == ["Win or loss: 🟥", "Who was piloting: 🟥🟩", "K / D / A: 🟨🟩⬛ 🟩🟩🟨 🟩🟩🟨 🟩🟩⬛", "Grade: 🟨🟩"]
+    assert v["share"].splitlines()[1:] == [
+        "Win or loss: 🟥",
+        "Who was piloting: 🟥🟩",
+        "K / D / A: 🟨🟩⬛ 🟩🟩🟨 🟩🟩🟨 🟩🟩⬛ 🟩🟩🟩",
+        "Grade: 🟨🟩",
+    ]
+
+
+def test_kda_misses_cost_a_point_each(session, history, owner):
+    puzzle = pick(session, "G1", 1)
+    daily.guess(session, puzzle, owner, "result", "win")
+    daily.guess(session, puzzle, owner, "pilot", 1)
+    daily.guess(session, puzzle, owner, "kda", [7, 2, 12])
+    daily.guess(session, puzzle, owner, "kda", [7, 2, 11])  # one miss: 3 of 4
+    kda = next(q for q in daily.view(session, puzzle, owner)["questions"] if q["id"] == "kda")
+    assert (kda["solved"], kda["points"]) == (True, 3)
 
 
 def test_bad_guesses_are_refused(session, history, owner):

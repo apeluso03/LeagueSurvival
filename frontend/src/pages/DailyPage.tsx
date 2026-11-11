@@ -137,7 +137,6 @@ function QuestionCard({
   onGuess: (value: string | number | number[]) => void
 }) {
   const names = new Map(v.players.map((p) => [p.id, p.name]))
-  const left = q.tries - q.guesses.length
   const locked = !active && !q.finished
   return (
     <li className={`card flex flex-col gap-2.5 p-4 ${locked ? 'opacity-45' : ''} ${active ? 'ring-1 ring-hex-400/50' : ''}`}>
@@ -145,7 +144,9 @@ function QuestionCard({
         <span className="text-xs font-bold text-slate-500">{n}</span>
         <h2 className="text-sm font-semibold text-white">{q.label}</h2>
         <span className="ml-auto text-xs text-slate-400 tabular-nums">
-          {q.finished ? `${q.points} / ${q.tries} pts` : `${left} ${left === 1 ? 'try' : 'tries'} left`}
+          {q.finished
+            ? `${q.points} / ${q.max_points} pts`
+            : `worth ${q.worth} ${q.worth === 1 ? 'pt' : 'pts'}${q.tries == null && q.worth > 0 ? ' · -1 per wrong guess' : ''}`}
         </span>
       </div>
       {q.guesses.length > 0 && (

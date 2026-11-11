@@ -614,8 +614,9 @@ def daily_view(session: Session, v: dict, private: bool = False) -> dict:
     components = []
     current = next((q for q in v["questions"] if q["id"] == v["current"]), None)
     if current:
-        left = current["tries"] - len(current["guesses"])
-        lines.append(f"➡️ **{current['label']}** · {left} {'try' if left == 1 else 'tries'} left")
+        worth = current["worth"]
+        extra = " · -1 per wrong guess" if current["tries"] is None and worth > 0 else ""
+        lines.append(f"➡️ **{current['label']}** · worth {worth} {'point' if worth == 1 else 'points'}{extra}")
         if current["id"] in ("kda", "grade"):
             lines.append("-# ⬆️⬇️ the answer is higher or lower · 🔼🔽 close (within 2, or one grade)")
         guessed = {g["value"] for g in current["guesses"]} if current["id"] != "kda" else set()
