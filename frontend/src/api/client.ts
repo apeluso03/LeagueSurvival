@@ -23,6 +23,7 @@ import type {
   PlayerProfile,
   RunRecap,
   ChampionReport,
+  Graveyard,
   Game,
   GoldInfo,
   InventoryItem,
@@ -42,6 +43,8 @@ import type {
   SpinResult,
   SyncResult,
 } from '../types'
+
+import { CLIENT_ID } from '../lib/liveUpdates'
 
 const UNREACHABLE = "Can't reach the backend. Is it running?"
 
@@ -69,7 +72,8 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   try {
     res = await fetch(`/api${path}`, {
       method,
-      headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+      // X-Client-Id: live updates name the tab behind each change, so it can skip its own (lib/liveUpdates).
+      headers: body === undefined ? { 'X-Client-Id': CLIENT_ID } : { 'Content-Type': 'application/json', 'X-Client-Id': CLIENT_ID },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
@@ -174,6 +178,7 @@ export const api = {
   refreshPositions: () => post<{ count: number }>('/meta/positions/refresh'),
   comp: (championIds: string[], exclude: string[] = [], roles: Record<string, Role> = {}) =>
     post<CompSuggestion>('/comp', { champion_ids: championIds, exclude, roles }),
+  graveyard: (runId: number) => get<Graveyard>(`/runs/${runId}/graveyard`),
   championLines: (runId: number) => get<Record<string, ChampionLine>>(`/runs/${runId}/champion-lines`),
   eliminate: (runId: number, championId: string) => post<Run>(`/runs/${runId}/pool/${championId}/eliminate`),
   revive: (runId: number, championId: string, tokenId?: number) =>

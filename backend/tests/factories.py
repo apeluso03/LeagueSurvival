@@ -139,6 +139,9 @@ class FakeDiscord:
         self.posts: list[tuple[str, dict]] = []  # (channel_id, message)
         self.edits: list[tuple[str, str, dict]] = []  # (channel_id, message_id, message)
         self.replies: list[tuple[str, dict]] = []
+        self.reels: list[tuple[str, dict, str, bytes]] = []  # posts with a file: (channel, message, name, data)
+        self.reply_files: list[tuple[str, str, bytes]] = []  # (token, name, data)
+        self.followups: list[tuple[str, dict]] = []
         self.commands: list[dict] | None = None
         self.left: list[str] = []
         self.fail: dict = {}
@@ -151,8 +154,11 @@ class FakeDiscord:
         if name in self.fail:
             raise self.fail[name]
 
-    async def post(self, channel_id, message):
+    async def post(self, channel_id, message, files=None):
         self._maybe_fail("post")
+        if files:  # the spin reels: kept apart so `posts` stays the messages the bot edits
+            self.reels += [(channel_id, message, name, data) for name, data in files]
+            return f"r{len(self.reels)}"
         self._next += 1
         self.posts.append((channel_id, message))
         return f"m{self._next}"
@@ -161,8 +167,12 @@ class FakeDiscord:
         self._maybe_fail("edit")
         self.edits.append((channel_id, message_id, message))
 
-    async def edit_reply(self, token, message):
+    async def edit_reply(self, token, message, files=None):
         self.replies.append((token, message))
+        self.reply_files += [(token, name, data) for name, data in files or []]
+
+    async def followup(self, token, message):
+        self.followups.append((token, message))
 
     async def channels(self, guild_id):
         self._maybe_fail("channels")

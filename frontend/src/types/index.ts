@@ -837,3 +837,40 @@ export interface DailyView {
 
 export type DailyResponse = DailyView | { available: false }
 
+
+// --- Graveyard (SPEC 21) ---
+
+export interface Headstone {
+  champion_id: string
+  name: string
+  title: string
+  tags: string[]
+  image_url: string
+  eliminated_at: string | null
+  game_id: number | null // null: removed by hand
+  player_id: number | null // who was on it when it fell
+  manual: boolean
+  last_game: { kills: number; deaths: number; assists: number; grade: string | null; duration: number; team_position: Role | null } | null
+  offered: number
+  played: number
+  wins: number
+  losses: number
+  games_survived: number
+  deaths: number
+  revived: number
+  shields_broken: number
+  epitaph: string
+}
+
+export interface Graveyard {
+  run_id: number
+  total: number
+  dead: number
+  headstones: Headstone[]
+  diggers: { player_id: number; count: number }[]
+  by_class: { tag: string; count: number }[]
+  first_blood: string | null
+  quickest: string | null
+  longest: string | null
+  risen: { champion_id: string; name: string; image_url: string; revived: number; deaths: number }[]
+}

@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useMemo } from 'react'
 import { api } from '../api/client'
 import { registerTeamColors } from '../lib/teams'
+import { useLiveConnected } from './useLiveUpdates'
 import type { Champion, Player, Role } from '../types'
 
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: api.settings })
@@ -22,15 +23,18 @@ export const useChampions = () =>
   useQuery({ queryKey: ['champions'], queryFn: api.champions, staleTime: Infinity })
 
 // While a game is pending, poll so results applied by the backend's matcher show up on their own.
+// Not while live updates are connected: those bring the result the moment it's saved.
 const PENDING_REFRESH_MS = 15_000
 
-export const useRun = (id: number | null | undefined) =>
-  useQuery({
+export const useRun = (id: number | null | undefined) => {
+  const live = useLiveConnected()
+  return useQuery({
     queryKey: ['run', id],
     queryFn: () => api.run(id!),
     enabled: id != null,
-    refetchInterval: (q) => (q.state.data?.pending_game_id ? PENDING_REFRESH_MS : false),
+    refetchInterval: (q) => (!live && q.state.data?.pending_game_id ? PENDING_REFRESH_MS : false),
   })
+}
 
 export const usePool = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['pool', runId], queryFn: () => api.pool(runId!), enabled: runId != null })
@@ -62,13 +66,15 @@ export const usePoolEvents = (runId: number | null | undefined) =>
 export const useGames = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['games', runId], queryFn: () => api.games(runId!), enabled: runId != null })
 
-export const useGame = (id: number | null | undefined) =>
-  useQuery({
+export const useGame = (id: number | null | undefined) => {
+  const live = useLiveConnected()
+  return useQuery({
     queryKey: ['game', id],
     queryFn: () => api.game(id!),
     enabled: id != null,
-    refetchInterval: (q) => (q.state.data?.status === 'pending' ? PENDING_REFRESH_MS : false),
+    refetchInterval: (q) => (!live && q.state.data?.status === 'pending' ? PENDING_REFRESH_MS : false),
   })
+}
 
 export const useShop = (runId: number | null | undefined) =>
   useQuery({ queryKey: ['shop', runId], queryFn: () => api.shop(runId!), enabled: runId != null })

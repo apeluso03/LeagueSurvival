@@ -11,11 +11,12 @@ from sqlmodel import Session, select
 from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
-from app.routers import account, champions, daily, discord, fun, games, live, players, privacy, riot, runs, settings, shop, stats, tokens
+from app.routers import account, champions, daily, discord, fun, games, live, live_updates, players, privacy, riot, runs, settings, shop, stats, tokens
 from app.routers.access import current_user
 from app.jobs import crawler, live_tracker, poller
 from app.jobs import discord_bot as discord_job
 from app.services import ddragon, meta
+from app.services.hub import LiveUpdatesMiddleware
 from app.services.rules import RuleError
 
 log = logging.getLogger("uvicorn.error")
@@ -83,6 +84,9 @@ app.add_middleware(
 )
 
 
+app.add_middleware(LiveUpdatesMiddleware)
+
+
 @app.exception_handler(RuleError)
 async def rule_error_handler(_request: Request, exc: RuleError):
     return JSONResponse(status_code=exc.status, content={"detail": str(exc)})
@@ -108,6 +112,7 @@ def health():
 # routes check for themselves (Discord's own requests are signed, not signed in).
 app.include_router(account.router)
 app.include_router(discord.router)
+app.include_router(live_updates.router)  # the WebSocket checks the session cookie itself
 for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun, live, privacy, daily):
     app.include_router(module.router, dependencies=[Depends(current_user)])
 

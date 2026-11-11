@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.4",
     "psycopg[binary]>=3.2",  # Postgres (hosted); SQLite needs nothing extra
     "pynacl>=1.5",  # checks the signature on every request from Discord (the bot)
+    "pillow>=11",  # draws the spin reels as a GIF for Discord (services/spin_gif.py)
     "tzdata>=2024.1",  # time zones for the daily game's midnight (slim images have none)
 ]
 

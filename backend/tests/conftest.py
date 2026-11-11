@@ -147,3 +147,22 @@ def owner(session) -> User:
 @pytest.fixture
 def client(owner, sign_in):
     return sign_in(owner)
+
+
+@pytest.fixture(autouse=True)
+def _no_waiting_for_reels(monkeypatch):
+    """The bot waits for a spin's reels to stop before posting the draft; tests don't."""
+    from app.services import discord_bot
+
+    monkeypatch.setattr(discord_bot, "REVEAL_PAUSE", 0)
+
+
+@pytest.fixture(autouse=True)
+def _no_portrait_downloads(monkeypatch):
+    """The spin GIF draws blank cards instead of fetching champion portraits from Data Dragon."""
+    from app.services import spin_gif
+
+    async def none(urls, http=None):
+        return {}
+
+    monkeypatch.setattr(spin_gif, "_fetch_icons", none)
