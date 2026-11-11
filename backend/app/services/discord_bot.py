@@ -37,7 +37,7 @@ from app.models import (
     utcnow,
 )
 from app.routers.access import Ctx, can_act_for, can_manage
-from app.services import achievements, auth, contracts, economy, meta, rules, shop
+from app.services import achievements, auth, contracts, daily, economy, meta, rules, shop
 from app.services import discord_render as render
 from app.services.discord_api import DiscordError
 from app.services.rules import RuleError
@@ -53,6 +53,7 @@ KINDS = {
     "moments": "Revives and trophies",
     "recaps": "Run recaps and the monthly Wrapped",
     "nudges": "Reminders when a game waits hours for a result",
+    "daily": "A new Daily Statline each day, with yesterday's answer and scores",
 }
 MAX_ATTEMPTS = 5
 LIVE_EDIT_SECONDS = 45  # edit a live scoreboard at most this often
@@ -60,8 +61,8 @@ NUDGE_AFTER = timedelta(hours=3)
 ROLES = list(render.ROLE_NAMES)
 
 # Interaction and response types (discord.com/developers/docs/interactions/receiving-and-responding).
-PING, COMMAND, COMPONENT, AUTOCOMPLETE = 1, 2, 3, 4
-PONG, MESSAGE, DEFER, UPDATE, CHOICES = 1, 4, 5, 7, 8
+PING, COMMAND, COMPONENT, AUTOCOMPLETE, MODAL_SUBMIT = 1, 2, 3, 4, 5
+PONG, MESSAGE, DEFER, UPDATE, CHOICES, MODAL = 1, 4, 5, 7, 8, 9
 
 # --- slash commands -------------------------------------------------------------------------------
 
@@ -124,6 +125,7 @@ COMMANDS = [
         "options": [_opt("name", "Run name", required=True, max_length=60), _opt("options", "Options per player", INTEGER, choices=[{"name": "3", "value": 3}, {"name": "4", "value": 4}])],
     },
     {"name": "link", "description": "Link your Discord account to Hardcore Draft"},
+    {"name": "daily", "description": "Play today's Daily Statline (only you see your guesses)"},
 ]
 for _c in COMMANDS:
     _c["contexts"] = [0]  # servers only: a DM has no group
@@ -279,6 +281,8 @@ def handle(session: Session, data: dict) -> Answer:
             answer = _command(session, who, data)
         elif kind == COMPONENT:
             answer = _component(session, who, data)
+        elif kind == MODAL_SUBMIT:
+            answer = _modal(session, who, data)
         else:
             return _say("I don't know that one.")
     except Denied as e:
@@ -346,6 +350,8 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
 
     # Everything below acts on the run: linked members only.
     ctx = _need_member(who)
+    if name == "daily":
+        return _daily_answer(session, who, ctx, MESSAGE)
     if name == "newrun":
         if not ctx.is_owner:
             raise Denied("Only the group's owner can start a run.")
@@ -476,6 +482,8 @@ def _component(session: Session, who: Who, data: dict) -> Answer:
         return _say("That button is from an older message.")
     action, args = custom[1], custom[2:]
     ctx = _need_member(who)
+    if action == "dq":
+        return _daily_component(session, who, ctx, args, data)
 
     if action in ("ready", "unready"):
         run = session.get(Run, int(args[0]))
@@ -877,3 +885,101 @@ def prune_outbox(session: Session, keep_days: int = 14) -> None:
     cutoff = utcnow() - timedelta(days=keep_days)
     for ev in session.exec(select(EventOutbox).where(EventOutbox.created_at < cutoff)).all():
         session.delete(ev)
+
+
+# --- Daily Statline (SPEC 20) -------------------------------------------------------------------------
+
+
+def _daily_answer(session: Session, who: Who, ctx: Ctx, kind: int, puzzle=None) -> Answer:
+    """Today's puzzle as this person sees it, only to them (kind: a new reply, or an update)."""
+    puzzle = puzzle or daily.puzzle_for(session, who.link.group_id)
+    if puzzle is None:
+        raise Denied("No Daily Statline yet: it needs finished challenge games with Riot stats.")
+    view = daily.view(session, puzzle, ctx.user)
+    return Answer({"type": kind, "data": render.daily_view(session, view, private=kind == MESSAGE)}, commit=True)
+
+
+def _daily_guess(session: Session, who: Who, ctx: Ctx, question: str, value) -> Answer:
+    puzzle = daily.puzzle_for(session, who.link.group_id)
+    if puzzle is None:
+        raise Denied("No Daily Statline today.")
+    daily.guess(session, puzzle, ctx.user, question, value)
+    return _daily_answer(session, who, ctx, UPDATE, puzzle)
+
+
+def _daily_component(session: Session, who: Who, ctx: Ctx, args: list[str], data: dict) -> Answer:
+    action = args[0] if args else "open"
+    if action == "open":
+        return _daily_answer(session, who, ctx, MESSAGE)
+    if action == "result":
+        return _daily_guess(session, who, ctx, "result", args[1])
+    if action in ("pilot", "grade"):
+        return _daily_guess(session, who, ctx, action, (data["data"].get("values") or [""])[0])
+    if action == "kda":
+        def field_(key: str, label: str) -> dict:
+            text = {"type": 4, "custom_id": key, "label": label, "style": 1, "min_length": 1, "max_length": 2, "required": True}
+            return render.row(text)
+
+        return Answer(
+            {
+                "type": MODAL,
+                "data": {
+                    "custom_id": "hd:dqm:kda",
+                    "title": "Guess the K/D/A",
+                    "components": [field_("k", "Kills"), field_("d", "Deaths"), field_("a", "Assists")],
+                },
+            }
+        )
+    if action == "share":
+        puzzle = daily.puzzle_for(session, who.link.group_id, create=False)
+        if puzzle is None:
+            raise Denied("No Daily Statline today.")
+        view = daily.view(session, puzzle, ctx.user)
+        if not view["done"]:
+            raise Denied("Finish today's puzzle first.")
+        name = render.Names(session).pname(ctx.player_id) if ctx.player_id else ctx.user.username
+        return Answer({"type": MESSAGE, "data": render.reply(f"**{name}**\n{view['share']}\nPlay with `/daily`")})
+    raise Denied("That button is from an older message.")
+
+
+def _modal(session: Session, who: Who, data: dict) -> Answer:
+    ctx = _need_member(who)
+    if (data.get("data") or {}).get("custom_id") != "hd:dqm:kda":
+        return _say("That form is from an older message.")
+    values = {c["custom_id"]: c.get("value", "") for r in data["data"].get("components", []) for c in r.get("components", [])}
+    try:
+        kda = [int(values[k].strip()) for k in ("k", "d", "a")]
+    except (KeyError, ValueError):
+        raise Denied("Kills, deaths and assists are whole numbers.") from None
+    return _daily_guess(session, who, ctx, "kda", kda)
+
+
+async def post_daily(new_session: Callable[[], Session], client, now: datetime | None = None) -> int:
+    """Once a day per server: the new puzzle's clue, with yesterday's answer and scores."""
+    day = daily.today(now)
+    posts = []
+    with new_session() as session:
+        for link in session.exec(select(DiscordLink)).all():
+            if not _announcing(link, "daily") or (link.state or {}).get("daily") == day:
+                continue
+            puzzle = daily.puzzle_for(session, link.group_id, day)
+            if puzzle is None:  # nothing to play yet: try again tomorrow
+                link.state = {**(link.state or {}), "daily": day}
+                session.add(link)
+                continue
+            yesterday = daily.puzzle_for(session, link.group_id, daily._previous(day), create=False)
+            posts.append(_Post(link.group_id, link.channel_id, render.daily_post(session, puzzle, yesterday)))
+        session.commit()
+    if not posts:
+        return 0
+    results = await _deliver(client, posts)
+    with new_session() as session:
+        _record(session, posts, results)
+        for post in posts:
+            if not isinstance(results.get(id(post)), DiscordError):
+                link = session.exec(select(DiscordLink).where(DiscordLink.group_id == post.group_id)).first()
+                link.state = {**(link.state or {}), "daily": day}
+                session.add(link)
+        session.commit()
+    return len(posts)
+

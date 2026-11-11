@@ -1,6 +1,8 @@
 import type {
   Account,
   AppSettings,
+  DailyQuestionId,
+  DailyResponse,
   DiscordChannel,
   DiscordKind,
   DiscordStatus,
@@ -209,6 +211,10 @@ export const api = {
   discordTest: () => post<void>('/discord/test'),
   removeDiscordServer: () => request<void>('DELETE', '/discord/server'),
   unlinkDiscord: () => request<void>('DELETE', '/discord/account'),
+
+  daily: () => get<DailyResponse>('/daily'),
+  dailyGuess: (question: DailyQuestionId, value: string | number | number[]) =>
+    post<DailyResponse>('/daily/guess', { question, value }),
 
   live: () => get<{ game_id: number | null; live: LiveGame | null }>('/live'),
   gameLive: (gameId: number) => get<{ game_id: number; live: LiveGame | null }>(`/games/${gameId}/live`),

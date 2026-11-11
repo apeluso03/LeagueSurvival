@@ -1008,3 +1008,30 @@ Answers to 19.9, as built: the full bot (no webhook step); one announcements cha
 - **Removing the bot** from inside Discord isn't reported to the bot (no gateway connection): the next failed post shows in Settings, and the owner removes it there.
 - **Tests:** `tests/test_discord.py` with a fake Discord client (`tests/factories.py`): signatures and replays, permissions for every command and button, the outbox (edits, muting, retries, giving up, deleted messages), trophies, nudges, Wrapped, the live scoreboard, OAuth state tied to the browser, linking servers and accounts, Discord sign-in.
 
+## 20. Daily Statline (built, v0.6)
+
+A daily guessing game in the spirit of Bausdle, built from a group's own run history. Playable on the site (**Daily** tab, `/daily`) and through the Discord bot (`/daily`), with the same guesses either way.
+
+### 20.1 The puzzle
+- **One a day per group,** starting at midnight in `DAILY_TIMEZONE` (default `America/New_York`). Made the first time anyone looks (site, bot or the bot's daily post).
+- **The statline:** one player's line from a finished (won or lost) challenge game with Riot stats, in the group's runs, picked at random from the lines never used. A line is used once ever (`dailypuzzle` is unique on group, match and player); the other players' lines from the same game stay available. With no line left (or no Riot stats yet), there's no puzzle that day.
+- **The clue:** champion, role (`teamPosition`), game length and queue. The date isn't shown.
+
+### 20.2 Questions and scoring
+| # | Question | Tries | Points | Feedback |
+|---|---|---|---|---|
+| 1 | Win or loss? | 1 | 1 | right / wrong |
+| 2 | Who was piloting? (any player in the group) | 2 | 2, 1 | right / wrong |
+| 3 | K / D / A | 4 | 4, 3, 2, 1 | per number: right, or higher / lower; "close" within 2 |
+| 4 | Grade (S+ to D) | 3 | 3, 2, 1 | right, or higher / lower; "close" one grade off |
+
+- Questions go in order; each ends when it's right or out of tries. A game without a grade skips question 4 (out of 7).
+- One go per account per day. Only today's puzzle can be played.
+- **After finishing:** the answer, the score, a spoiler-free share text (🟩 right, 🟨 close, ⬛ off, 🟥 wrong), the day's leaderboard (best score first, then who finished first) and the streak (days in a row finished).
+
+### 20.3 Built
+- **Backend:** `services/daily.py` (picking, checking, scoring, leaderboard, streaks, share text), `routers/daily.py` (`GET /api/daily`, `POST /api/daily/guess` with `question` and `value`), tables `dailypuzzle` and `dailyplay` (migration `c7d2f4a8e1b3`). `tzdata` is a dependency so the time zone works in slim containers.
+- **Site:** `pages/DailyPage.tsx`: the clue card, a card per question (buttons for win or loss, player chips, three number boxes for the K/D/A, grade buttons), then the result, a copy button for the share text and the leaderboard.
+- **Discord** (SPEC 19): `/daily` answers privately with the clue, the guesses so far and the next question's controls (Win / Loss buttons, a player menu, a K/D/A form, a grade menu); each guess updates that same private message. **Share my result** posts the share text publicly. With the "daily" announcement switched on, the bot posts each new puzzle (clue, Play button, yesterday's answer and scores) once a day.
+- **Tests:** `tests/test_daily.py`: picking lines (never twice, other lines from the same game still allowed), the time zone, scoring and hints, bad guesses, three-question games, old puzzles, streaks, the API, playing through the bot, the daily post.
+

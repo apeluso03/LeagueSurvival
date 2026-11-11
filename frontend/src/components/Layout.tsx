@@ -13,6 +13,7 @@ import { BackendDownBanner, ResultWatcher, NoChampionsBanner } from './StatusBan
 const TABS = [
   { to: '/wheels', label: 'Wheels' },
   { to: '/live', label: 'Live' },
+  { to: '/daily', label: 'Daily' },
   { to: '/pool', label: 'Pool' },
   { to: '/shop', label: 'Shop' },
   { to: '/stats', label: 'Stats' },

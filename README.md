@@ -33,6 +33,7 @@ Next come live updates, then groups so anyone can start their own, then hosting.
   - a gold-lead graph, contract progress and a play-by-play feed;
   - your team's builds, with items already built checked off;
   - builds for the role each player is really in. That comes from their lane in the game (when the backend runs on a PC in it) or Smite for jungle. Anyone can also set their own role from the role chip, on the spin card or the Live tab; the owner can set anyone's. Autofilled to jungle on a champ rolled as support? Pick Jungle and the build, spells and Mobalytics button switch to its jungle build.
+- **Daily:** Daily Statline, a daily guessing game from your own run history (see "Daily Statline").
 - **Pool:** card grid of the run's champions with sorts and filters, shields, revives and each champion's numbers.
 - **Shop:** gold from your in-game stats; Reroll, Blacklist, Swap, Shield, Choose a Champ and Contracts.
 - **Stats:** per-player stats and a sortable leaderboard. Each player has their own page with their title, champions and recent games.
@@ -196,6 +197,21 @@ After a spin, the backend looks for your game.
 - **Preview:** to see the Live tab without being in a game, open it and click **Preview with sample data** (or go to `/live?preview=1`). It shows a made-up game built in your browser; nothing is saved.
 - **No cooldown timers:** summoner spells are shown, but not their cooldowns. Riot's rules restrict tracking those.
 
+## Daily Statline
+
+A daily guessing game built from your group's own games, playable on the **Daily** tab and in Discord with `/daily`.
+
+- **The puzzle:** each day at midnight (Eastern time; change it with `DAILY_TIMEZONE`, e.g. `Europe/London`) the group gets one player's statline from a past challenge game with Riot stats, picked at random. A statline is never used twice; the other players' lines from that game can still come up on later days.
+- **The clue:** the champion, role, game length and queue.
+- **The questions,** in order:
+  - win or loss? (1 try, 1 point);
+  - who was piloting? (2 tries, 2 or 1 points);
+  - the K/D/A (4 tries, 4 to 1 points; each number says higher or lower, and amber means within 2);
+  - the grade (3 tries, 3 to 1 points, higher or lower). Games without a grade skip this one.
+- **After you finish:** the answer, your score out of 10, a spoiler-free emoji result to share, today's leaderboard and your streak.
+- **One go per person per day:** your guesses are the same on the site and in Discord.
+- **In Discord:** `/daily` plays it privately (buttons, menus and a form for the K/D/A), **Share my result** posts your emoji result, and if the group turns it on, the bot posts each new puzzle with yesterday's answer and scores.
+
 ## Discord bot
 
 Each group can add the Hardcore Draft bot to its own Discord server (SPEC.md section 19). It posts the run as it happens, and everyone can play from Discord with slash commands and buttons.
@@ -207,8 +223,9 @@ Each group can add the Hardcore Draft bot to its own Discord server (SPEC.md sec
 - **Moments:** revives and trophies unlocked.
 - **Recaps:** the run recap when a run ends, and last month's Wrapped early each month.
 - **Reminders:** once, when a game has waited 3 hours for a result.
+- **Daily Statline:** each day's new puzzle, with yesterday's answer and scores.
 
-**Commands:** `/run`, `/pool`, `/stats`, `/build`, `/live`, `/history` for anyone in the server; `/gold`, `/shop`, `/role` for players (for themselves; the run owner can name anyone); `/spin`, `/pick`, `/result`, `/undo` for the run owner; `/newrun` for the group owner; `/ready` for a ready check; `/link` to check your link. Permissions are the same as on the site: people act as the account that linked their Discord (Settings, Discord, **Link Discord**), and someone who hasn't linked can look but not act. Linked accounts can also **Sign in with Discord**.
+**Commands:** `/run`, `/pool`, `/stats`, `/build`, `/live`, `/history` for anyone in the server; `/daily` for the Daily Statline; `/gold`, `/shop`, `/role` for players (for themselves; the run owner can name anyone); `/spin`, `/pick`, `/result`, `/undo` for the run owner; `/newrun` for the group owner; `/ready` for a ready check; `/link` to check your link. Permissions are the same as on the site: people act as the account that linked their Discord (Settings, Discord, **Link Discord**), and someone who hasn't linked can look but not act. Linked accounts can also **Sign in with Discord**.
 
 **Setting it up** (once per site, by whoever hosts it):
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications), **New Application**, and name it Hardcore Draft.

@@ -764,7 +764,7 @@ export interface GoldBreakdown {
 
 // --- Discord bot (SPEC 19) ---------------------------------------------------------------------
 
-export type DiscordKind = 'spins' | 'live' | 'results' | 'moments' | 'recaps' | 'nudges'
+export type DiscordKind = 'spins' | 'live' | 'results' | 'moments' | 'recaps' | 'nudges' | 'daily'
 
 export interface DiscordStatus {
   enabled: boolean // the bot is set up on this site
@@ -783,3 +783,55 @@ export interface DiscordChannel {
   name: string
   position: number
 }
+
+// --- Daily Statline (SPEC 20) -------------------------------------------------------------------
+
+export type DailyQuestionId = 'result' | 'pilot' | 'kda' | 'grade'
+export type DailyHint = 'exact' | 'higher' | 'lower' // higher: the answer is higher than the guess
+
+export interface DailyGuess {
+  value: string | number | number[]
+  correct: boolean
+  hint?: DailyHint // grade
+  close?: boolean // grade: one off
+  parts?: { value: number; hint: DailyHint; close: boolean }[] // K/D/A, each within 2 = close
+}
+
+export interface DailyQuestion {
+  id: DailyQuestionId
+  label: string
+  tries: number
+  guesses: DailyGuess[]
+  solved: boolean
+  finished: boolean
+  points: number
+}
+
+export interface DailyView {
+  available: true
+  number: number
+  day: string
+  clue: { champion_id: string | null; role: Role | null; duration: number | null; queue_id: number | null }
+  players: { id: number; name: string }[]
+  grades: string[]
+  questions: DailyQuestion[]
+  current: DailyQuestionId | null
+  done: boolean
+  score: number
+  max_score: number
+  streak: number
+  leaderboard: { user_id: number; name: string; score: number }[] | null
+  answer: {
+    pilot: number
+    pilot_name: string
+    result: 'win' | 'loss'
+    kda: [number, number, number]
+    grade: string | null
+    game_id: number
+    played_at: string | null
+  } | null
+  share: string | null
+}
+
+export type DailyResponse = DailyView | { available: false }
+
