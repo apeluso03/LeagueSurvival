@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { api } from '../api/client'
-import { useAction, useChampionLines, useEconomy, usePlayerMap, useTokens } from '../hooks/queries'
+import { useAction, useChampionLines, useEconomy, usePlayerMap, useTokens, useGameNumber } from '../hooks/queries'
 import { splashUrl } from '../lib/champions'
 import { classColor } from '../lib/reel'
 import { num, pct } from '../lib/stats'
@@ -41,6 +41,7 @@ export function ChampionCard({
   focus?: 'revive' | 'shield'
 }) {
   const players = usePlayerMap()
+  const gameNo = useGameNumber()
   const tokens = useTokens(run.id)
   const line = useChampionLines(run.id).data?.[entry.champion_id]
   const report = useQuery({
@@ -149,7 +150,7 @@ export function ChampionCard({
               <p className="text-sm text-red-200">
                 Eliminated
                 {entry.eliminated_by_player_id && <> when {name(entry.eliminated_by_player_id)} lost with it</>}
-                {entry.eliminated_in_game_id && <> in game #{entry.eliminated_in_game_id}</>}
+                {entry.eliminated_in_game_id && <> in game {gameNo(entry.eliminated_in_game_id)}</>}
                 {entry.eliminated_at && <> on {new Date(entry.eliminated_at).toLocaleDateString()}</>}.
               </p>
             )}

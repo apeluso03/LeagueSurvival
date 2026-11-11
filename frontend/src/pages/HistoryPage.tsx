@@ -14,6 +14,7 @@ import {
   usePlayerMap,
   usePoolEvents,
   useRuns,
+  useGameNumber,
 } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
 import type { Game, GoldBreakdown, PoolEvent, Run } from '../types'
@@ -132,7 +133,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                     {g.status}
                   </span>
                   <span className="text-xs text-slate-400">
-                    #{g.id} · {new Date(g.created_at).toLocaleString()}
+                    Game {g.number} · {new Date(g.created_at).toLocaleString()}
                   </span>
                   {g.result_source && (
                     <span className="text-xs text-slate-500">{g.result_source === 'auto' ? 'from Riot' : 'recorded by hand'}</span>
@@ -177,7 +178,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
                   <button
                     className="btn-secondary"
                     disabled={undo.isPending}
-                    onClick={() => confirm(`Undo game ${g.id}? It'll go back to waiting for a result.`) && undo.mutate(g.id)}
+                    onClick={() => confirm(`Undo game ${g.number}? It'll go back to waiting for a result.`) && undo.mutate(g.id)}
                   >
                     Undo result
                   </button>
@@ -214,6 +215,7 @@ function GameList({ runId, run }: { runId: number; run: Run | undefined }) {
 }
 
 function ActivityLog({ runId }: { runId: number }) {
+  const gameNo = useGameNumber()
   const events = usePoolEvents(runId)
   const champs = useChampionMap()
   const players = usePlayerMap()
@@ -227,7 +229,7 @@ function ActivityLog({ runId }: { runId: number }) {
   const describe = (e: PoolEvent) => {
     switch (e.type) {
       case 'eliminate':
-        return `${name(e.champion_id)} eliminated, played by ${who(e.player_id)} in game #${e.game_id}`
+        return `${name(e.champion_id)} eliminated, played by ${who(e.player_id)} in game ${e.game_id != null ? gameNo(e.game_id) : '?'}`
       case 'revive':
         return `${who(e.player_id)} used a revive token on ${name(e.champion_id)}`
       case 'manual_eliminate':

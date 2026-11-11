@@ -100,6 +100,18 @@ Notes:
 - **Backups:** turn on Railway's backups for the Postgres service, or copy it with `pg_dump` now and then.
 - **Your local app** keeps its own SQLite database. After moving, use the hosted site; the local copy stops getting updates.
 
+## Clearing out test data
+
+`python -m app.cleanup_cli` (from `backend/`) shows what it would remove from each group, and changes nothing:
+- every run except the current one, with its games, gold and items;
+- in the current run, voided games and games from before the run started (their eliminations are undone, and wins and streaks are counted again).
+
+Then `python -m app.cleanup_cli --group <id> --apply` deletes it. Riot matches stay as plain stats. Back up the database first.
+
+On Railway, run it inside the deployed service so it reaches the database over Railway's private network: `railway ssh` (pick the web service), then `python -m app.cleanup_cli`.
+
+Games are numbered within their run (Game 1, 2, 3...), counting won and lost games, so removing test games renumbers the rest.
+
 ## Running locally
 
 You need Python 3.12+ and Node 22+.

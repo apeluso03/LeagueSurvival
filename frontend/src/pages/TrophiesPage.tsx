@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { LowerThird } from '../components/LowerThird'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
-import { useAchievements, useActiveRun, useChampionMap, usePlayers, useRuns } from '../hooks/queries'
+import { useAchievements, useActiveRun, useChampionMap, usePlayers, useRuns, useGameNumber } from '../hooks/queries'
 import { num, pct } from '../lib/stats'
 import { teamColor } from '../lib/teams'
 import { TIER_COLORS } from '../lib/tiers'
@@ -135,6 +135,7 @@ function ShameSection({ title, children, empty }: { title: string; children: Rea
 }
 
 function GameRow({ g, highlight }: { g: ShameGame; highlight: 'kda' | 'deaths' | 'duration' }) {
+  const gameNo = useGameNumber()
   const champs = useChampionMap()
   const champ = g.champion_id ? champs.get(g.champion_id) : undefined
   const mins = g.duration ? `${Math.floor(g.duration / 60)}:${String(g.duration % 60).padStart(2, '0')}` : '—'
@@ -144,7 +145,7 @@ function GameRow({ g, highlight }: { g: ShameGame; highlight: 'kda' | 'deaths' |
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <LowerThird playerId={g.player_id} size="sm" sub={champ?.name} />
         <span className="text-[11px] text-slate-500">
-          Game {g.game_id} · {new Date(g.at).toLocaleDateString()} · {g.won ? 'won anyway' : 'lost'}
+          Game {gameNo(g.game_id)} · {new Date(g.at).toLocaleDateString()} · {g.won ? 'won anyway' : 'lost'}
         </span>
       </div>
       <span className="font-display text-lg text-red-300 tabular-nums">

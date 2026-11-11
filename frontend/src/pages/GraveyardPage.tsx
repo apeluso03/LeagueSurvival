@@ -187,11 +187,11 @@ function Summary({ g }: { g: Graveyard }) {
           </p>
         )}
       </section>
-      {feature('First blood', g.first_blood, (h) => `Game ${h.game_id}`)}
+      {feature('First blood', g.first_blood, (h) => `Game ${h.game_number}`)}
       {feature('Quickest fall', g.quickest, (h) => (h.games_survived === 0 ? 'Fell in the first game' : `After ${h.games_survived} ${h.games_survived === 1 ? 'game' : 'games'}`))}
       {longest && longest.games_survived > (quickest?.games_survived ?? 0)
         ? feature('Longest life', g.longest, (h) => `Lived through ${h.games_survived} ${h.games_survived === 1 ? 'game' : 'games'}`)
-        : feature('Last to fall', g.headstones[0]?.champion_id ?? null, (h) => (h.manual ? 'Removed by hand' : `Game ${h.game_id}`))}
+        : feature('Last to fall', g.headstones[0]?.champion_id ?? null, (h) => (h.manual ? 'Removed by hand' : `Game ${h.game_number}`))}
     </div>
   )
 }
@@ -231,7 +231,7 @@ function Tombstone({ h }: { h: Headstone }) {
           'Removed by hand'
         ) : (
           <>
-            Game {h.game_id}
+            Game {h.game_number}
             {h.player_id != null && (
               <>
                 {' · '}

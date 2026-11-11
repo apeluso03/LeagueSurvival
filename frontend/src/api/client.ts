@@ -178,6 +178,7 @@ export const api = {
   refreshPositions: () => post<{ count: number }>('/meta/positions/refresh'),
   comp: (championIds: string[], exclude: string[] = [], roles: Record<string, Role> = {}) =>
     post<CompSuggestion>('/comp', { champion_ids: championIds, exclude, roles }),
+  gameNumbers: () => get<Record<string, number>>('/games/numbers'),
   graveyard: (runId: number) => get<Graveyard>(`/runs/${runId}/graveyard`),
   championLines: (runId: number) => get<Record<string, ChampionLine>>(`/runs/${runId}/champion-lines`),
   eliminate: (runId: number, championId: string) => post<Run>(`/runs/${runId}/pool/${championId}/eliminate`),

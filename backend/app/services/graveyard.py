@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from sqlmodel import Session, col, select
 
 from app.models import ChallengeGame, Champion, PlayerMatchStats, PoolEntry, PoolEvent, Run
+from app.services.rules import game_numbers
 from app.services.stats import run_champion_lines
 
 TOP_GRADES = ("S+", "S", "S-")
@@ -36,6 +37,7 @@ class Headstone:
     image_url: str
     eliminated_at: str | None
     game_id: int | None  # None: removed by hand
+    game_number: int | None  # its number within the run, as players see it
     player_id: int | None  # who was on it when it fell
     manual: bool
     last_game: LastGame | None
@@ -96,7 +98,7 @@ def epitaph(h: Headstone) -> str:
         return "Didn't touch a single kill on the way out."
     if h.games_survived >= 20:
         return f"Lived through {h.games_survived} games."
-    return f"Fell in game {h.game_id}."
+    return f"Fell in game {h.game_number}."
 
 
 def build(session: Session, run: Run) -> Graveyard:
@@ -117,6 +119,7 @@ def build(session: Session, run: Run) -> Graveyard:
         select(ChallengeGame).where(ChallengeGame.run_id == run.id, col(ChallengeGame.status).in_(["won", "lost"]))
     ).all()
 
+    numbers = game_numbers(session, [run.id])
     out = Graveyard(run_id=run.id, total=len(entries), dead=0)
     for entry, champ in entries:
         if entry.status != "eliminated":
@@ -146,6 +149,7 @@ def build(session: Session, run: Run) -> Graveyard:
             image_url=champ.image_url,
             eliminated_at=entry.eliminated_at.isoformat() if entry.eliminated_at else None,
             game_id=game_id,
+            game_number=numbers.get(game_id) if game_id else None,
             player_id=entry.eliminated_by_player_id,
             manual=game_id is None,
             last_game=last,

@@ -172,7 +172,7 @@ function ResultToast({ game, streak, onClose }: { game: Game; streak: number; on
       <div className="flex items-start gap-3">
         <div className="flex-1">
           <span className="broadcast-tag" style={{ ['--tag' as string]: tone }}>
-            Final · Game {game.id}
+            Final · Game {game.number}
           </span>
           <div className="font-display mt-1.5 text-2xl tracking-wide text-white uppercase">
             {RESULT_TEXT[game.status]}

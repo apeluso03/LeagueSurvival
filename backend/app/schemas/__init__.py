@@ -141,6 +141,7 @@ class MatchSummaryOut(BaseModel):
 
 class GameOut(BaseModel):
     id: int
+    number: int = 0  # its place in the run, as players see it (rules.game_numbers)
     run_id: int
     created_at: datetime
     status: str

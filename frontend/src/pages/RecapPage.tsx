@@ -6,7 +6,7 @@ import { LowerThird } from '../components/LowerThird'
 import { PlayerLink } from '../components/PlayerLink'
 import { CoinIcon } from '../components/icons'
 import { EmptyState, ErrorText, LoadingState } from '../components/ui'
-import { useChampionMap, usePlayerMap } from '../hooks/queries'
+import { useChampionMap, usePlayerMap, useGameNumber } from '../hooks/queries'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { loadingUrl, splashUrl } from '../lib/champions'
 import { num, pct } from '../lib/stats'
@@ -204,6 +204,7 @@ function SectionTitle({ children }: { children: ReactNode }) {
 
 /** Every game in order, like a series' match history. */
 function Timeline({ recap: r }: { recap: RunRecap }) {
+  const gameNo = useGameNumber()
   if (!r.timeline.length) return null
   return (
     <section className="flex flex-col gap-2">
@@ -212,7 +213,7 @@ function Timeline({ recap: r }: { recap: RunRecap }) {
         {r.timeline.map((g, i) => (
           <span
             key={g.game_id}
-            title={`Game ${g.game_id}: ${g.status === 'won' ? 'win' : 'loss'}`}
+            title={`Game ${gameNo(g.game_id)}: ${g.status === 'won' ? 'win' : 'loss'}`}
             className={`history-tile ${g.status === 'won' ? 'is-win' : 'is-loss'}`}
           >
             <small>{i + 1}</small>

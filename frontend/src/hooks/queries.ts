@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import { api } from '../api/client'
 import { registerTeamColors } from '../lib/teams'
 import { useLiveConnected } from './useLiveUpdates'
@@ -114,6 +114,15 @@ export const useLive = () =>
     queryFn: api.live,
     refetchInterval: (q) => (q.state.data?.live?.streaming ? 3_000 : q.state.data?.game_id ? 10_000 : 30_000),
   })
+
+/**
+ * A game's number as players see it: its place in its run (won and lost games count; a pending
+ * game is the next one). The database id keeps counting across runs, so it's never shown.
+ */
+export function useGameNumber() {
+  const { data } = useQuery({ queryKey: ['game-numbers'], queryFn: api.gameNumbers, staleTime: 30_000 })
+  return useCallback((id: number) => data?.[id] ?? (data ? id : '…'), [data])
+}
 
 /** The active run, resolved through settings. */
 export function useActiveRun() {

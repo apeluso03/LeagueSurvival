@@ -30,7 +30,15 @@ def list_games(run_id: int | None = None, ctx: Ctx = Depends(group_ctx), session
     else:
         query = query.where(col(ChallengeGame.run_id).in_(select(Run.id).where(Run.group_id == ctx.group_id)))
     keys = champion_keys(session)  # once for the whole list, not once per game
-    return [game_out(session, g, keys) for g in session.exec(query).all()]
+    games = session.exec(query).all()
+    numbers = rules.game_numbers(session, {g.run_id for g in games})
+    return [game_out(session, g, keys, numbers) for g in games]
+
+
+@router.get("/numbers")
+def game_numbers(ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)) -> dict[int, int]:
+    """Every game's number within its run (what players see), by game id, for the whole group."""
+    return rules.game_numbers(session, session.exec(select(Run.id).where(Run.group_id == ctx.group_id)).all())
 
 
 @router.get("/{game_id}", response_model=GameOut)

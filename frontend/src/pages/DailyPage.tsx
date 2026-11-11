@@ -3,7 +3,7 @@ import { useState, type CSSProperties, type FormEvent, type ReactNode } from 're
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
-import { useChampionMap } from '../hooks/queries'
+import { useChampionMap, useGameNumber } from '../hooks/queries'
 import { formatDuration, queueName } from '../lib/queues'
 import { teamColor } from '../lib/teams'
 import type { DailyGuess, DailyHint, DailyQuestion, DailyQuestionId, DailyView, Role } from '../types'
@@ -253,6 +253,7 @@ function GuessInput({
 }
 
 function Finished({ v }: { v: DailyView }) {
+  const gameNo = useGameNumber()
   const [copied, setCopied] = useState(false)
   const a = v.answer!
   const copy = () => {
@@ -273,7 +274,7 @@ function Finished({ v }: { v: DailyView }) {
           {a.grade ? ` · ${a.grade}` : ''}
         </span>
         <Link to="/history" className="ml-auto text-xs text-hex-200 hover:underline">
-          Game {a.game_id} in History
+          Game {gameNo(a.game_id)} in History
         </Link>
       </div>
       {v.share && (

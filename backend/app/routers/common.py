@@ -105,7 +105,9 @@ def match_summary(
     )
 
 
-def game_out(session: Session, game: ChallengeGame, champ_by_key: dict[int, str] | None = None) -> GameOut:
+def game_out(
+    session: Session, game: ChallengeGame, champ_by_key: dict[int, str] | None = None, numbers: dict[int, int] | None = None
+) -> GameOut:
     eliminated = session.exec(
         select(PoolEvent.champion_id).where(
             PoolEvent.game_id == game.id, PoolEvent.type == "eliminate", PoolEvent.undone == False  # noqa: E712
@@ -130,6 +132,7 @@ def game_out(session: Session, game: ChallengeGame, champ_by_key: dict[int, str]
     ).all()
     return GameOut(
         **game.model_dump(),
+        number=(numbers or {}).get(game.id) or rules.game_number(session, game),
         assignments=[AssignmentOut(**a.model_dump()) for a in assignments],
         eliminated=list(eliminated),
         tokens_earned=list(earned),

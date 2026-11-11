@@ -16,6 +16,7 @@ import {
   usePlayers,
   usePool,
   useShop,
+  useGameNumber,
 } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
 import { useCountUp } from '../hooks/useCountUp'
@@ -376,6 +377,7 @@ function InventoryBar({
 
 /** What this player has working right now: placed shields, an armed blacklist, live contracts. */
 function InPlay({ run, playerId }: { run: Run; playerId: number }) {
+  const gameNo = useGameNumber()
   const inv = useInventory(run.id, playerId)
   const champs = useChampionMap()
   const items = inv.data ?? []
@@ -428,7 +430,7 @@ function InPlay({ run, playerId }: { run: Run; playerId: number }) {
               <li key={i.id} className="flex items-center gap-2 text-slate-400">
                 <ItemArt type={i.type} size={22} />
                 <span className="text-slate-300">{ITEM_META[i.type].name}</span>
-                {i.used_in_game_id && <span>· game {i.used_in_game_id}</span>}
+                {i.used_in_game_id && <span>· game {gameNo(i.used_in_game_id)}</span>}
                 {i.contract && <span>· {i.contract.description} ({i.contract.status === 'won' ? `won ${i.contract.payout}` : 'missed'})</span>}
               </li>
             ))}
@@ -448,6 +450,7 @@ const REASON_LABEL: Record<LedgerRow['reason'], string> = {
 }
 
 function GoldHistory({ runId, playerId }: { runId: number; playerId: number }) {
+  const gameNo = useGameNumber()
   const gold = useGold(runId, playerId)
   const rows = gold.data?.ledger ?? []
   return (
@@ -464,7 +467,7 @@ function GoldHistory({ runId, playerId }: { runId: number; playerId: number }) {
               <span className={`w-16 font-bold tabular-nums ${r.amount >= 0 ? 'text-gold-300' : 'text-red-300'}`}>{signedGold(r.amount)}</span>
               <span className="font-semibold text-slate-200">
                 {REASON_LABEL[r.reason]}
-                {r.game_id && <span className="font-normal text-slate-400"> · game {r.game_id}</span>}
+                {r.game_id && <span className="font-normal text-slate-400"> · game {gameNo(r.game_id)}</span>}
               </span>
               {r.reason === 'game' && (
                 <span className="flex flex-wrap gap-1.5 text-xs text-slate-400">

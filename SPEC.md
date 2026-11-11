@@ -1061,3 +1061,7 @@ As planned in 12.3, with these specifics (`services/hub.py`, `routers/live_updat
 - Portraits come from Data Dragon and are cached in memory. If the GIF can't be drawn, the draft still goes out on its own.
 - Picks, results and undo still edit the draft message; the reels are posted once per spin.
 
+### 21.4 Game numbers and clearing test data
+- **Game numbers:** players see a game's place in its run, not its database id (which keeps counting across every run and group). Won and lost games count 1, 2, 3...; a pending game shows the next number, and a voided one shares the number of the game after it (`rules.game_numbers`). The API sends `number` on every game and `GET /api/games/numbers` (id to number, for the group); the site, the bot and the Graveyard all show it.
+- **Clearing test data:** `python -m app.cleanup_cli [--group N] [--apply]` (`services/cleanup.py`). Without `--apply` it only lists what would go. It deletes every run but the group's current one (`rules.delete_run`, which now also removes Daily puzzles and bot messages on those games), and in the current run, voided games and games created before the run started. A deleted finished game's eliminations and shield use are undone, its gold, tokens and Daily puzzles go, and the run's wins and streaks are counted again; a game whose revive token was already spent is kept and reported. Riot matches stay, unlinked.
+
