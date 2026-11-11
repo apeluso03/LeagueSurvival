@@ -33,12 +33,14 @@ import {
   useShop,
 } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
+import { useLiveConnected, useLiveEvent } from '../hooks/useLiveUpdates'
 import { useBuy, useOwnedItem } from '../hooks/useItems'
 import { factLine } from '../lib/facts'
 import { teamColor } from '../lib/teams'
 import { ITEM_META, ITEM_ORDER } from '../lib/items'
 import { preloadImages } from '../lib/preload'
 import { realRoles, rolesByChampion } from '../lib/roles'
+import { pauseRefresh } from '../lib/liveUpdates'
 import { SPIN_MS, buildStrip, randomLandingOffset } from '../lib/reel'
 import { playLand, playReveal, playStart, unlock } from '../lib/sound'
 import type { Assignment, Champion, CompPick, ContractInfo, Game, ItemType, PlayerEconomy, PlayerRole, Role, Run } from '../types'
@@ -46,7 +48,7 @@ import type { Assignment, Champion, CompPick, ContractInfo, Game, ItemType, Play
 // Reels stop one after another: the first after 9.5s, then each next one this much later
 // (11.9s for a full five-player spin).
 const STAGGER_MS = 600
-// Players who don't run the wheels check this often for a new spin (live updates come later).
+// Without live updates (socket down), players who don't run the wheels check this often for a new spin.
 const WATCH_MS = 10_000
 const reelMs = (i: number) => SPIN_MS - 1000 + i * STAGGER_MS
 
@@ -89,7 +91,8 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const [editPicks, setEditPicks] = useState(false)
   const qc = useQueryClient()
   const { canManage, myPlayerId } = useAccess(run)
-  useQuery({ queryKey: ['run', run.id], queryFn: () => api.run(run.id), enabled: !canManage, refetchInterval: WATCH_MS })
+  const live = useLiveConnected()
+  useQuery({ queryKey: ['run', run.id], queryFn: () => api.run(run.id), enabled: !canManage, refetchInterval: live ? false : WATCH_MS })
   // Not useAction: refreshing every query (and re-rendering the page) right as the reels start made
   // the first frames stutter. The pending game goes straight into the cache instead, and everything
   // else refreshes once the spin is over.
@@ -145,42 +148,66 @@ function Wheels({ run, challengeMode, lastUsed }: { run: Run; challengeMode: boo
   const pending = run.pending_game_id != null
   const canSpin = run.status === 'active' && !pending && chosen.length >= 2 && chosen.length <= 5
 
+  /** Play the reels for a spin's options (ours, or one someone else just made). */
+  const startReels = (assignments: Assignment[], game: Game | null) => {
+    setLastResolvedId(null)
+    if (game) {
+      qc.setQueryData(['game', game.id], game)
+      qc.setQueryData<Run>(['run', run.id], (r) => (r ? { ...r, pending_game_id: game.id } : r))
+    }
+    // Skip the reels for people who asked their device for reduced motion.
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    if (reduced) {
+      refreshAll()
+      return setStage(null)
+    }
+    const fillers = alivePool.length ? alivePool : assignments.flatMap((a) => a.options)
+    setStage({
+      key: Date.now(),
+      startAt: performance.now(),
+      reels: assignments.map((a) => ({
+        playerId: a.player_id,
+        strip: buildStrip(fillers, a.options),
+        offset: randomLandingOffset(),
+        options: a.options.length,
+      })),
+      done: false,
+      skipped: false,
+    })
+    playStart()
+  }
+
   const doSpin = () => {
     unlock() // browsers only allow sound after a click
     spin.mutate(chosen, {
       onSuccess: (res) => {
         setPractice(res.practice ? res.assignments : null)
-        setLastResolvedId(null)
-        const game = res.game
-        if (game) {
-          qc.setQueryData(['game', game.id], game)
-          qc.setQueryData<Run>(['run', run.id], (r) => (r ? { ...r, pending_game_id: game.id } : r))
-        }
-        // Skip the reels for people who asked their device for reduced motion.
-        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-        if (reduced) {
-          refreshAll()
-          return setStage(null)
-        }
-        const fillers = alivePool.length ? alivePool : res.assignments.flatMap((a) => a.options)
-        setStage({
-          key: Date.now(),
-          startAt: performance.now(),
-          reels: res.assignments.map((a) => ({
-            playerId: a.player_id,
-            strip: buildStrip(fillers, a.options),
-            offset: randomLandingOffset(),
-            options: a.options.length,
-          })),
-          done: false,
-          skipped: false,
-        })
-        playStart()
+        startReels(res.assignments, res.game)
       },
     })
   }
 
   const spinning = stage != null && !stage.done
+  // Live updates wait while the reels run (a refetch mid-spin made the first frames stutter).
+  useEffect(() => (spinning ? pauseRefresh() : undefined), [spinning])
+
+  // Someone else spun (the run owner on another device, or /spin in Discord): play the same draw here.
+  const watching = useRef<(() => void) | null>(null)
+  useLiveEvent((e) => {
+    if (e.type !== 'spin' || e.run_id !== run.id || e.game_id == null || spinning || watching.current) return
+    const release = pauseRefresh() // hold the refresh until the reels have started
+    watching.current = release
+    const done = () => {
+      watching.current = null
+      release()
+    }
+    qc.fetchQuery({ queryKey: ['game', e.game_id], queryFn: () => api.game(e.game_id!), staleTime: 0 })
+      .then((g) => {
+        if (g.status === 'pending' && document.visibilityState !== 'hidden') startReels(g.assignments, g)
+      })
+      .catch(() => {})
+      .finally(done)
+  })
   // Hold on the glowing winners for a moment before the option cards slide in.
   const finishSpin = () => {
     if (stage?.skipped) playReveal() // otherwise the last reel already chimed as it landed

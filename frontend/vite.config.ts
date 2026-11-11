@@ -10,7 +10,8 @@ export default defineConfig({
     host: '127.0.0.1',
     port: 5173,
     proxy: {
-      '/api': process.env.API_URL ?? 'http://127.0.0.1:8000',
+      // ws: the live-updates socket (/api/ws) goes through the same proxy.
+      '/api': { target: process.env.API_URL ?? 'http://127.0.0.1:8000', ws: true },
     },
   },
   test: {

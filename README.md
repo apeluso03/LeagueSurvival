@@ -25,7 +25,7 @@ Next come live updates, then groups so anyone can start their own, then hosting.
   - a pick bar, then a LOCKED IN moment and a loading-screen view;
   - win and elimination replay moments.
 
-  Before a spin there's a danger meter and survival odds.
+  Before a spin there's a danger meter and survival odds. Everyone watching the Wheels tab on their own device sees the same spin's reels, live.
 - **Live:** after a spin, the app finds your game when it loads and fills in everyone's champion for you. While the game runs, the Live tab shows:
   - the score, game clock and item-gold lead;
   - towers, dragons and other objectives;
@@ -35,6 +35,7 @@ Next come live updates, then groups so anyone can start their own, then hosting.
   - builds for the role each player is really in. That comes from their lane in the game (when the backend runs on a PC in it) or Smite for jungle. Anyone can also set their own role from the role chip, on the spin card or the Live tab; the owner can set anyone's. Autofilled to jungle on a champ rolled as support? Pick Jungle and the build, spells and Mobalytics button switch to its jungle build.
 - **Daily:** Daily Statline, a daily guessing game from your own run history (see "Daily Statline").
 - **Pool:** card grid of the run's champions with sorts and filters, shields, revives and each champion's numbers.
+- **Graveyard:** a headstone for every champion the run has lost: who was on it, the game, its last K/D/A and grade, its record, how many games it lived through, revives and shields broken, and an epitaph. Plus who buried the most, first blood, the quickest fall and the champions that came back.
 - **Shop:** gold from your in-game stats; Reroll, Blacklist, Swap, Shield, Choose a Champ and Contracts.
 - **Stats:** per-player stats and a sortable leaderboard. Each player has their own page with their title, champions and recent games.
 - **Trophies:** 22 achievements that unlock titles, plus a Hall of Shame.
@@ -43,6 +44,7 @@ Next come live updates, then groups so anyone can start their own, then hosting.
 - **Run recap:** a post-game stats graphic with awards. You can save it as an image.
 - **Stream overlay:** `/overlay`, a see-through page for OBS showing the score, picks and big moments.
 - **Accounts:** an owner account, invite links, and each player handling their own gold, shop and items (see below).
+- **Live updates:** every signed-in browser keeps a connection open, so spins, picks, results, purchases and settings show up on everyone's screen within a second, with no refresh. If the connection drops, the site goes back to checking every few seconds and reconnects on its own.
 
 ## Groups and accounts
 
@@ -218,7 +220,7 @@ A daily guessing game built from your group's own games, playable on the **Daily
 Each group can add the Hardcore Draft bot to its own Discord server (SPEC.md section 19). It posts the run as it happens, and everyone can play from Discord with slash commands and buttons.
 
 **What it posts** (the group owner turns each on or off in Settings, Discord):
-- **Spins:** one message per spin with everyone's options, roles and builds, and suggested bans. It's edited as picks come in, then shows the result. Buttons on it: set your role, your items (Reroll, Swap), your build, and Win / Loss / Void for the run owner.
+- **Spins:** first the spin's reels as an animated GIF (the same case-opening reels as the site), then, once they stop, one message with everyone's options, roles and builds, and suggested bans. It's edited as picks come in, then shows the result. Buttons on it: set your role, your items (Reroll, Swap), your build, and Win / Loss / Void for the run owner.
 - **The live game:** "In game" when the game is found, edited into a small scoreboard while live stats come in.
 - **Results:** eliminations, shield saves, revive tokens, gold and grades, pentakills, contracts hit, a low-pool warning, and an Undo button.
 - **Moments:** revives and trophies unlocked.

@@ -38,7 +38,7 @@ Each person signs in with their own account. The run's owner runs the wheels and
 
 ### Non-goals for MVP
 - Open sign-up and separate groups on one site (planned, see 12.4). Today one site holds one group, and new accounts join only through invite links.
-- Real-time updates between devices (planned next, see 12.3).
+- Real-time updates between devices (built, see 12.3 and 21.2).
 - Reading live champ select data (the public Riot API does not offer this).
 - Mobile app (web only, but the layout should work on a phone).
 
@@ -506,7 +506,7 @@ Built since (v0.3):
 - **After the spin, on one screen:** each player's card shows their options with quick facts ("You 2-0 · Riot 58% of 12 · Group 4-1", "New for you"), the suggested role, and the high-elo build (keystone, trees, summoner spells, 3 core items and boots; see 9.5). The pick bar shows 5 suggested bans with the rolled champions' win rate against each. The result bar (game status, Riot status, Win / Loss / Void / Re-roll) is a single row. It fits a 1920×1080 desktop or a 1536×730 laptop browser window without scrolling.
 - **Moments:** LOCKED IN when everyone has picked, then a loading-screen view with each champion's art, role and build. Win and elimination moments play as replay highlights (cards crack and shatter on a loss), with streak banners at 5, 10, then every 10.
 - **Before the spin:** a danger meter (how many losses until spins shrink or stop) and survival odds (a Monte Carlo estimate of reaching the next win targets, using each player's shrunk win rate and the revive-token rules).
-- **Signed in as a player (not the run owner):** a "Waiting for the owner to spin" panel with your own Blacklist and Contract buttons. The page checks for a new spin every 10 seconds until live updates exist (12.3). After the spin you see everyone's options and builds, but item buttons only on your own card, and the result bar only shows the status.
+- **Signed in as a player (not the run owner):** a "Waiting for the owner to spin" panel with your own Blacklist and Contract buttons. When the owner spins, the same reels play here as they happen (live updates, 21.2). After the spin you see everyone's options and builds, but item buttons only on your own card, and the result bar only shows the status.
 
 ### 10.1b Live tab (`/live`)
 - Shown in the nav with a red dot while a game is live. Before a game starts it explains what will happen; once found through Riot only, it lists both teams' champions, spells, keystones and bans.
@@ -705,7 +705,7 @@ Every endpoint except `/api/health` and the signed-out `/api/auth/*` ones needs 
 
 Gold *earned* and per-game gold stay public as stats (Stats leaderboard, game results); balances, gold history and owned items are private.
 
-### 12.3 Live updates (next)
+### 12.3 Live updates (built, v0.7; see 21.2)
 Players now sit on their own devices, so changes must show up everywhere at once.
 - One WebSocket per signed-in browser (FastAPI), authenticated by the session cookie, subscribed to the runs that user can see.
 - Events: spin started (with the strips, so every device plays the same reels), item used (reroll replays that reel everywhere), picks marked, lock-in, result, undo, pool changes, gold changes, player joined.
@@ -790,7 +790,7 @@ Checked against Riot's API Terms and the "Legal Jibber Jabber" fan-content polic
 | M5 | Gold and Shop | Gold ledger and calculation, Link match for manual games, Shop tab, all six items, contracts, rating grade, undo covers gold |
 | M6 | Polish | Wheel animation, History tab, mobile layout, empty and error states, result summary screen |
 | M7 | Accounts | Username/password accounts, invite links, per-player permissions (12.1, 12.2) |
-| M8 | Live updates | WebSockets: spins, items, picks and results show on every device at once (12.3) |
+| M8 | Live updates | WebSockets: spins, items, picks and results show on every device at once (12.3). Built in v0.7 (21.2) |
 | M9 | Groups | Open sign-up, anyone can start a group and own its runs, per-group players and settings (12.4) |
 | M10 | Hosting | Postgres, deployed with HTTPS, backups, jobs outside the web process (12.5) |
 | M11 | Public launch | Production Riot key, fair polling, abuse protection, privacy and terms pages (12.6, 12.7) |
@@ -831,7 +831,7 @@ Status note (v0.3): M0 to M7 are built, plus the extras in Section 18 (esports l
 ## 16. Ideas Backlog (post-MVP)
 - More shop items: Extra Options (2 more backups next spin), buyable Revive, Mystery Box, Gift gold, cosmetics (badges, wheel colours).
 - Discord bot: see section 19.
-- "Graveyard" page with stats on each eliminated champion.
+- "Graveyard" page with stats on each eliminated champion (built, 21.1).
 - Run comparison: compare runs over time.
 - Ready check before spins and spectator mode for friends not playing (with live updates).
 - Public group pages or leaderboards across groups (opt-in).
@@ -941,7 +941,7 @@ Slash commands (Discord's `/` menu) and buttons on the bot's messages:
 
 ### 19.5 Later, maybe
 - Server roles the bot manages: "On a streak", "Run owner", a role for whoever has the most eliminations.
-- The spin reels as a short animated image in the spin message.
+- The spin reels as a short animated image in the spin message (built as its own post before the draft, 21.3).
 - Voice channel status: "In game · 23:10 · 4/2/7".
 - One thread per game, so a busy server's main channel stays tidy.
 
@@ -1034,4 +1034,30 @@ A daily guessing game in the spirit of Bausdle, built from a group's own run his
 - **Site:** `pages/DailyPage.tsx`: the clue card, a card per question (buttons for win or loss, player chips, three number boxes for the K/D/A, grade buttons), then the result, a copy button for the share text and the leaderboard.
 - **Discord** (SPEC 19): `/daily` answers privately with the clue, the guesses so far and the next question's controls (Win / Loss buttons, a player menu, a K/D/A form, a grade menu); each guess updates that same private message. **Share my result** posts the share text publicly. With the "daily" announcement switched on, the bot posts each new puzzle (clue, Play button, yesterday's answer and scores) once a day.
 - **Tests:** `tests/test_daily.py`: picking lines (never twice, other lines from the same game still allowed), the time zone, scoring and hints, bad guesses, three-question games, old puzzles, streaks, the API, playing through the bot, the daily post.
+
+## 21. Graveyard, live updates and the spin reels in Discord (built, v0.7)
+
+### 21.1 Graveyard
+A page (**Graveyard** tab, `/graveyard`) for the active run's eliminated champions, from `GET /api/runs/{id}/graveyard` (`services/graveyard.py`). Nothing new is stored: it's worked out from the pool, pool events, spins and Riot stats.
+- **A headstone per champion,** newest first: portrait, name and title, the game it fell in and who was on it (or "Removed by hand"), the date, its last K/D/A, grade and game length (when the game has Riot stats), its record in the run, how many of the run's finished games it lived through, how often it was rolled and played, revives, shields broken and deaths (a revived champion can die again).
+- **An epitaph** picked from the most telling number, in this order: removed by hand; offered 4+ times and played once; one game; an S grade in its last game; 10+ deaths in its last game; revived before; outlived a shield; 3+ wins; no kills or assists; lived through 20+ games; otherwise "Fell in game N".
+- **The run's totals:** gravediggers (eliminations per player, with filter chips), the hardest-hit class, first blood, the quickest fall, the longest life (or the last to fall when they all fell together), and "Back from the dead": champions revived and alive again.
+- Search, filter by player, and sort by newest, oldest, lived longest, fell quickest or most played. Works at phone width.
+
+### 21.2 Live updates
+As planned in 12.3, with these specifics (`services/hub.py`, `routers/live_updates.py`, `frontend/src/lib/liveUpdates.ts`):
+- **The socket:** `/api/ws`, signed in by the session cookie, for the group the browser is viewing. Pages on other sites can't open it (the Origin header is checked). Every 25 seconds the server sends a ping and checks the session again: signed out closes it (code 4401, no reconnect); switching groups closes it (4409) and the browser reconnects to the new group.
+- **What it sends:** the game rules' events (`spin`, `picks`, `result`, `undo`, `gold`, `game_found`, `revive`, `run_end`) as soon as their transaction commits (never for a change that was rolled back), and a plain `changed` after any other successful change made through the API (a purchase, a setting, a new player). Messages carry only the type, the game and run ids, and the tab that caused it, never balances or other private data: browsers refetch what they may see.
+- **The browser:** sends an `X-Client-Id` per tab with every request and skips its own events. Any event refetches everything but the champion list and builds, once, 200 ms after a burst. While a spin's reels run, refetches wait until they stop (refetching mid-spin made the reels stutter).
+- **Spins everywhere:** a `spin` from someone else (the run owner on another device, or `/spin` in Discord) plays the same options' reels on every Wheels tab that's open (skipped for reduced motion, or a hidden tab).
+- **Polling only as a fallback:** the 10-second check for a new spin and the 15-second check for a pending result only run while the socket is down. It reconnects with backoff (1 to 30 seconds), right away when the tab or network comes back, and refreshes once to catch up. The Live tab still polls the live game (that comes from the live tracker, not events).
+- **One instance:** the hub is in memory, which fits the single Railway instance. Several instances would need a shared channel (Postgres LISTEN/NOTIFY or Redis).
+- Ready check (12.3's optional idea) is still only in Discord (`/ready`).
+
+### 21.3 The spin reels in Discord
+- When a spin is announced (a site spin, or `/spin` with a channel set), the bot first posts "🎰 Game N: spinning for ..." with the reels as a GIF (`services/spin_gif.py`, Pillow), waits until they stop, then posts the draft message as before. The draft is held back so the options aren't spoiled before the reels land.
+- `/spin` with no announcement channel answers with the GIF itself, then posts the draft under it.
+- **The GIF:** one row per player, the same reels as the site (`lib/reel.ts`): a strip of portraits slowing down (ease-out quart) and stopping with option #1 under the gold marker and the backups beside it, each row stopping 0.35 s after the one above, then the options lit and named. 520 px wide, 10 frames a second, one shared palette, played once with the last frame held: about 1 MB for 2 players and 3 MB for 5.
+- Portraits come from Data Dragon and are cached in memory. If the GIF can't be drawn, the draft still goes out on its own.
+- Picks, results and undo still edit the draft message; the reels are posted once per spin.
 

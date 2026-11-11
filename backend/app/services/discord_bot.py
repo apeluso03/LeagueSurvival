@@ -11,6 +11,7 @@ outbox into posts in each group's server.
   with no database transaction open (SQLite allows one writer).
 """
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -37,7 +38,7 @@ from app.models import (
     utcnow,
 )
 from app.routers.access import Ctx, can_act_for, can_manage
-from app.services import achievements, auth, contracts, daily, economy, meta, rules, shop
+from app.services import achievements, auth, contracts, daily, economy, meta, rules, shop, spin_gif
 from app.services import discord_render as render
 from app.services.discord_api import DiscordError
 from app.services.rules import RuleError
@@ -58,6 +59,9 @@ KINDS = {
 MAX_ATTEMPTS = 5
 LIVE_EDIT_SECONDS = 45  # edit a live scoreboard at most this often
 NUDGE_AFTER = timedelta(hours=3)
+# After posting a spin's reels, wait this many times the reels' length before posting the draft
+# under it, so the options aren't spoiled before the reels stop (tests set it to 0).
+REVEAL_PAUSE = 1.0
 ROLES = list(render.ROLE_NAMES)
 
 # Interaction and response types (discord.com/developers/docs/interactions/receiving-and-responding).
@@ -400,8 +404,10 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
             return Answer({"type": MESSAGE, "data": render.reply("Practice spin (challenge mode is off, nothing is saved):\n" + "\n".join(lines))}, commit=True)
         game = rules.create_spin(session, run, ids)
         if _announcing(who.link, "spins"):
-            return Answer({"type": MESSAGE, "data": render.reply(f"Spun for game {game.id}. The draft is in <#{who.link.channel_id}>.", private=True)}, commit=True)
-        return Answer({"type": MESSAGE, "data": render.spin_message(session, game)}, commit=True)
+            # The bot's spin post (the reels, then the draft) comes from the outbox like a site spin.
+            text = f"Spun for game {game.id}. The reels are spinning in <#{who.link.channel_id}>."
+            return Answer({"type": MESSAGE, "data": render.reply(text, private=True)}, commit=True)
+        return _spin_reply(session, game)
     if name == "pick":
         # Same rule as the site (SPEC 12.2): only the run owner marks picks.
         _need_manager(ctx, run)
@@ -437,6 +443,27 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
 
 
 _RESULT_TEXT = {"won": "win recorded", "lost": "loss recorded", "void": "voided"}
+
+
+def _spin_reply(session: Session, game: ChallengeGame) -> Answer:
+    """With no announcement channel: answer /spin itself with the reels, then the draft once they stop."""
+    spec = spin_gif.plan(session, game)
+    game_id = game.id
+
+    async def followup(new_session: Callable[[], Session]) -> dict:
+        with new_session() as s:
+            g = s.get(ChallengeGame, game_id)
+            draft, intro = render.spin_message(s, g), render.spin_intro(s, g)
+        try:
+            gif = await spin_gif.render(spec) if spec else None
+        except Exception:  # noqa: BLE001 - the draft alone is still the answer
+            log.exception("Couldn't draw the spin reels")
+            gif = None
+        if gif is None:
+            return draft
+        return {**intro, "_files": [(spin_gif.FILENAME, gif)], "_then": [(REVEAL_PAUSE * (spec["seconds"] + 0.4), draft)]}
+
+    return Answer({"type": DEFER, "data": {}}, followup=followup, commit=True)
 
 
 def _pick(session: Session, game: ChallengeGame, player_id: int, index: int) -> Answer:
@@ -608,6 +635,7 @@ class _Post:
     message_id: str | None = None  # edit this message instead of posting
     data: dict | None = None
     announce: list[str] = field(default_factory=list)  # trophies to record once posted
+    gif: dict | None = None  # the spin reels to draw and attach (services/spin_gif.plan)
 
 
 def _unlock_keys(session: Session, group_id: int) -> set[str]:
@@ -659,6 +687,11 @@ def _plan(session: Session, events: list[EventOutbox]) -> tuple[list[_Post], set
             existing = session.get(DiscordMessage, key)
             if edit_only and existing is None:
                 continue
+            if kind == "spin" and existing is None and ev.type == "spin":
+                # A new spin: its reels play first, as their own post, then the draft appears under them.
+                spec = spin_gif.plan(session, game)
+                if spec:
+                    posts.append(_Post(ev.group_id, link.channel_id, render.spin_intro(session, game), gif=spec))
             post = _Post(
                 group_id=ev.group_id,
                 channel_id=existing.channel_id if existing else link.channel_id,
@@ -705,6 +738,9 @@ async def _deliver(client, posts: list[_Post]) -> dict[int, str | DiscordError]:
     message id, or the error."""
     out: dict[int, str | DiscordError] = {}
     for post in posts:
+        if post.gif is not None:
+            await _deliver_reels(client, post, out)
+            continue
         try:
             if post.message_id:
                 try:
@@ -721,6 +757,26 @@ async def _deliver(client, posts: list[_Post]) -> dict[int, str | DiscordError]:
         except Exception as e:  # noqa: BLE001 - a network blip; try again next time
             out[id(post)] = DiscordError(0, str(e))
     return out
+
+
+async def _deliver_reels(client, post: _Post, out: dict[int, str | DiscordError]) -> None:
+    """Draw and post a spin's reels, then wait for them to stop before the next post (the draft)."""
+    try:
+        gif = await spin_gif.render(post.gif)
+    except Exception:  # noqa: BLE001 - the draft still goes out without them
+        log.exception("Couldn't draw the spin reels")
+        return
+    try:
+        out[id(post)] = await client.post(post.channel_id, post.message, files=[(spin_gif.FILENAME, gif)])
+    except DiscordError as e:
+        out[id(post)] = e
+        return
+    except Exception as e:  # noqa: BLE001 - a network blip
+        out[id(post)] = DiscordError(0, str(e))
+        return
+    wait = REVEAL_PAUSE * (post.gif["seconds"] + 0.4)
+    if wait > 0:
+        await asyncio.sleep(wait)
 
 
 def _record(session: Session, posts: list[_Post], results: dict[int, str | DiscordError]) -> None:

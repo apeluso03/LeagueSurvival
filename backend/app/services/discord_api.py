@@ -6,6 +6,7 @@ requests (routers/discord.py), and everything the bot posts goes out through RES
 """
 
 import asyncio
+import json
 import logging
 from urllib.parse import urlencode
 
@@ -60,6 +61,17 @@ def authorize_url(redirect_uri: str, state: str, install: bool = False) -> str:
     return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
+def _body(message: dict, files: list[tuple[str, bytes]] | None) -> dict:
+    """A message as JSON, or with files as a multipart upload (the JSON goes in `payload_json`)."""
+    if not files:
+        return {"json": message}
+    payload = {**message, "attachments": [{"id": i, "filename": name} for i, (name, _) in enumerate(files)]}
+    return {
+        "data": {"payload_json": json.dumps(payload)},
+        "files": {f"files[{i}]": (name, content, "image/gif" if name.endswith(".gif") else "application/octet-stream") for i, (name, content) in enumerate(files)},
+    }
+
+
 class DiscordClient:
     """The REST calls the bot makes. Tests swap in a fake with the same methods."""
 
@@ -94,16 +106,21 @@ class DiscordClient:
 
     # --- messages ---
 
-    async def post(self, channel_id: str, message: dict) -> str:
-        data = await self._request("POST", f"/channels/{channel_id}/messages", json=message)
+    async def post(self, channel_id: str, message: dict, files: list[tuple[str, bytes]] | None = None) -> str:
+        data = await self._request("POST", f"/channels/{channel_id}/messages", **_body(message, files))
         return data["id"]
 
     async def edit(self, channel_id: str, message_id: str, message: dict) -> None:
         await self._request("PATCH", f"/channels/{channel_id}/messages/{message_id}", json=message)
 
-    async def edit_reply(self, interaction_token: str, message: dict) -> None:
+    async def edit_reply(self, interaction_token: str, message: dict, files: list[tuple[str, bytes]] | None = None) -> None:
         """Fill in a reply that was first answered with "thinking..." (a deferred interaction)."""
-        await self._request("PATCH", f"/webhooks/{self.app_id}/{interaction_token}/messages/@original", bot=False, json=message)
+        path = f"/webhooks/{self.app_id}/{interaction_token}/messages/@original"
+        await self._request("PATCH", path, bot=False, **_body(message, files))
+
+    async def followup(self, interaction_token: str, message: dict) -> None:
+        """Another message in answer to the same command (after its first reply)."""
+        await self._request("POST", f"/webhooks/{self.app_id}/{interaction_token}", bot=False, json=message)
 
     # --- servers ---
 

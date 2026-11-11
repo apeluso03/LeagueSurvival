@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { InvitePage, LoginPage, RequireAuth, SetupPage, SignupPage, StartGroupPage } from './pages/AuthPages'
 import { DailyPage } from './pages/DailyPage'
+import { GraveyardPage } from './pages/GraveyardPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { LandingPage } from './pages/LandingPage'
 import { LegalPage } from './pages/LegalPage'
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="live" element={<LivePage />} />
           <Route path="daily" element={<DailyPage />} />
           <Route path="pool" element={<PoolPage />} />
+          <Route path="graveyard" element={<GraveyardPage />} />
           <Route path="shop" element={<ShopPage />} />
           <Route path="stats" element={<StatsPage />} />
           <Route path="trophies" element={<TrophiesPage />} />

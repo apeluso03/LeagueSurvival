@@ -5,6 +5,7 @@ The OAuth `state` is signed and tied to a short-lived cookie in the browser that
 link from someone else can't attach their Discord (or their server) to your account or group.
 """
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -122,8 +123,18 @@ async def interactions(
             except Exception:  # noqa: BLE001 - tell the person rather than leave "thinking..." forever
                 log.exception("Discord follow-up failed")
                 message = render.reply("Something went wrong. Try again in a moment.")
+            # A follow-up can attach files ("_files") and add later messages ("_then": [(wait, message)]).
+            files = message.pop("_files", None)
+            later = message.pop("_then", [])
             try:
-                await client.edit_reply(token, message)
+                if files:
+                    await client.edit_reply(token, message, files=files)
+                else:
+                    await client.edit_reply(token, message)
+                for wait, extra in later:
+                    if wait > 0:
+                        await asyncio.sleep(wait)
+                    await client.followup(token, extra)
             except DiscordError as e:
                 log.warning("Couldn't fill in a Discord reply: %s", e)
 

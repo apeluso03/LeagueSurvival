@@ -124,6 +124,14 @@ def _roles(session: Session, game: ChallengeGame) -> dict[int, dict]:
     return live.player_roles(session, game.id, row_)
 
 
+def spin_intro(session: Session, game: ChallengeGame) -> dict:
+    """The line above a spin's reels (the GIF is attached to it)."""
+    n = Names(session)
+    names = [n.pname(a.player_id) for a in rules.assignments_for(session, game.id)]
+    who = ", ".join(names[:-1]) + f" and {names[-1]}" if len(names) > 1 else "".join(names)
+    return {"content": f"🎰 **Game {game.id}**: spinning for {who}...", "allowed_mentions": {"parse": []}}
+
+
 def spin_message(session: Session, game: ChallengeGame) -> dict:
     """One message per spin: everyone's options, edited as picks come in, then locked in, then the
     result. While the game is pending it has the buttons to play from Discord."""

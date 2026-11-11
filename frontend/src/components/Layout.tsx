@@ -1,6 +1,8 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useActiveRun, useLive, useTeamColors } from '../hooks/queries'
+import { useMe } from '../hooks/useAuth'
+import { useLiveUpdatesConnection } from '../hooks/useLiveUpdates'
 import { usePageTitle } from '../hooks/usePageTitle'
 import { setMuted, useMuted } from '../lib/sound'
 import { ErrorBoundary } from './ErrorBoundary'
@@ -15,6 +17,7 @@ const TABS = [
   { to: '/live', label: 'Live' },
   { to: '/daily', label: 'Daily' },
   { to: '/pool', label: 'Pool' },
+  { to: '/graveyard', label: 'Graveyard' },
   { to: '/shop', label: 'Shop' },
   { to: '/stats', label: 'Stats' },
   { to: '/trophies', label: 'Trophies' },
@@ -87,6 +90,7 @@ export function Layout() {
   const inGame = !!live && live.ended_at == null
   const headerRef = useHeaderHeight()
   useTeamColors()
+  useLiveUpdatesConnection(useMe().data?.group?.id)
   // Tabs set the title here; other pages (player, recap) set their own.
   usePageTitle(TABS.find((t) => t.to === pathname)?.label ?? (pathname === '/' ? '' : null))
   return (

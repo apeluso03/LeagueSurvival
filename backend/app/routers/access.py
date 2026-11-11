@@ -70,6 +70,9 @@ def current_ctx(request: Request, user: User = Depends(current_user), session: S
             session.add(row)
             session.commit()
     group = session.get(Group, member.group_id) if member else None
+    holder = request.scope.get("live_updates")
+    if holder is not None and group is not None:
+        holder["group_id"] = group.id  # a change here tells the group's other browsers (services/hub.py)
     return Ctx(user=user, group=group, member=member)
 
 

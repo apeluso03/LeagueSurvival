@@ -8,7 +8,7 @@ from app.models import Champion, InventoryItem, Player, PoolEntry, PoolEvent, Re
 from app.routers.access import Ctx, get_player, get_run, group_ctx, require_act_for, require_manager, require_owner
 from app.routers.common import game_out, get_app_settings, run_out
 from app.schemas import AssignmentOut, PoolEntryOut, RunIn, RunOut, SpinIn, SpinOut
-from app.services import recap, rules, stats
+from app.services import graveyard, recap, rules, stats
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -89,6 +89,12 @@ def get_pool(
 def run_recap(run_id: int, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
     """Everything the run recap page shows: totals, the win/loss timeline, per-player lines and awards."""
     return recap.run_recap(session, get_run(session, ctx, run_id))
+
+
+@router.get("/{run_id}/graveyard")
+def run_graveyard(run_id: int, ctx: Ctx = Depends(group_ctx), session: Session = Depends(get_session)):
+    """Every champion the run has lost, with its last game, record and epitaph (SPEC 21)."""
+    return graveyard.to_dict(graveyard.build(session, get_run(session, ctx, run_id)))
 
 
 @router.get("/{run_id}/champion-lines")
