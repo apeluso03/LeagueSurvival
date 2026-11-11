@@ -6,10 +6,12 @@ other players' lines from that game stay available for later days.
 
 The clue is the champion, role, game length and queue. Four questions, in order:
 
-    result   Win or loss?                1 try     1 point
-    pilot    Who was piloting?           2 tries   2 / 1 points
-    kda      Kills / deaths / assists    4 tries   4 / 3 / 2 / 1 points (higher/lower per number)
-    grade    The grade (S+ to D)         3 tries   3 / 2 / 1 points (higher/lower)
+    result   Win or loss?                1 try        1 point
+    pilot    Who was piloting?           until right  2 points, -1 per wrong guess
+    kda      Kills / deaths / assists    until right  4 points, -1 per wrong guess (higher/lower per number)
+    grade    The grade (S+ to D)         until right  3 points, -1 per wrong guess (higher/lower)
+
+A question never scores below 0.
 
 The grade question is left out for a game without one. Everyone in the group plays the same
 puzzle once per day, on the site or through the Discord bot (the same guesses either way).
@@ -40,7 +42,8 @@ from app.services import rating
 from app.services.rules import RuleError
 
 QUESTIONS = ("result", "pilot", "kda", "grade")
-POINTS = {"result": [1], "pilot": [2, 1], "kda": [4, 3, 2, 1], "grade": [3, 2, 1]}
+WORTH = {"result": 1, "pilot": 2, "kda": 4, "grade": 3}  # points for a right first guess; -1 per wrong one
+TRIES = {"result": 1}  # the rest take guesses until they're right
 LABELS = {"result": "Win or loss?", "pilot": "Who was piloting?", "kda": "K / D / A", "grade": "Grade"}
 CLOSE = 2  # a K/D/A number within this of the answer counts as close
 
@@ -128,7 +131,7 @@ def questions(ans: dict) -> list[str]:
 
 
 def max_score(ans: dict) -> int:
-    return sum(POINTS[q][0] for q in questions(ans))
+    return sum(WORTH[q] for q in questions(ans))
 
 
 def _check(q: str, guess, ans: dict) -> dict:
@@ -151,16 +154,27 @@ def progress(play: DailyPlay | None, ans: dict) -> dict:
     guesses = (play.guesses if play else {}) or {}
     out, current, score = [], None, 0
     for q in questions(ans):
-        tries = len(POINTS[q])
+        tries = TRIES.get(q)  # None: unlimited
         checked = [_check(q, g, ans) for g in guesses.get(q, [])]
         solved = any(c["correct"] for c in checked)
-        finished = solved or len(checked) >= tries
-        points = POINTS[q][len(checked) - 1] if solved else 0
+        finished = solved or (tries is not None and len(checked) >= tries)
+        worth = max(0, WORTH[q] - sum(not c["correct"] for c in checked))  # what a right guess scores now
+        points = worth if solved else 0
         score += points
         if not finished and current is None:
             current = q
         out.append(
-            {"id": q, "label": LABELS[q], "tries": tries, "guesses": checked, "solved": solved, "finished": finished, "points": points}
+            {
+                "id": q,
+                "label": LABELS[q],
+                "tries": tries,
+                "max_points": WORTH[q],
+                "worth": 0 if finished else worth,
+                "guesses": checked,
+                "solved": solved,
+                "finished": finished,
+                "points": points,
+            }
         )
     return {"questions": out, "current": current, "done": current is None, "score": score, "max_score": max_score(ans)}
 
@@ -197,7 +211,7 @@ def _normalize(session: Session, puzzle: DailyPuzzle, q: str, value):
 
 def guess(session: Session, puzzle: DailyPuzzle, user: User, q: str, value) -> DailyPlay:
     """Record one guess for the question that's up. Questions go in order; each ends when it's
-    right or out of tries."""
+    right (or, for win or loss, after its one try)."""
     if puzzle.day != today():
         raise RuleError("That puzzle is over. Play today's.", 409)
     ans = answer(session, puzzle)

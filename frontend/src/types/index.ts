@@ -800,7 +800,9 @@ export interface DailyGuess {
 export interface DailyQuestion {
   id: DailyQuestionId
   label: string
-  tries: number
+  tries: number | null // null: guess until right
+  max_points: number
+  worth: number // what a right guess scores now (-1 per wrong guess)
   guesses: DailyGuess[]
   solved: boolean
   finished: boolean
