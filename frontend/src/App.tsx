@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { InvitePage, LoginPage, RequireAuth, SetupPage, SignupPage, StartGroupPage } from './pages/AuthPages'
+import { DailyPage } from './pages/DailyPage'
 import { HistoryPage } from './pages/HistoryPage'
 import { LandingPage } from './pages/LandingPage'
 import { LegalPage } from './pages/LegalPage'
@@ -31,6 +32,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="wheels" element={<WheelsPage />} />
           <Route path="live" element={<LivePage />} />
+          <Route path="daily" element={<DailyPage />} />
           <Route path="pool" element={<PoolPage />} />
           <Route path="shop" element={<ShopPage />} />
           <Route path="stats" element={<StatsPage />} />

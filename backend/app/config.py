@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # The site's own address (e.g. https://hardcoredraft.gg), for links in Discord posts and as the
     # Discord sign-in return address. Empty: taken from each request; posts go without links.
     public_url: str = ""
+    # When a new daily puzzle starts (midnight in this time zone, SPEC 20).
+    daily_timezone: str = "America/New_York"
     # The Discord bot (SPEC 19), from the Discord Developer Portal. All four, or the bot stays off.
     discord_app_id: str = ""
     discord_public_key: str = ""

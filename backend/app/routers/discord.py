@@ -315,7 +315,7 @@ async def channels(ctx: Ctx = Depends(require_owner), session: Session = Depends
 
 class ServerPatch(BaseModel):
     channel_id: str | None = None
-    muted: list[Literal["spins", "live", "results", "moments", "recaps", "nudges"]] | None = Field(default=None, max_length=6)
+    muted: list[Literal["spins", "live", "results", "moments", "recaps", "nudges", "daily"]] | None = Field(default=None, max_length=7)
 
 
 @router.patch("/server")

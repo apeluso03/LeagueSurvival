@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from app.config import BACKEND_DIR, get_settings
 from app.db import engine
 from app.models import Champion
-from app.routers import account, champions, discord, fun, games, live, players, privacy, riot, runs, settings, shop, stats, tokens
+from app.routers import account, champions, daily, discord, fun, games, live, players, privacy, riot, runs, settings, shop, stats, tokens
 from app.routers.access import current_user
 from app.jobs import crawler, live_tracker, poller
 from app.jobs import discord_bot as discord_job
@@ -108,7 +108,7 @@ def health():
 # routes check for themselves (Discord's own requests are signed, not signed in).
 app.include_router(account.router)
 app.include_router(discord.router)
-for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun, live, privacy):
+for module in (settings, players, champions, runs, games, tokens, riot, stats, shop, fun, live, privacy, daily):
     app.include_router(module.router, dependencies=[Depends(current_user)])
 
 

@@ -1,8 +1,8 @@
 """Background sender for the Discord bot (services/discord_bot.py, SPEC 19).
 
 Every SEND_SECONDS it sends what the event outbox has waiting. Less often it edits live
-scoreboards, posts reminders for games stuck without a result, and early each month posts last
-month's Wrapped. On start it registers the slash commands (idempotent).
+scoreboards, posts reminders for games stuck without a result, posts each day's Daily Statline,
+and early each month posts last month's Wrapped. On start it registers the slash commands (idempotent).
 
 With the bot not set up, it only clears out old events now and then.
 """
@@ -63,6 +63,7 @@ async def run_forever(engine: Engine, client_factory=DiscordClient) -> None:
             if tick % SLOW_EVERY == 0:
                 await discord_bot.post_nudges(new_session, client)
                 await discord_bot.post_wrapped(new_session, client)
+                await discord_bot.post_daily(new_session, client)
                 with new_session() as session:
                     discord_bot.prune_outbox(session)
                     session.commit()

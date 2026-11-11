@@ -570,3 +570,113 @@ def gold_and_items(session: Session, run: Run, player: Player) -> dict:
     if tokens:
         lines.append(f"Revive tokens: {len(tokens)}")
     return reply(embeds=[{"author": {"name": player.display_name}, "description": "\n".join(lines), "color": color_of(player)}], private=True)
+
+
+# --- Daily Statline (SPEC 20) -------------------------------------------------------------------------
+
+_ARROW = {("higher", False): "⬆️", ("lower", False): "⬇️", ("higher", True): "🔼", ("lower", True): "🔽"}
+
+
+def _clue_line(n: Names, clue: dict) -> str:
+    parts = [f"**{n.cname(clue['champion_id'])}**"]
+    if clue.get("role"):
+        parts.append(ROLE_NAMES.get(clue["role"], clue["role"]))
+    if clue.get("duration"):
+        parts.append(f"{clue['duration'] // 60}:{clue['duration'] % 60:02d}")
+    if clue.get("queue_id") is not None:
+        parts.append(QUEUES.get(clue["queue_id"], f"Queue {clue['queue_id']}"))
+    return " · ".join(parts)
+
+
+def _guess_text(q: dict, players: dict[int, str]) -> str:
+    out = []
+    for g in q["guesses"]:
+        if q["id"] == "kda":
+            out.append(" / ".join(f"{p['value']}{'✅' if p['hint'] == 'exact' else _ARROW[(p['hint'], p['close'])]}" for p in g["parts"]))
+        elif q["id"] == "grade":
+            out.append(f"{g['value']}{'✅' if g['correct'] else _ARROW[(g['hint'], g['close'])]}")
+        elif q["id"] == "pilot":
+            out.append(f"{players.get(g['value'], '?')} {'✅' if g['correct'] else '❌'}")
+        else:
+            out.append(f"{g['value'].title()} {'✅' if g['correct'] else '❌'}")
+    return " · ".join(out)
+
+
+def daily_view(session: Session, v: dict, private: bool = False) -> dict:
+    """One person's Daily Statline: the clue, their guesses with hints, and the next question's
+    buttons (or the answer, their score and the day's leaderboard once done)."""
+    n = Names(session)
+    players = {p["id"]: p["name"] for p in v["players"]}
+    lines = [_clue_line(n, v["clue"]), ""]
+    for q in v["questions"]:
+        if q["guesses"]:
+            lines.append(f"**{q['label']}** {_guess_text(q, players)}")
+    components = []
+    current = next((q for q in v["questions"] if q["id"] == v["current"]), None)
+    if current:
+        left = current["tries"] - len(current["guesses"])
+        lines.append(f"➡️ **{current['label']}** · {left} {'try' if left == 1 else 'tries'} left")
+        if current["id"] in ("kda", "grade"):
+            lines.append("-# ⬆️⬇️ the answer is higher or lower · 🔼🔽 close (within 2, or one grade)")
+        guessed = {g["value"] for g in current["guesses"]} if current["id"] != "kda" else set()
+        if current["id"] == "result":
+            components.append(row(button("Win", "hd:dq:result:win", style=3), button("Loss", "hd:dq:result:loss", style=4)))
+        elif current["id"] == "pilot":
+            options = [{"label": p["name"], "value": str(p["id"])} for p in v["players"] if p["id"] not in guessed][:25]
+            components.append(row({"type": 3, "custom_id": "hd:dq:pilot", "placeholder": "Who was piloting?", "options": options}))
+        elif current["id"] == "kda":
+            components.append(row(button("Guess the K/D/A", "hd:dq:kda", style=1)))
+        else:
+            options = [{"label": g, "value": g} for g in v["grades"] if g not in guessed]
+            components.append(row({"type": 3, "custom_id": "hd:dq:grade", "placeholder": "Pick a grade", "options": options}))
+    else:
+        a = v["answer"]
+        k, d, as_ = a["kda"]
+        lines += [
+            "",
+            f"It was **{a['pilot_name']}** · {a['result'].title()} · {k}/{d}/{as_}" + (f" · {a['grade']}" if a["grade"] else ""),
+            f"Score **{v['score']}/{v['max_score']}** · streak {v['streak']}",
+        ]
+        board = v.get("leaderboard") or []
+        if board:
+            lines.append("Today: " + ", ".join(f"{e['name']} {e['score']}" for e in board[:8]))
+        buttons = [button("Share my result", "hd:dq:share", style=1)] if private else []
+        url = link("/daily")
+        if url:
+            buttons.append(link_button("Open on the site", url))
+        if buttons:
+            components.append(row(*buttons))
+    embed = {"title": f"Daily Statline #{v['number']}", "description": "\n".join(lines), "color": GOLD, "footer": FOOTER}
+    champ = n.champ(v["clue"]["champion_id"])
+    if champ and champ.image_url:
+        embed["thumbnail"] = {"url": champ.image_url}
+    return reply(embeds=[embed], components=components, private=private)
+
+
+def daily_post(session: Session, puzzle, yesterday=None) -> dict:
+    """The day's announcement: today's clue, and yesterday's answer and best scores."""
+    from app.services import daily
+
+    n = Names(session)
+    ans = daily.answer(session, puzzle)
+    lines = [
+        _clue_line(n, ans),
+        "Guess the result, who was piloting, the K/D/A and the grade. One go each, only you see your guesses.",
+    ]
+    if yesterday is not None:
+        y = daily.answer(session, yesterday)
+        k, d, a = y["kda"]
+        lines += ["", f"Yesterday (#{yesterday.number}): **{n.pname(y['pilot'])}** on {n.cname(y['champion_id'])} · {y['result'].title()} · {k}/{d}/{a}" + (f" · {y['grade']}" if y["grade"] else "")]
+        board = daily.leaderboard(session, yesterday)
+        if board:
+            lines.append("Scores: " + ", ".join(f"{e['name']} {e['score']}/{daily.max_score(y)}" for e in board[:8]))
+    embed = {"title": f"Daily Statline #{puzzle.number}", "description": "\n".join(lines), "color": GOLD, "footer": FOOTER}
+    champ = n.champ(ans["champion_id"])
+    if champ and champ.image_url:
+        embed["thumbnail"] = {"url": champ.image_url}
+    buttons = [button("Play", "hd:dq:open", style=1)]
+    url = link("/daily")
+    if url:
+        buttons.append(link_button("Play on the site", url))
+    return reply(embeds=[embed], components=[row(*buttons)])
+

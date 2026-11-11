@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, Column, DateTime, TypeDecorator
+from sqlalchemy import JSON, BigInteger, Column, DateTime, TypeDecorator, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -471,4 +471,41 @@ class EventOutbox(SQLModel, table=True):
     sent_at: datetime | None = dt_field()  # handled (posted, or nothing to post)
     attempts: int = 0
     error: str | None = None
+
+
+# --- Daily Statline, the daily guessing game (SPEC 20) ------------------------------------------
+
+
+class DailyPuzzle(SQLModel, table=True):
+    """A group's puzzle for one day: one player's statline from a past challenge game. A statline
+    is used once ever; the other players' lines from the same game stay available."""
+
+    __table_args__ = (
+        UniqueConstraint("group_id", "day", name="uq_dailypuzzle_group_day"),
+        UniqueConstraint("group_id", "match_id", "player_id", name="uq_dailypuzzle_statline"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    group_id: int = Field(foreign_key="group.id", index=True)
+    day: str  # "2026-11-11", in the daily time zone (config.daily_timezone)
+    number: int  # Daily Statline #N for this group
+    match_id: str
+    player_id: int = Field(foreign_key="player.id")
+    game_id: int = Field(foreign_key="challengegame.id")
+    created_at: datetime = dt_field(default_now=True)
+
+
+class DailyPlay(SQLModel, table=True):
+    """One person's go at a day's puzzle: their guesses per question (services/daily.py)."""
+
+    __table_args__ = (UniqueConstraint("puzzle_id", "user_id", name="uq_dailyplay_puzzle_user"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    puzzle_id: int = Field(foreign_key="dailypuzzle.id", index=True)
+    user_id: int = Field(foreign_key="user.id")
+    guesses: dict = json_field(dict)  # {"result": ["win"], "pilot": [3], "kda": [[5, 2, 7]], "grade": ["A"]}
+    done: bool = False
+    score: int = 0
+    created_at: datetime = dt_field(default_now=True)
+    finished_at: datetime | None = dt_field()
 
