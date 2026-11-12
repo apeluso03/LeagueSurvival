@@ -36,7 +36,7 @@ Next come live updates, then groups so anyone can start their own, then hosting.
 - **Daily:** Daily Statline, a daily guessing game from your own run history (see "Daily Statline").
 - **Pool:** card grid of the run's champions with sorts and filters, shields, revives and each champion's numbers.
 - **Graveyard:** a headstone for every champion the run has lost: who was on it, the game, its last K/D/A and grade, its record, how many games it lived through, revives and shields broken, and an epitaph. Plus who buried the most, first blood, the quickest fall and the champions that came back.
-- **Shop:** gold from your in-game stats; Reroll, Blacklist, Swap, Shield, Choose a Champ and Contracts.
+- **Shop:** gold from your in-game stats; Reroll, Blacklist, Role Select, Swap, Shield, Choose a Champ and Contracts. **Role Select** (400 gold) locks your role for your next spin: you only roll champions played in it, and nobody else in that game rolls a champion that mains it (one player per role).
 - **Stats:** per-player stats and a sortable leaderboard. Each player has their own page with their title, champions and recent games.
 - **Trophies:** 22 achievements that unlock titles, plus a Hall of Shame.
 - **Wrapped:** a monthly story of your group's games.
@@ -44,6 +44,7 @@ Next come live updates, then groups so anyone can start their own, then hosting.
 - **Run recap:** a post-game stats graphic with awards. You can save it as an image.
 - **Stream overlay:** `/overlay`, a see-through page for OBS showing the score, picks and big moments.
 - **Accounts:** an owner account, invite links, and each player handling their own gold, shop and items (see below).
+- **Themes:** pick a look from your user menu (top right): **Broadcast** (the default), **Frutiger Aero** (glossy glass, blue sky, bubbles), **Spectral** (ghostly teal mist) or **Neon Sunset** (synthwave, with a striped sun and a neon grid). It's saved per browser.
 - **Live updates:** every signed-in browser keeps a connection open, so spins, picks, results, purchases and settings show up on everyone's screen within a second, with no refresh. If the connection drops, the site goes back to checking every few seconds and reconnects on its own.
 
 ## Groups and accounts
@@ -240,7 +241,7 @@ Each group can add the Hardcore Draft bot to its own Discord server (SPEC.md sec
 - **Reminders:** once, when a game has waited 3 hours for a result.
 - **Daily Statline:** each day's new puzzle, with yesterday's answer and scores.
 
-**Commands:** `/run`, `/pool`, `/stats`, `/build`, `/live`, `/history` for anyone in the server; `/daily` for the Daily Statline; `/gold`, `/shop`, `/role` for players (for themselves; the run owner can name anyone); `/spin`, `/pick`, `/result`, `/undo` for the run owner; `/newrun` for the group owner; `/ready` for a ready check; `/link` to check your link. Permissions are the same as on the site: people act as the account that linked their Discord (Settings, Discord, **Link Discord**), and someone who hasn't linked can look but not act. Linked accounts can also **Sign in with Discord**.
+**Commands:** `/run`, `/pool`, `/stats`, `/build`, `/live`, `/history` for anyone in the server; `/daily` for the Daily Statline; `/gold`, `/shop`, `/role`, `/roleselect` for players (for themselves; the run owner can name anyone); `/spin`, `/pick`, `/result`, `/undo` for the run owner; `/newrun` for the group owner; `/ready` for a ready check; `/link` to check your link. Permissions are the same as on the site: people act as the account that linked their Discord (Settings, Discord, **Link Discord**), and someone who hasn't linked can look but not act. Linked accounts can also **Sign in with Discord**.
 
 **Setting it up** (once per site, by whoever hosts it):
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications), **New Application**, and name it Hardcore Draft.

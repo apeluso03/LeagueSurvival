@@ -9,7 +9,7 @@ import random
 
 from sqlmodel import Session, col, select
 
-from app.models import ChallengeGame, Contract, InventoryItem, Player, PoolEntry, PoolEvent, Run, utcnow
+from app.models import ChallengeGame, Champion, Contract, InventoryItem, Player, PoolEntry, PoolEvent, Run, utcnow
 from app.services import contracts, economy, events, rules, shop_config
 from app.services import spin as spin_logic
 from app.services.rules import RuleError
@@ -21,7 +21,56 @@ ITEMS = {
     "shield": ("Shield", "Anytime", "Protect an alive champion. The next loss that would eliminate it uses the shield instead."),
     "choose": ("Choose a Champ", "After a spin, before lock-in", "Replace your list with any alive champion you pick."),
     "contract": ("Contract", "Before a spin", "Get a random goal for your next game. Hit it for bonus gold."),
+    "role": (
+        "Role Select",
+        "Before a spin",
+        "Pick your role for your next spin: you only roll champions played there, and nobody else in that game "
+        "rolls a champion that mains it. One player per role.",
+    ),
 }
+
+# Role Select roles (the game's own names, like SpinAssignment.played_role) and how champion data
+# names them (Champion.positions, most played first).
+ROLE_NAMES = {"TOP": "Top", "JUNGLE": "Jungle", "MIDDLE": "Mid", "BOTTOM": "Bot", "UTILITY": "Support"}
+_POSITION = {"TOP": "TOP", "JUNGLE": "JUNGLE", "MIDDLE": "MIDDLE", "BOTTOM": "BOTTOM", "UTILITY": "SUPPORT"}
+
+
+def role_pool(session: Session, champion_ids, role: str) -> set[str]:
+    """Champions (of these) played in `role`: what a Role Select for it can roll."""
+    pos = _POSITION[role]
+    ids = set(champion_ids)
+    return {c.id for c in session.exec(select(Champion).where(col(Champion.id).in_(ids))).all() if pos in (c.positions or [])}
+
+
+def role_mains(session: Session, champion_ids, roles) -> set[str]:
+    """Champions (of these) whose main role is one of `roles`: kept away from everyone else."""
+    mains = {_POSITION[r] for r in roles}
+    ids = set(champion_ids)
+    return {c.id for c in session.exec(select(Champion).where(col(Champion.id).in_(ids))).all() if (c.positions or [None])[0] in mains}
+
+
+def armed_role_selects(session: Session, run_id: int, player_ids: list[int] | None = None) -> dict[int, tuple[InventoryItem, str]]:
+    """Armed Role Selects in a run (for these players): player id -> (item, role)."""
+    query = select(InventoryItem).where(
+        InventoryItem.run_id == run_id, InventoryItem.type == "role", InventoryItem.status == "armed"
+    )
+    if player_ids is not None:
+        query = query.where(col(InventoryItem.player_id).in_(player_ids))
+    return {i.player_id: (i, i.target.get("role")) for i in session.exec(query).all()}
+
+
+def spin_role_limits(
+    session: Session, alive: list[str], roles: dict[int, str], player_ids: list[int]
+) -> tuple[dict[int, set[str]], dict[int, set[str]]]:
+    """For a spin with these locked roles (player id -> role): what each Role Select player may roll,
+    and what everyone else can't (champions maining a locked role)."""
+    allowed = {pid: role_pool(session, alive, role) for pid, role in roles.items()}
+    banned: dict[int, set[str]] = {}
+    for pid in player_ids:
+        others = [r for p, r in roles.items() if p != pid]
+        if others and pid not in roles:
+            banned[pid] = role_mains(session, alive, others)
+    return allowed, banned
 
 
 def blacklist_cap(alive_count: int, pct: float) -> int:
@@ -38,6 +87,7 @@ def catalog(session: Session, run: Run) -> dict:
             for t, (n, w, d) in ITEMS.items()
         ],
         "blacklist_cap": blacklist_cap(alive, cfg["blacklist_pct"]),
+        "locked_roles": {role: pid for pid, (_, role) in armed_role_selects(session, run.id).items()},
         "contract_payout": cfg["contract"]["payout"],
         "config": cfg,
     }
@@ -159,6 +209,23 @@ def use_item(session: Session, item: InventoryItem, payload: dict, rng: random.R
         item.target = {"champion_ids": ids, "cap": cap}
         session.add(item)
 
+    elif item.type == "role":
+        role = payload.get("role")
+        if role not in ROLE_NAMES:
+            raise RuleError("Pick a role: Top, Jungle, Mid, Bot or Support")
+        armed = armed_role_selects(session, run.id)
+        if item.player_id in armed:
+            raise RuleError(f"This player already has {ROLE_NAMES[armed[item.player_id][1]]} locked for their next spin", 409)
+        taken = next((pid for pid, (_, r) in armed.items() if r == role), None)
+        if taken is not None:
+            who = session.get(Player, taken)
+            raise RuleError(f"{who.display_name if who else 'Someone'} already locked {ROLE_NAMES[role]} for the next spin", 409)
+        if not role_pool(session, alive, role):
+            raise RuleError(f"No {ROLE_NAMES[role]} champions are alive", 409)
+        item.status = "armed"
+        item.target = {"role": role}
+        session.add(item)
+
     elif item.type == "reroll":
         game, mine = _spin_slot(session, item, payload.get("game_id"))
         others = {c for a in rules.assignments_for(session, game.id) if a.player_id != item.player_id for c in a.options}
@@ -170,9 +237,20 @@ def use_item(session: Session, item: InventoryItem, payload: dict, rng: random.R
             )
         ).first()
         banned = set(bl.target.get("champion_ids", [])) if bl else set()
+        # A Role Select used on this spin still holds: its player rerolls within the role, and
+        # nobody else rerolls into a champion maining a locked role.
+        locked = {
+            i.player_id: i.target.get("role")
+            for i in session.exec(
+                select(InventoryItem).where(InventoryItem.type == "role", InventoryItem.used_in_game_id == game.id)
+            ).all()
+        }
+        only = role_pool(session, alive, locked[item.player_id]) if item.player_id in locked else None
+        if item.player_id not in locked and locked:
+            banned |= role_mains(session, alive, locked.values())
         count = max(len(mine.options), 1)
         try:
-            new = spin_logic.redraw(alive, count, set(mine.options) | others | banned, rng)
+            new = spin_logic.redraw(alive, count, set(mine.options) | others | banned, rng, allowed=only)
         except spin_logic.SpinBlocked as e:
             raise RuleError(str(e), 409) from e
         old = list(mine.options)
@@ -222,11 +300,12 @@ def adjust_gold(session: Session, run: Run, player_id: int, amount: int, note: s
 
 
 def items_used_in_game(session: Session, game_id: int) -> list[InventoryItem]:
-    """Reroll / Swap / Choose / Blacklist items spent on a game's spin (History tab)."""
+    """Reroll / Swap / Choose / Blacklist / Role Select items spent on a game's spin (History tab)."""
     return list(
         session.exec(
             select(InventoryItem).where(
-                InventoryItem.used_in_game_id == game_id, col(InventoryItem.type).in_(["reroll", "swap", "choose", "blacklist"])
+                InventoryItem.used_in_game_id == game_id,
+                col(InventoryItem.type).in_(["reroll", "swap", "choose", "blacklist", "role"]),
             )
         ).all()
     )

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { ContractReveal } from '../components/ContractReveal'
-import { BlacklistDialog, PickChampionDialog } from '../components/ItemDialogs'
+import { BlacklistDialog, PickChampionDialog, RoleSelectDialog } from '../components/ItemDialogs'
 import { ItemArt } from '../components/ItemArt'
 import { CoinIcon, ShieldIcon } from '../components/icons'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState } from '../components/ui'
@@ -13,6 +13,7 @@ import {
   useEconomy,
   useGold,
   useInventory,
+  usePlayerMap,
   usePlayers,
   usePool,
   useShop,
@@ -20,7 +21,7 @@ import {
 } from '../hooks/queries'
 import { useAccess } from '../hooks/useAuth'
 import { useCountUp } from '../hooks/useCountUp'
-import { ITEM_META, ITEM_ORDER, signedGold } from '../lib/items'
+import { ITEM_META, ITEM_ORDER, roleName, signedGold } from '../lib/items'
 import { playPurchase, unlock } from '../lib/sound'
 import type { ContractInfo, InventoryItem, ItemType, LedgerRow, PlayerEconomy, Run, ShopItem } from '../types'
 
@@ -45,7 +46,7 @@ const PLAYER_KEY = 'lol-survival:shop-player'
 const CATEGORIES: { id: string; label: string; types: ItemType[] }[] = [
   { id: 'all', label: 'All items', types: ITEM_ORDER },
   { id: 'spin', label: 'After the spin', types: ['reroll', 'swap', 'choose'] },
-  { id: 'prep', label: 'Before the spin', types: ['blacklist', 'contract'] },
+  { id: 'prep', label: 'Before the spin', types: ['blacklist', 'role', 'contract'] },
   { id: 'protect', label: 'Protection', types: ['shield'] },
 ]
 
@@ -284,6 +285,9 @@ function InventoryBar({
 }) {
   const inv = useInventory(run.id, playerId)
   const pool = usePool(run.id)
+  const shop = useShop(run.id)
+  const playerMap = usePlayerMap()
+  const names = useMemo(() => new Map([...playerMap].map(([id, p]) => [id, p.display_name])), [playerMap])
   const [using, setUsing] = useState<InventoryItem | null>(null)
   const use = useAction(({ id, body }: { id: number; body: Parameters<typeof api.useItem>[1] }) => api.useItem(id, body))
   const alive = useMemo(() => (pool.data ?? []).filter((e) => e.status === 'alive'), [pool.data])
@@ -293,12 +297,13 @@ function InventoryBar({
   const slotAction = (t: ItemType) => {
     const it = unusedOf(t)
     if (!it || run.status !== 'active') return
-    if (t === 'shield' || t === 'blacklist') setUsing(it)
+    if (t === 'shield' || t === 'blacklist' || t === 'role') setUsing(it)
   }
   const hint = (t: ItemType, n: number) => {
     if (!n) return ITEM_META[t].name
     if (t === 'shield') return 'Click to place a shield'
     if (t === 'blacklist') return 'Click to pick champions to ban'
+    if (t === 'role') return econ?.armed_role ? 'A role is already locked for your next spin' : 'Click to lock your role for the next spin'
     if (t === 'contract') return 'Contracts start as soon as they are bought'
     return 'Use it on the Wheels tab after a spin'
   }
@@ -308,7 +313,7 @@ function InventoryBar({
       <div className="flex gap-1.5 sm:gap-2" aria-label="Inventory">
         {ITEM_ORDER.map((t) => {
           const n = econ?.unused[t] ?? 0
-          const clickable = n > 0 && (t === 'shield' || t === 'blacklist') && run.status === 'active'
+          const clickable = n > 0 && (t === 'shield' || t === 'blacklist' || (t === 'role' && !econ?.armed_role)) && run.status === 'active'
           const popped = lastBought?.type === t
           return (
             <button
@@ -332,6 +337,11 @@ function InventoryBar({
               )}
               {t === 'blacklist' && econ?.armed_blacklist && (
                 <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 rounded bg-red-700 px-1 text-[9px] font-bold text-white uppercase">armed</span>
+              )}
+              {t === 'role' && econ?.armed_role && (
+                <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 rounded bg-cyan-700 px-1 text-[9px] font-bold text-white uppercase">
+                  {roleName(econ.armed_role)}
+                </span>
               )}
               {t === 'contract' && econ?.active_contract && (
                 <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 rounded bg-gold-600 px-1 text-[9px] font-bold text-slate-950 uppercase">live</span>
@@ -359,6 +369,16 @@ function InventoryBar({
           error={use.error}
           onClose={() => setUsing(null)}
           onPick={(cid) => use.mutate({ id: using.id, body: { champion_id: cid } }, { onSuccess: () => setUsing(null) })}
+        />
+      )}
+      {using?.type === 'role' && (
+        <RoleSelectDialog
+          locked={shop.data?.locked_roles ?? {}}
+          names={names}
+          busy={use.isPending}
+          error={use.error}
+          onClose={() => setUsing(null)}
+          onPick={(role) => use.mutate({ id: using.id, body: { role } }, { onSuccess: () => setUsing(null) })}
         />
       )}
       {using?.type === 'blacklist' && (

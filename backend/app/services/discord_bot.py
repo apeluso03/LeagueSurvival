@@ -124,6 +124,11 @@ COMMANDS = [
     {"name": "undo", "description": "Undo the last result (run owner)"},
     {"name": "ready", "description": "Ready check before a spin"},
     {
+        "name": "roleselect",
+        "description": "Lock your role for your next spin (Role Select; buys one if you have none)",
+        "options": [_opt("role", "Role", required=True, choices=_role_choices), _player(desc="Who it's for (the run owner can pick anyone)")],
+    },
+    {
         "name": "newrun",
         "description": "Start a new run (group owner)",
         "options": [_opt("name", "Run name", required=True, max_length=60), _opt("options", "Options per player", INTEGER, choices=[{"name": "3", "value": 3}, {"name": "4", "value": 4}])],
@@ -378,6 +383,8 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
             text += f" Your contract: **{contracts.describe(contract)}** for {contract.payout:,} gold."
         elif item.type in ("reroll", "swap", "choose"):
             text += " Use it after the next spin (My items on the spin)."
+        elif item.type == "role":
+            text += " Lock your role with `/roleselect`."
         else:
             text += " Use it on the site."
         return Answer({"type": MESSAGE, "data": render.reply(text, private=True)}, commit=True)
@@ -430,6 +437,8 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
             raise Denied("There's no result to undo.")
         rules.undo_result(session, game)
         return Answer({"type": MESSAGE, "data": render.reply(f"Undid game {rules.game_number(session, game)}'s result. It's waiting for a result again.", private=True)}, commit=True)
+    if name == "roleselect":
+        return _role_select(session, who, ctx, run, opts)
     if name == "ready":
         settings = group_settings(session, group_id)
         players = list(settings.last_used_player_ids or []) or [
@@ -443,6 +452,28 @@ def _command(session: Session, who: Who, data: dict) -> Answer:
 
 
 _RESULT_TEXT = {"won": "win recorded", "lost": "loss recorded", "void": "voided"}
+
+
+def _role_select(session: Session, who: Who, ctx: Ctx, run: Run, opts: dict) -> Answer:
+    """Lock a role for the player's next spin: uses a Role Select they own, or buys one."""
+    pid = _target_player(session, who, ctx, run, opts.get("player"))
+    role = str(opts["role"])
+    item = session.exec(
+        select(InventoryItem).where(
+            InventoryItem.run_id == run.id, InventoryItem.player_id == pid, InventoryItem.type == "role", InventoryItem.status == "unused"
+        )
+    ).first()
+    bought = item is None
+    if bought:
+        item, _ = shop.purchase(session, run, pid, "role")
+    shop.use_item(session, item, {"role": role})
+    name, role_name = render.Names(session).pname(pid), shop.ROLE_NAMES[role]
+    text = (
+        f"🎯 **{name}** locked **{role_name}** for their next spin"
+        + (f" (Role Select bought for {item.price_paid:,} gold)" if bought else "")
+        + f". They only roll {role_name} champions, and nobody else in that game rolls a champion that mains {role_name}."
+    )
+    return Answer({"type": MESSAGE, "data": render.reply(text)}, commit=True)
 
 
 def _spin_reply(session: Session, game: ChallengeGame) -> Answer:

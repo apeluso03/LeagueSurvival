@@ -140,6 +140,15 @@ export const BlacklistIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
+/** Role Select: a lane map with a pin. */
+export const RoleIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <path d="M4 20 20 4M4 9h0M9 4v0" />
+    <circle cx="12" cy="12" r="2.6" />
+  </svg>
+)
+
 export const ContractIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M7 3h8l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" />

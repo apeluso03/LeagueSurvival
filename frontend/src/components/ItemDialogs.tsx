@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { filterChampions } from '../lib/champions'
-import { ITEM_META } from '../lib/items'
-import type { Player, PoolEntry } from '../types'
+import { ITEM_META, SELECT_ROLES } from '../lib/items'
+import type { Player, PoolEntry, Role } from '../types'
 import { ChampionPortrait, ErrorText, Modal } from './ui'
 
 type Pickable = Pick<PoolEntry, 'champion_id' | 'name' | 'image_url' | 'tags'>
@@ -104,6 +104,56 @@ export function BlacklistDialog({
         <button className="btn-primary" disabled={!picked.length || busy} onClick={() => onConfirm(picked)}>
           Ban for next spin
         </button>
+      </div>
+      <div className="mt-3">
+        <ErrorText error={error} />
+      </div>
+    </Modal>
+  )
+}
+
+/** Pick the role to lock for the next spin (Role Select). Roles someone else locked are taken. */
+export function RoleSelectDialog({
+  playerName,
+  locked,
+  names,
+  onPick,
+  onClose,
+  busy,
+  error,
+}: {
+  playerName?: string
+  locked: Partial<Record<Role, number>>
+  names: Map<number, string>
+  onPick: (role: Role) => void
+  onClose: () => void
+  busy?: boolean
+  error?: unknown
+}) {
+  return (
+    <Modal title={`Role Select${playerName ? ` for ${playerName}` : ''}`} onClose={onClose}>
+      <p className="mb-3 text-sm text-slate-400">
+        Your next spin only rolls champions played in this role, and nobody else in that game rolls a champion that
+        mains it. One player per role.
+      </p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {SELECT_ROLES.map((r) => {
+          const by = locked[r.id]
+          return (
+            <button
+              key={r.id}
+              className="btn-secondary flex-col gap-0.5 py-3"
+              disabled={busy || by != null}
+              title={by != null ? `${names.get(by) ?? 'Someone'} has it` : r.hint}
+              onClick={() => onPick(r.id)}
+            >
+              <span>{r.name}</span>
+              <span className="text-[10px] font-normal tracking-normal text-slate-400 normal-case">
+                {by != null ? `taken: ${names.get(by) ?? 'someone'}` : r.hint}
+              </span>
+            </button>
+          )
+        })}
       </div>
       <div className="mt-3">
         <ErrorText error={error} />

@@ -299,6 +299,7 @@ class ShopItemOut(BaseModel):
 class ShopOut(BaseModel):
     items: list[ShopItemOut]
     blacklist_cap: int
+    locked_roles: dict[str, int] = {}  # armed Role Selects in the run: role -> player id
     contract_payout: int
     config: dict
 
@@ -350,11 +351,12 @@ class PlayerEconomyOut(BaseModel):
     spent: int
     unused: dict[str, int]  # item type -> count of unused items
     armed_blacklist: list[str] | None
+    armed_role: str | None = None  # an armed Role Select: TOP, JUNGLE, MIDDLE, BOTTOM or UTILITY
     active_contract: ContractOut | None
 
 
 class PurchaseIn(BaseModel):
-    type: Literal["reroll", "blacklist", "swap", "shield", "choose", "contract"]
+    type: Literal["reroll", "blacklist", "swap", "shield", "choose", "contract", "role"]
 
 
 class PurchaseOut(BaseModel):
@@ -367,6 +369,7 @@ class ItemUseIn(BaseModel):
     game_id: int | None = None
     other_player_id: int | None = None
     champion_ids: list[str] | None = None
+    role: Literal["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"] | None = None  # Role Select
 
 
 class GoldAdjustIn(BaseModel):

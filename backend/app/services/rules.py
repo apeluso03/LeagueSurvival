@@ -238,6 +238,7 @@ def draw_options(
     player_ids: list[int],
     rng: random.Random | None = None,
     exclude: dict[int, set[str]] | None = None,
+    allowed: dict[int, set[str]] | None = None,
 ) -> list[list[str]]:
     _require_active(run)
     _validate_players(session, player_ids)
@@ -248,6 +249,7 @@ def draw_options(
             run.options_per_player,
             rng,
             [(exclude or {}).get(pid, set()) for pid in player_ids],
+            [(allowed or {}).get(pid) for pid in player_ids],
         )
     except spin_logic.SpinBlocked as e:
         tokens = len(available_tokens(session, run.id))
@@ -268,14 +270,30 @@ def create_spin(
     from app.services import shop  # local: shop imports this module
 
     blacklists = shop.armed_blacklists(session, run.id, player_ids)
-    options = draw_options(session, run, player_ids, rng, {pid: bl for pid, (_, bl) in blacklists.items()})
+    role_items = shop.armed_role_selects(session, run.id, player_ids)
+    roles = {pid: role for pid, (_, role) in role_items.items()}
+    exclude = {pid: set(bl) for pid, (_, bl) in blacklists.items()}
+    allowed: dict[int, set[str]] = {}
+    if roles:
+        alive = alive_champion_ids(session, run.id)
+        allowed, banned = shop.spin_role_limits(session, alive, roles, player_ids)
+        for pid, pool in allowed.items():
+            if not pool - exclude.get(pid, set()):
+                name = session.get(Player, pid).display_name
+                raise RuleError(f"No {shop.ROLE_NAMES[roles[pid]]} champions are left for {name}'s Role Select.", 409)
+        for pid, champs in banned.items():
+            exclude[pid] = exclude.get(pid, set()) | champs
+    options = draw_options(session, run, player_ids, rng, exclude, allowed)
     game = ChallengeGame(run_id=run.id)
     session.add(game)
     session.flush()
     for pid, opts in zip(player_ids, options, strict=True):
-        session.add(SpinAssignment(game_id=game.id, player_id=pid, options=opts, original_options=list(opts)))
-    # An armed Blacklist applies to its owner's next spin only, then it's spent.
-    for item, _ in blacklists.values():
+        # A Role Select also sets the role they're in, so their build follows it.
+        session.add(
+            SpinAssignment(game_id=game.id, player_id=pid, options=opts, original_options=list(opts), played_role=roles.get(pid))
+        )
+    # An armed Blacklist or Role Select applies to its owner's next spin only, then it's spent.
+    for item, _ in [*blacklists.values(), *role_items.values()]:
         item.status = "used"
         item.used_at = utcnow()
         item.used_in_game_id = game.id

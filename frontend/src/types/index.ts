@@ -263,7 +263,7 @@ export interface ChampionReport {
 
 // --- gold and shop (SPEC 7.7 to 7.9) ---
 
-export type ItemType = 'reroll' | 'blacklist' | 'swap' | 'shield' | 'choose' | 'contract'
+export type ItemType = 'reroll' | 'blacklist' | 'swap' | 'shield' | 'choose' | 'contract' | 'role'
 
 export interface ShopItem {
   type: ItemType
@@ -283,6 +283,7 @@ export interface ShopConfig {
 export interface Shop {
   items: ShopItem[]
   blacklist_cap: number
+  locked_roles: Partial<Record<Role, number>> // armed Role Selects in the run: role -> player id
   contract_payout: number
   config: ShopConfig
 }
@@ -334,6 +335,7 @@ export interface PlayerEconomy {
   spent: number
   unused: Partial<Record<ItemType, number>>
   armed_blacklist: string[] | null
+  armed_role: Role | null // an armed Role Select
   active_contract: ContractInfo | null
 }
 
@@ -342,6 +344,7 @@ export interface ItemUse {
   game_id?: number
   other_player_id?: number
   champion_ids?: string[]
+  role?: Role // Role Select
 }
 
 // --- run recap and player profile ---------------------------------------------------------

@@ -13,7 +13,7 @@ import { LoadingScreen, LockInMoment } from '../components/LockIn'
 import { LowerThird } from '../components/LowerThird'
 import { PickBar } from '../components/PickBar'
 import { GoldBadge } from '../components/Gold'
-import { BlacklistDialog, PickChampionDialog, SwapDialog } from '../components/ItemDialogs'
+import { BlacklistDialog, PickChampionDialog, RoleSelectDialog, SwapDialog } from '../components/ItemDialogs'
 import { ShieldIcon } from '../components/icons'
 import { ChampionPortrait, EmptyState, ErrorText, LoadingState, Modal } from '../components/ui'
 import {
@@ -37,7 +37,7 @@ import { useLiveConnected, useLiveEvent } from '../hooks/useLiveUpdates'
 import { useBuy, useOwnedItem } from '../hooks/useItems'
 import { factLine } from '../lib/facts'
 import { teamColor } from '../lib/teams'
-import { ITEM_META, ITEM_ORDER } from '../lib/items'
+import { ITEM_META, ITEM_ORDER, roleName } from '../lib/items'
 import { preloadImages } from '../lib/preload'
 import { realRoles, rolesByChampion } from '../lib/roles'
 import { pauseRefresh } from '../lib/liveUpdates'
@@ -553,7 +553,7 @@ function PlayerCard({
   )
 }
 
-/** Gold, armed Blacklist and Contract for each player about to spin (SPEC 10.1). */
+/** Gold, armed Blacklist, Role Select and Contract for each player about to spin (SPEC 10.1). */
 function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
   const economy = useEconomy(run.id)
   const playerMap = usePlayerMap()
@@ -563,6 +563,7 @@ function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
   const buy = useBuy(run.id)
   const owned = useOwnedItem(run.id)
   const [blacklistFor, setBlacklistFor] = useState<number | null>(null)
+  const [roleFor, setRoleFor] = useState<number | null>(null)
   const [revealed, setRevealed] = useState<{ contract: ContractInfo; name?: string } | null>(null)
   const price = (t: ItemType) => shop.data?.config.prices[t] ?? 0
   const byId = new Map((economy.data ?? []).map((e) => [e.player_id, e]))
@@ -572,6 +573,12 @@ function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
     if (!econ?.unused.blacklist) await buy.mutateAsync({ playerId: pid, type: 'blacklist' })
     setBlacklistFor(pid)
   }
+  // Pick the role first; buy one only once a role is chosen (closing the dialog costs nothing).
+  const lockRole = async (pid: number, role: Role) => {
+    if (!byId.get(pid)?.unused.role) await buy.mutateAsync({ playerId: pid, type: 'role' })
+    owned.mutate({ playerId: pid, type: 'role', body: { role } }, { onSuccess: () => setRoleFor(null) })
+  }
+  const nameOf = new Map([...playerMap].map(([id, p]) => [id, p.display_name]))
 
   return (
     <div className="flex flex-col gap-2">
@@ -580,6 +587,7 @@ function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
           const econ = byId.get(pid)
           const name = playerMap.get(pid)?.display_name
           const hasBl = (econ?.unused.blacklist ?? 0) > 0
+          const hasRole = (econ?.unused.role ?? 0) > 0
           return (
             <div key={pid} className="flex flex-col gap-2 rounded-sm bg-white/[0.03] p-3 ring-1 ring-white/5 ring-inset">
               <div className="flex items-center justify-between gap-2">
@@ -591,6 +599,7 @@ function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
                   Banned next spin: {econ.armed_blacklist.map((c) => champs.get(c)?.name ?? c).join(', ')}
                 </div>
               )}
+              {econ?.armed_role && <div className="text-xs text-hex-200">Role Select: {roleName(econ.armed_role)} next spin</div>}
               {econ?.active_contract && <div className="text-xs text-gold-200">Contract: {econ.active_contract.description}</div>}
               <OwnedItems econ={econ} />
               <div className="flex flex-wrap gap-1.5">
@@ -602,6 +611,16 @@ function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
                   >
                     <ITEM_META.blacklist.Icon className="h-3.5 w-3.5" />
                     {hasBl ? 'Blacklist' : `Blacklist · ${price('blacklist')}g`}
+                  </button>
+                )}
+                {!econ?.armed_role && (
+                  <button
+                    className="btn-secondary px-2.5 py-1 text-xs"
+                    disabled={buy.isPending || (!hasRole && (econ?.balance ?? 0) < price('role'))}
+                    onClick={() => setRoleFor(pid)}
+                  >
+                    <ITEM_META.role.Icon className="h-3.5 w-3.5" />
+                    {hasRole ? 'Role Select' : `Role · ${price('role')}g`}
                   </button>
                 )}
                 <button
@@ -638,6 +657,17 @@ function PrepRow({ run, playerIds }: { run: Run; playerIds: number[] }) {
           }
         />
       )}
+      {roleFor != null && (
+        <RoleSelectDialog
+          playerName={nameOf.get(roleFor)}
+          locked={shop.data?.locked_roles ?? {}}
+          names={nameOf}
+          busy={buy.isPending || owned.isPending}
+          error={buy.error ?? owned.error}
+          onClose={() => setRoleFor(null)}
+          onPick={(role) => void lockRole(roleFor, role).catch(() => {})}
+        />
+      )}
       {revealed && <ContractReveal contract={revealed.contract} playerName={revealed.name} onClose={() => setRevealed(null)} />}
     </div>
   )
@@ -650,6 +680,7 @@ function OwnedItems({ econ }: { econ: PlayerEconomy | undefined }) {
   const hint: Partial<Record<ItemType, string>> = {
     shield: 'Protect a champion from the Pool tab',
     blacklist: 'Arm it with the Blacklist button to ban champs from your next spin',
+    role: 'Lock a role with the Role Select button before your next spin',
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-300">
@@ -1009,7 +1040,7 @@ function WaitingForSpin({
       </div>
       {challengeMode && run.status === 'active' && myPlayerId != null && (
         <>
-          <p className="text-sm text-slate-400">Getting ready? Arm a Blacklist or take a Contract before the spin.</p>
+          <p className="text-sm text-slate-400">Getting ready? Arm a Blacklist, lock a role with Role Select, or take a Contract before the spin.</p>
           <PrepRow run={run} playerIds={[myPlayerId]} />
         </>
       )}

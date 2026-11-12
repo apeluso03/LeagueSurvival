@@ -69,6 +69,7 @@ def run_economy(run_id: int, ctx: Ctx = Depends(group_ctx), session: Session = D
     for p in players:
         mine = [i for i in items if i.player_id == p.id]
         armed = next((i for i in mine if i.type == "blacklist" and i.status == "armed"), None)
+        role = next((i for i in mine if i.type == "role" and i.status == "armed"), None)
         pending = contracts.pending_for(session, run.id, p.id)
         out.append(
             PlayerEconomyOut(
@@ -76,6 +77,7 @@ def run_economy(run_id: int, ctx: Ctx = Depends(group_ctx), session: Session = D
                 **economy.totals(session, run.id, p.id),
                 unused=dict(Counter(i.type for i in mine if i.status == "unused")),
                 armed_blacklist=armed.target.get("champion_ids") if armed else None,
+                armed_role=role.target.get("role") if role else None,
                 active_contract=contract_out(pending[0][0]) if pending else None,
             )
         )
