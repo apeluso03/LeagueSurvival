@@ -123,14 +123,14 @@ class LiveUpdatesMiddleware:
             if k == b"x-client-id":
                 origin = v.decode("latin-1")[:64] or None
                 break
-        status = 500
         holder: dict = {}
         scope["live_updates"] = holder  # routers/access.current_ctx notes the group here
 
         async def send_(msg):
-            nonlocal status
-            if msg["type"] == "http.response.start":
-                status = msg["status"]
+            # As the response starts (the change is committed by then), not after it ends: nothing
+            # runs once the request is over, so it can't race the server tearing the request down.
+            if msg["type"] == "http.response.start" and msg["status"] < 400 and holder.get("group_id") is not None:
+                hub.publish(holder["group_id"], message("changed", origin=origin))
             await send(msg)
 
         token = ORIGIN.set(origin)
@@ -138,6 +138,3 @@ class LiveUpdatesMiddleware:
             await self.app(scope, receive, send_)
         finally:
             ORIGIN.reset(token)
-        group_id = holder.get("group_id")
-        if group_id is not None and status < 400:
-            hub.publish(group_id, message("changed", origin=origin))
