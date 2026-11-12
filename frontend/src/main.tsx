@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { isUnreachable, setSignedOutHandler } from './api/client'
 import App from './App'
 import './index.css'
+import './themes.css'
 
 const queryClient = new QueryClient({
   defaultOptions: {

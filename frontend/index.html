@@ -8,10 +8,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=IM+Fell+English+SC&family=Inter:wght@400;500;600;700&family=Nunito:wght@600;700;800&family=Orbitron:wght@600;800&display=swap"
       rel="stylesheet"
     />
     <title>Hardcore Draft</title>
+    <script>
+      // The theme this browser picked (lib/theme.ts), set before the page draws so it never flashes.
+      try {
+        var t = localStorage.getItem('hd:theme')
+        var colors = { aero: '#6cc3f2', spectral: '#030807', synthwave: '#12052a' }
+        if (colors[t]) {
+          document.documentElement.dataset.theme = t
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', colors[t])
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
