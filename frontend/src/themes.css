@@ -1,0 +1,602 @@
+/*
+ * Themes (SPEC 22, lib/theme.ts). index.css is the default ("Broadcast") and is never changed by a
+ * theme: each one here sets `data-theme` on <html> and swaps the colour scales Tailwind's classes
+ * read (--color-slate-*, --color-hex-*, --color-gold-*...), the backdrop, the fonts, and the few
+ * surfaces drawn with fixed colours.
+ *
+ * Scales are swapped on <body>, not <html>, so the defaults stay readable on <html> as --dk-*:
+ * Frutiger Aero is a light theme, and the "dark islands" that sit on champion art (reels, pool
+ * cards, full-screen moments) put the default dark scales back for their own contents.
+ */
+
+/* The default scales, saved before any theme touches them (resolved here, on <html>). */
+:root {
+  --dk-slate-50: var(--color-slate-50);
+  --dk-slate-100: var(--color-slate-100);
+  --dk-slate-200: var(--color-slate-200);
+  --dk-slate-300: var(--color-slate-300);
+  --dk-slate-400: var(--color-slate-400);
+  --dk-slate-500: var(--color-slate-500);
+  --dk-slate-600: var(--color-slate-600);
+  --dk-slate-700: var(--color-slate-700);
+  --dk-slate-800: var(--color-slate-800);
+  --dk-slate-900: var(--color-slate-900);
+  --dk-slate-950: var(--color-slate-950);
+  --dk-white: var(--color-white);
+  --dk-black: var(--color-black);
+  --dk-gold-100: var(--color-gold-100);
+  --dk-gold-200: var(--color-gold-200);
+  --dk-gold-300: var(--color-gold-300);
+  --dk-gold-400: var(--color-gold-400);
+  --dk-gold-500: var(--color-gold-500);
+  --dk-gold-600: var(--color-gold-600);
+  --dk-hex-100: var(--color-hex-100);
+  --dk-hex-200: var(--color-hex-200);
+  --dk-hex-300: var(--color-hex-300);
+  --dk-hex-400: var(--color-hex-400);
+  --dk-hex-500: var(--color-hex-500);
+  --dk-hex-600: var(--color-hex-600);
+  --dk-hex-800: var(--color-hex-800);
+  --dk-hex-900: var(--color-hex-900);
+  --dk-red-200: var(--color-red-200);
+  --dk-red-300: var(--color-red-300);
+  --dk-red-400: var(--color-red-400);
+  --dk-amber-200: var(--color-amber-200);
+  --dk-amber-300: var(--color-amber-300);
+  --dk-emerald-200: var(--color-emerald-200);
+  --dk-emerald-300: var(--color-emerald-300);
+}
+
+/* =============================================================================================
+ * Frutiger Aero: glossy glass, a bright sky, bubbles and fresh green. A light theme.
+ * ============================================================================================= */
+
+html[data-theme='aero'] {
+  color-scheme: light;
+  background: #8fd0f4;
+}
+[data-theme='aero'] body {
+  --font-sans: 'Segoe UI', 'Nunito', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Nunito', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+
+  /* Ink on glass: the grey scale runs the other way (100 is now the darkest text). */
+  --color-slate-50: #061a2b;
+  --color-slate-100: #0d2c45;
+  --color-slate-200: #1b4363;
+  --color-slate-300: #2d5b7d;
+  --color-slate-400: #4a7595;
+  --color-slate-500: #6b8faa;
+  --color-slate-600: #9db9cd;
+  --color-slate-700: #c6dbe8;
+  --color-slate-800: #e3f0f8;
+  --color-slate-900: #f1f8fc;
+  --color-slate-950: #ffffff;
+  /* "white" text and "black" shades swap too: white/10 is now a faint ink tint, black/40 white glass. */
+  --color-white: #0b2a44;
+  --color-black: #ffffff;
+
+  --color-hex-100: #0a4d7a;
+  --color-hex-200: #0b6aa3;
+  --color-hex-300: #129ce0;
+  --color-hex-400: #0a88cc;
+  --color-hex-500: #0870ae;
+  --color-hex-600: #065b8e;
+  --color-hex-800: #cfeaf8;
+  --color-hex-900: #e6f5fc;
+
+  --color-gold-100: #5a3d00;
+  --color-gold-200: #7d5600;
+  --color-gold-300: #9f6d05;
+  --color-gold-400: #c58b12;
+  --color-gold-500: #dea52b;
+  --color-gold-600: #edc060;
+  --color-gold-700: #f6dc9c;
+  --color-gold-800: #fbeccc;
+  --color-gold-900: #fdf6e6;
+
+  /* Wins are Aero green. */
+  --color-emerald-100: #0c4615;
+  --color-emerald-200: #135f1f;
+  --color-emerald-300: #1c7a2a;
+  --color-emerald-400: #2c9a38;
+  --color-emerald-500: #4cb64e;
+  --color-emerald-600: #7ccf6a;
+
+  --color-red-100: #5a0b0b;
+  --color-red-200: #7a1212;
+  --color-red-300: #9c1b1b;
+  --color-red-400: #c02727;
+  --color-amber-100: #573500;
+  --color-amber-200: #7a4b00;
+  --color-amber-300: #9a5f00;
+  --color-amber-400: #b97400;
+}
+
+/* The sky: a bright gradient over green hills, a sun glow, light rays and floating bubbles. */
+[data-theme='aero'] body::before {
+  background:
+    radial-gradient(circle at 12% 22%, transparent 0 26px, rgb(255 255 255 / 0.6) 27px, transparent 30px),
+    radial-gradient(circle at 10.5% 20%, rgb(255 255 255 / 0.85) 0 4px, transparent 9px),
+    radial-gradient(circle at 84% 34%, transparent 0 40px, rgb(255 255 255 / 0.5) 41px, transparent 45px),
+    radial-gradient(circle at 82.6% 31.5%, rgb(255 255 255 / 0.8) 0 6px, transparent 12px),
+    radial-gradient(circle at 70% 76%, transparent 0 18px, rgb(255 255 255 / 0.55) 19px, transparent 22px),
+    radial-gradient(circle at 26% 64%, transparent 0 12px, rgb(255 255 255 / 0.5) 13px, transparent 15px),
+    radial-gradient(circle at 92% 70%, transparent 0 24px, rgb(255 255 255 / 0.45) 25px, transparent 28px),
+    repeating-conic-gradient(from 200deg at 8% -10%, rgb(255 255 255 / 0.13) 0 3deg, transparent 3deg 9deg),
+    radial-gradient(45rem 26rem at 8% -6%, rgb(255 255 255 / 0.95), transparent 65%),
+    radial-gradient(120% 60% at 50% 118%, #6fcf4d 0%, #9fe07a 38%, transparent 62%),
+    radial-gradient(70% 40% at 85% 108%, #4fbf3a, transparent 70%),
+    linear-gradient(180deg, #3aa8e8 0%, #7cc8f2 30%, #c4e9fb 58%, #e9f8ff 72%, #d8f4cf 100%);
+}
+
+[data-theme='aero'] h1,
+[data-theme='aero'] h2 {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 800;
+}
+[data-theme='aero'] .gold-text {
+  background-image: linear-gradient(180deg, #d99a1a 0%, #b07a0c 55%, #845a00 100%);
+}
+[data-theme='aero'] .blue-text {
+  background-image: linear-gradient(180deg, #3fbef5 0%, #0b8fd6 50%, #06609a 100%);
+}
+[data-theme='aero'] ::selection {
+  background: rgb(18 156 224 / 0.3);
+}
+
+/* Glass panels: frosted white, rounded, a shine along the top. */
+[data-theme='aero'] .card {
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0) 42%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.78), rgb(232 246 255 / 0.66));
+  box-shadow:
+    inset 0 1px 0 #fff,
+    inset 0 0 0 1px rgb(255 255 255 / 0.7),
+    0 0 0 1px rgb(30 120 180 / 0.18),
+    0 14px 34px -18px rgb(10 80 140 / 0.45);
+  backdrop-filter: blur(10px) saturate(1.4);
+}
+[data-theme='aero'] .glass {
+  background: rgb(255 255 255 / 0.8);
+  border-radius: 12px;
+}
+[data-theme='aero'] .broadcast-header {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.92) 0%, rgb(226 245 255 / 0.85) 48%, rgb(176 226 250 / 0.85) 50%, rgb(208 239 255 / 0.9) 100%);
+  box-shadow:
+    inset 0 -1px 0 rgb(255 255 255 / 0.9),
+    0 1px 0 rgb(20 110 170 / 0.25),
+    0 8px 24px -14px rgb(10 80 140 / 0.5);
+  backdrop-filter: blur(12px) saturate(1.5);
+}
+
+/* Gel buttons: rounded, glossy, the top half lighter. */
+[data-theme='aero'] :is(.btn, .btn-primary, .btn-secondary, .btn-gold, .btn-danger, .btn-success) {
+  clip-path: none;
+  border-radius: 999px;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+[data-theme='aero'] .btn-primary {
+  color: #fff;
+  background: linear-gradient(180deg, #a6e9ff 0%, #39b8f0 48%, #0c90d6 52%, #3fc0f2 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 0 0 1px rgb(255 255 255 / 0.35), 0 0 0 1px #0a78b8, 0 4px 10px -3px rgb(8 90 150 / 0.55);
+  text-shadow: 0 1px 1px rgb(0 60 110 / 0.5);
+}
+[data-theme='aero'] .btn-success {
+  color: #fff;
+  background: linear-gradient(180deg, #c9f5a6 0%, #6fd04a 48%, #3faa25 52%, #72d34c 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 0 0 1px #2f8a1c, 0 4px 10px -3px rgb(40 110 20 / 0.5);
+  text-shadow: 0 1px 1px rgb(20 70 10 / 0.5);
+}
+[data-theme='aero'] .btn-danger {
+  color: #fff;
+  background: linear-gradient(180deg, #ffc0c0 0%, #f25b5b 48%, #d22d2d 52%, #f06060 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.85), 0 0 0 1px #a71e1e, 0 4px 10px -3px rgb(140 20 20 / 0.45);
+  text-shadow: 0 1px 1px rgb(100 0 0 / 0.45);
+}
+[data-theme='aero'] .btn-gold {
+  color: #4a3000;
+  background: linear-gradient(180deg, #fff2bf 0%, #ffd45c 48%, #f4b521 52%, #ffd35a 100%);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px #c68a12, 0 4px 10px -3px rgb(150 100 0 / 0.45);
+}
+[data-theme='aero'] .btn-secondary {
+  color: var(--color-slate-100);
+  background: linear-gradient(180deg, #ffffff 0%, #eef8ff 48%, #d9eefa 52%, #f2faff 100%);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgb(30 120 180 / 0.35), 0 3px 8px -4px rgb(10 80 140 / 0.4);
+}
+[data-theme='aero'] .input {
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.85);
+  box-shadow: inset 0 1px 3px rgb(10 70 120 / 0.18);
+}
+
+/* Header pieces. */
+[data-theme='aero'] .tab:hover,
+[data-theme='aero'] .user-menu-item:hover {
+  color: var(--color-hex-500);
+}
+[data-theme='aero'] .tab.is-active {
+  color: #fff;
+  text-shadow: 0 1px 1px rgb(0 60 110 / 0.5);
+}
+[data-theme='aero'] .tab::before {
+  clip-path: none;
+  border-radius: 999px;
+  inset: 0.2rem 0 0.15rem;
+  background: linear-gradient(180deg, #a6e9ff 0%, #39b8f0 48%, #0c90d6 52%, #3fc0f2 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.85), 0 0 0 1px #0a78b8;
+}
+[data-theme='aero'] .tab::after {
+  display: none;
+}
+[data-theme='aero'] .score-bug {
+  clip-path: none;
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.95), rgb(220 241 252 / 0.9));
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgb(30 120 180 / 0.3), 0 3px 10px -4px rgb(10 80 140 / 0.35);
+}
+[data-theme='aero'] .sb-run {
+  clip-path: none;
+  color: #4a3000;
+  background: linear-gradient(180deg, #fff2bf 0%, #ffd45c 48%, #f4b521 52%, #ffd35a 100%);
+}
+[data-theme='aero'] .sb-cell + .sb-cell,
+[data-theme='aero'] [data-token-counter] .sb-cell {
+  box-shadow: inset 1px 0 0 rgb(30 120 180 / 0.18);
+}
+[data-theme='aero'] .broadcast-tag {
+  clip-path: none;
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
+}
+[data-theme='aero'] .user-menu {
+  border-radius: 12px;
+  background: rgb(250 253 255 / 0.97);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgb(30 120 180 / 0.3), 0 18px 40px -14px rgb(10 80 140 / 0.5);
+  backdrop-filter: blur(12px);
+}
+[data-theme='aero'] .user-menu-item:hover,
+[data-theme='aero'] .user-menu-item:focus-visible {
+  background: rgb(18 156 224 / 0.12);
+}
+[data-theme='aero'] .lower-third {
+  clip-path: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.9), rgb(225 243 253 / 0.85));
+  box-shadow: inset 5px 0 0 var(--team, var(--color-hex-300)), 0 0 0 1px rgb(30 120 180 / 0.25);
+}
+[data-theme='aero'] .lower-third .lt-name {
+  color: var(--color-slate-100);
+}
+[data-theme='aero'] .lower-third .lt-sub {
+  clip-path: none;
+  border-radius: 999px;
+}
+[data-theme='aero'] .team-chip {
+  clip-path: none;
+  border-radius: 999px;
+  color: var(--color-slate-200);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.95), rgb(226 243 252 / 0.9));
+  box-shadow: inset 4px 0 0 var(--team), 0 0 0 1px rgb(30 120 180 / 0.25);
+}
+[data-theme='aero'] .team-chip:hover {
+  color: var(--color-slate-100);
+  background: #fff;
+}
+[data-theme='aero'] .team-chip.is-on {
+  color: #fff;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--team) 45%, #fff) 0%, var(--team) 52%, color-mix(in srgb, var(--team) 80%, #000) 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.7), 0 0 0 1px color-mix(in srgb, var(--team) 70%, #000);
+}
+[data-theme='aero'] .toast-panel {
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.96), rgb(228 245 255 / 0.95));
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgb(30 120 180 / 0.3), 0 24px 50px -20px rgb(10 80 140 / 0.5);
+}
+
+/* Dark islands: anything drawn over champion art keeps the default dark scales (black glass). */
+[data-theme='aero']
+  :is(
+    .pool-card,
+    .reel-window,
+    .draft-row,
+    .lol-frame,
+    .loading-frame,
+    .wrapped-story,
+    .elim-overlay,
+    .win-overlay,
+    .lockin-overlay,
+    .achievement-popup,
+    .overlay-root,
+    .postgame-hero,
+    .scoreline,
+    .streak-bar,
+    .mvp-panel,
+    .live-bug,
+    .inv-slot,
+    .btn-hextech,
+    .item-art
+  ) {
+  --color-slate-50: var(--dk-slate-50);
+  --color-slate-100: var(--dk-slate-100);
+  --color-slate-200: var(--dk-slate-200);
+  --color-slate-300: var(--dk-slate-300);
+  --color-slate-400: var(--dk-slate-400);
+  --color-slate-500: var(--dk-slate-500);
+  --color-slate-600: var(--dk-slate-600);
+  --color-slate-700: var(--dk-slate-700);
+  --color-slate-800: var(--dk-slate-800);
+  --color-slate-900: var(--dk-slate-900);
+  --color-slate-950: var(--dk-slate-950);
+  --color-white: var(--dk-white);
+  --color-black: var(--dk-black);
+  --color-gold-100: var(--dk-gold-100);
+  --color-gold-200: var(--dk-gold-200);
+  --color-gold-300: var(--dk-gold-300);
+  --color-gold-400: var(--dk-gold-400);
+  --color-gold-500: var(--dk-gold-500);
+  --color-gold-600: var(--dk-gold-600);
+  --color-hex-100: var(--dk-hex-100);
+  --color-hex-200: var(--dk-hex-200);
+  --color-hex-300: var(--dk-hex-300);
+  --color-hex-400: var(--dk-hex-400);
+  --color-hex-500: var(--dk-hex-500);
+  --color-hex-600: var(--dk-hex-600);
+  --color-hex-800: var(--dk-hex-800);
+  --color-hex-900: var(--dk-hex-900);
+  --color-red-200: var(--dk-red-200);
+  --color-red-300: var(--dk-red-300);
+  --color-red-400: var(--dk-red-400);
+  --color-amber-200: var(--dk-amber-200);
+  --color-amber-300: var(--dk-amber-300);
+  --color-emerald-200: var(--dk-emerald-200);
+  --color-emerald-300: var(--dk-emerald-300);
+  color: var(--color-slate-100);
+}
+/* ...as rounded black glass with a shine. */
+[data-theme='aero'] :is(.reel-window, .lol-frame, .loading-frame) {
+  border-radius: 14px;
+  overflow: hidden;
+}
+[data-theme='aero'] .pool-card {
+  border-radius: 12px;
+}
+
+/* =============================================================================================
+ * Spectral: ghost-light teal drifting through midnight mist, pale lantern-green highlights.
+ * ============================================================================================= */
+
+html[data-theme='spectral'] {
+  background: #030807;
+}
+[data-theme='spectral'] body {
+  --font-display: 'IM Fell English SC', 'Cinzel', 'Times New Roman', serif;
+
+  --color-slate-50: #f1fbf8;
+  --color-slate-100: #e1f4ee;
+  --color-slate-200: #c0e2d7;
+  --color-slate-300: #98c5b8;
+  --color-slate-400: #74a395;
+  --color-slate-500: #557c71;
+  --color-slate-600: #3a5850;
+  --color-slate-700: #243a35;
+  --color-slate-800: #13231f;
+  --color-slate-900: #0a1412;
+  --color-slate-950: #040a09;
+
+  --color-hex-100: #d4fff3;
+  --color-hex-200: #8cffe0;
+  --color-hex-300: #33e6b8;
+  --color-hex-400: #1ec89c;
+  --color-hex-500: #12a07e;
+  --color-hex-600: #0b7a60;
+  --color-hex-800: #073a2e;
+  --color-hex-900: #03201a;
+
+  --color-gold-100: #f7ffdf;
+  --color-gold-200: #ebfbae;
+  --color-gold-300: #d4f27a;
+  --color-gold-400: #b8db4f;
+  --color-gold-500: #97bc33;
+  --color-gold-600: #789a22;
+  --color-gold-700: #556e18;
+  --color-gold-800: #2e3c0e;
+  --color-gold-900: #1a2309;
+
+  --color-emerald-300: #8cffe0;
+  --color-emerald-400: #33e6b8;
+  --color-emerald-500: #1ec89c;
+  --color-emerald-600: #12a07e;
+}
+[data-theme='spectral'] body::before {
+  background:
+    radial-gradient(50rem 30rem at 85% -10%, rgb(51 230 184 / 0.16), transparent 62%),
+    radial-gradient(36rem 26rem at -5% 30%, rgb(51 230 184 / 0.08), transparent 60%),
+    radial-gradient(30rem 20rem at 60% 110%, rgb(212 242 122 / 0.07), transparent 60%),
+    linear-gradient(180deg, #020605 0%, #061210 100%);
+}
+/* Mist: two soft bands that drift slowly (a transform, so it never repaints the page). */
+[data-theme='spectral'] body::after {
+  content: '';
+  position: fixed;
+  inset: -20% -50%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 12% at 30% 62%, rgb(160 255 225 / 0.06), transparent 70%),
+    radial-gradient(35% 10% at 72% 80%, rgb(160 255 225 / 0.05), transparent 70%),
+    radial-gradient(30% 9% at 50% 40%, rgb(160 255 225 / 0.035), transparent 70%);
+  animation: spectral-drift 70s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes spectral-drift {
+  from { transform: translate3d(-6%, 0, 0); }
+  to { transform: translate3d(6%, -3%, 0); }
+}
+[data-theme='spectral'] h1,
+[data-theme='spectral'] h2 {
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 18px rgb(51 230 184 / 0.25);
+}
+[data-theme='spectral'] .card {
+  background:
+    linear-gradient(135deg, var(--color-hex-300) 0 9px, transparent 9px),
+    linear-gradient(90deg, rgb(212 242 122 / 0.45), rgb(212 242 122 / 0) 45%) top / 100% 1px no-repeat,
+    linear-gradient(180deg, rgb(10 24 21 / 0.92), rgb(5 12 11 / 0.92));
+  box-shadow: 0 0 0 1px rgb(51 230 184 / 0.07), 0 18px 40px -22px rgb(0 0 0 / 0.9), 0 0 40px -30px rgb(51 230 184 / 0.5);
+}
+[data-theme='spectral'] .broadcast-header {
+  background: linear-gradient(180deg, rgb(3 8 7 / 0.97), rgb(6 15 13 / 0.95));
+  box-shadow: inset 0 -1px 0 rgb(51 230 184 / 0.5), 0 1px 0 rgb(0 0 0 / 0.6), 0 10px 30px -18px rgb(51 230 184 / 0.55);
+}
+[data-theme='spectral'] .user-menu {
+  background: rgb(5 12 11 / 0.98);
+  box-shadow: 0 0 0 1px rgb(51 230 184 / 0.35), 0 18px 40px -12px rgb(0 0 0 / 0.8);
+}
+[data-theme='spectral'] .user-menu-item:hover {
+  background: rgb(51 230 184 / 0.12);
+}
+[data-theme='spectral'] :is(.reel-fade-left) { background: linear-gradient(90deg, #030807, transparent); }
+[data-theme='spectral'] :is(.reel-fade-right) { background: linear-gradient(270deg, #030807, transparent); }
+[data-theme='spectral'] ::selection { background: rgb(51 230 184 / 0.3); }
+
+/* =============================================================================================
+ * Neon Sunset: synthwave. Hot pink and sunset orange over a striped sun and a neon grid.
+ * ============================================================================================= */
+
+html[data-theme='synthwave'] {
+  background: #0b0418;
+}
+[data-theme='synthwave'] body {
+  --font-display: 'Orbitron', 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-slate-50: #fcf6ff;
+  --color-slate-100: #f4e9ff;
+  --color-slate-200: #ddc9f2;
+  --color-slate-300: #c2a5df;
+  --color-slate-400: #a083c4;
+  --color-slate-500: #7d60a2;
+  --color-slate-600: #58407b;
+  --color-slate-700: #3b2858;
+  --color-slate-800: #24153c;
+  --color-slate-900: #160b28;
+  --color-slate-950: #0b0418;
+
+  --color-hex-100: #ffe1f5;
+  --color-hex-200: #ff9edc;
+  --color-hex-300: #ff3fb4;
+  --color-hex-400: #f0249c;
+  --color-hex-500: #c4127c;
+  --color-hex-600: #940c5e;
+  --color-hex-800: #3d0628;
+  --color-hex-900: #22031a;
+
+  --color-gold-100: #fff4d8;
+  --color-gold-200: #ffe08c;
+  --color-gold-300: #ffc247;
+  --color-gold-400: #ff9f2e;
+  --color-gold-500: #ff7a1f;
+  --color-gold-600: #d85a12;
+  --color-gold-700: #9c3e0c;
+  --color-gold-800: #4a1d06;
+  --color-gold-900: #2a1004;
+
+  /* Wins are neon cyan. */
+  --color-emerald-300: #9af8ff;
+  --color-emerald-400: #2de2e6;
+  --color-emerald-500: #13b8c4;
+  --color-emerald-600: #0c8a96;
+}
+/* Night sky fading into a magenta horizon, with a striped sun sinking into it: the sun stops at
+   the horizon (66%), and its stripes are cut out of it with a mask (the dark page shows through). */
+[data-theme='synthwave'] body::before {
+  background:
+    radial-gradient(circle 13rem at 50% 97%, #ffe36b 0%, #ff9f2e 40%, #ff3fb4 80%, #ff3fb4 99%, transparent 100%) top / 100% 66% no-repeat,
+    radial-gradient(60% 26% at 50% 66%, rgb(255 63 180 / 0.45), transparent 70%),
+    radial-gradient(1px 1px at 12% 14%, #fff, transparent),
+    radial-gradient(1px 1px at 34% 8%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 58% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 76% 6%, #fff, transparent),
+    radial-gradient(1px 1px at 90% 22%, #fff, transparent),
+    radial-gradient(1px 1px at 22% 30%, #ffd6f1, transparent),
+    linear-gradient(180deg, #07021a 0%, #1a0838 38%, #4a0f5c 56%, #8c1a6a 65.8%, #12052a 66%, #0b0418 100%);
+  opacity: 0.9;
+  mask-image:
+    linear-gradient(180deg, #000 0 52vh, transparent 52vh 53vh, #000 53vh 56vh, transparent 56vh 57.6vh, #000 57.6vh 60vh, transparent 60vh 62vh, #000 62vh 63.4vh, transparent 63.4vh 65.6vh, #000 65.6vh),
+    radial-gradient(circle 13rem at 50% 64%, #000 99%, transparent 100%),
+    linear-gradient(#000, #000);
+  mask-composite: add, exclude, add;
+}
+/* The neon grid floor below the horizon, scrolling toward you (a transform: no repaints). */
+[data-theme='synthwave'] body::after {
+  content: '';
+  position: fixed;
+  left: -50%;
+  right: -50%;
+  top: 66vh;
+  height: 120vh;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgb(255 63 180 / 0.55) 1px, transparent 1px) 0 0 / 60px 60px,
+    linear-gradient(0deg, rgb(255 63 180 / 0.55) 1px, transparent 1px) 0 0 / 60px 60px;
+  transform-origin: top;
+  transform: perspective(300px) rotateX(62deg);
+  mask-image: linear-gradient(180deg, transparent, #000 25%);
+  animation: synth-grid 4s linear infinite;
+  will-change: transform;
+  opacity: 0.6;
+}
+@keyframes synth-grid {
+  from { transform: perspective(300px) rotateX(62deg) translate3d(0, 0, 0); }
+  to { transform: perspective(300px) rotateX(62deg) translate3d(0, 60px, 0); }
+}
+[data-theme='synthwave'] h1,
+[data-theme='synthwave'] h2 {
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 10px rgb(255 63 180 / 0.55), 0 0 2px rgb(255 63 180 / 0.9);
+}
+[data-theme='synthwave'] .card {
+  background:
+    linear-gradient(135deg, var(--color-hex-300) 0 9px, transparent 9px),
+    linear-gradient(90deg, rgb(255 194 71 / 0.6), rgb(255 63 180 / 0.35) 40%, rgb(255 63 180 / 0) 70%) top / 100% 1px no-repeat,
+    linear-gradient(180deg, rgb(28 12 50 / 0.9), rgb(15 6 30 / 0.92));
+  box-shadow: 0 0 0 1px rgb(255 63 180 / 0.14), 0 18px 40px -22px rgb(0 0 0 / 0.9), 0 0 36px -26px rgb(255 63 180 / 0.6);
+}
+[data-theme='synthwave'] .broadcast-header {
+  background: linear-gradient(180deg, rgb(11 4 24 / 0.97), rgb(20 7 40 / 0.95));
+  box-shadow: inset 0 -1px 0 rgb(255 63 180 / 0.7), 0 1px 0 rgb(0 0 0 / 0.6), 0 10px 30px -14px rgb(255 63 180 / 0.6);
+}
+[data-theme='synthwave'] .btn-primary {
+  box-shadow: 0 0 18px -4px rgb(255 63 180 / 0.8);
+}
+[data-theme='synthwave'] .tab.is-active::before {
+  box-shadow: 0 0 16px -2px rgb(255 63 180 / 0.8);
+}
+[data-theme='synthwave'] .user-menu {
+  background: rgb(15 6 30 / 0.98);
+  box-shadow: 0 0 0 1px rgb(255 63 180 / 0.4), 0 18px 40px -12px rgb(0 0 0 / 0.8);
+}
+[data-theme='synthwave'] .user-menu-item:hover {
+  background: rgb(255 63 180 / 0.14);
+}
+[data-theme='synthwave'] :is(.reel-fade-left) { background: linear-gradient(90deg, #0b0418, transparent); }
+[data-theme='synthwave'] :is(.reel-fade-right) { background: linear-gradient(270deg, #0b0418, transparent); }
+[data-theme='synthwave'] ::selection { background: rgb(255 63 180 / 0.35); }
+
+/* No drifting mist or scrolling grid for people who asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='spectral'] body::after,
+  [data-theme='synthwave'] body::after {
+    animation: none;
+  }
+}
+
+/* The stream overlay (/overlay) is see-through for OBS: no theme backdrop there. */
+html.overlay-mode body::after {
+  display: none;
+}

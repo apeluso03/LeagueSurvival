@@ -4,7 +4,7 @@ comes from DEFAULTS, so tuning a default later reaches every run that didn't cha
 import copy
 
 DEFAULTS: dict = {
-    "prices": {"reroll": 250, "blacklist": 250, "swap": 300, "shield": 700, "choose": 1600, "contract": 100},
+    "prices": {"reroll": 250, "blacklist": 250, "swap": 300, "shield": 700, "choose": 1600, "contract": 100, "role": 400},
     "gold": {
         "kill": 10,
         "assist": 2,
@@ -24,7 +24,7 @@ DEFAULTS: dict = {
     "blacklist_pct": 0.05,
 }
 
-ITEM_TYPES = ("reroll", "blacklist", "swap", "shield", "choose", "contract")
+ITEM_TYPES = ("reroll", "blacklist", "swap", "shield", "choose", "contract", "role")
 
 
 def _merge(base: dict, over: dict) -> dict:

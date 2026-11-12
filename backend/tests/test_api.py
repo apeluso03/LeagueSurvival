@@ -339,7 +339,7 @@ def test_shop_flow_over_the_api(client):
     assert run["owner_player_id"] == 1 and len(run["lobby_code"]) == 6
 
     shop_ = client.get(f"/api/runs/{rid}/shop").json()
-    assert {i["type"] for i in shop_["items"]} == {"reroll", "blacklist", "swap", "shield", "choose", "contract"}
+    assert {i["type"] for i in shop_["items"]} == {"reroll", "blacklist", "swap", "shield", "choose", "contract", "role"}
     assert shop_["blacklist_cap"] == 1  # 20 alive
 
     r = client.post(f"/api/runs/{rid}/players/1/purchase", json={"type": "shield"})

@@ -22,7 +22,7 @@ from app.models import (
     ReviveToken,
     Run,
 )
-from app.services import achievements, economy, live, meta, rules
+from app.services import achievements, economy, live, meta, rules, shop
 from app.services.shop import ITEMS
 from app.services.discord_api import EPHEMERAL
 
@@ -146,6 +146,7 @@ def spin_message(session: Session, game: ChallengeGame) -> dict:
         session, [c for c in shown if c], None, exclude=sorted({c for a in assignments for c in a.options}), roles=champ_roles
     )
     suggested = {p.champion_id: p for p in comp["picks"]}
+    role_selected = {i.player_id for i in shop.items_used_in_game(session, game.id) if i.type == "role"}
 
     if game.status == "pending":
         all_in = len(picked) == len(assignments)
@@ -173,7 +174,8 @@ def spin_message(session: Session, game: ChallengeGame) -> dict:
         pick = suggested.get(cid) if cid else None
         r = real.get(a.player_id)
         if r:
-            lines.append(f"Role: **{ROLE_NAMES[r['role']]}** ({ROLE_SOURCE[r['source']]})")
+            source = "Role Select" if a.player_id in role_selected and r["source"] == "set" else ROLE_SOURCE[r["source"]]
+            lines.append(f"Role: **{ROLE_NAMES[r['role']]}** ({source})")
         elif pick:
             lines.append(f"Suggested role: {pick.role_name}")
         if pick and pick.runes and pick.runes.get("keystone"):
